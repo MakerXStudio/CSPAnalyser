@@ -135,6 +135,39 @@ describe('generateWildcardDomain', () => {
   it('returns hostname as-is for single-label hostnames', () => {
     expect(generateWildcardDomain('localhost')).toBe('localhost');
   });
+
+  // ccTLD edge cases — must not produce overly permissive wildcards
+  it('returns hostname as-is for co.uk domains with only 3 parts', () => {
+    expect(generateWildcardDomain('example.co.uk')).toBe('example.co.uk');
+  });
+
+  it('returns hostname as-is for com.au domains with only 3 parts', () => {
+    expect(generateWildcardDomain('example.com.au')).toBe('example.com.au');
+  });
+
+  it('returns hostname as-is for co.jp domains with only 3 parts', () => {
+    expect(generateWildcardDomain('example.co.jp')).toBe('example.co.jp');
+  });
+
+  it('returns hostname as-is for org.uk domains with only 3 parts', () => {
+    expect(generateWildcardDomain('example.org.uk')).toBe('example.org.uk');
+  });
+
+  it('returns hostname as-is for com.br domains with only 3 parts', () => {
+    expect(generateWildcardDomain('example.com.br')).toBe('example.com.br');
+  });
+
+  it('returns hostname as-is for co.nz domains with only 3 parts', () => {
+    expect(generateWildcardDomain('example.co.nz')).toBe('example.co.nz');
+  });
+
+  it('wildcards ccTLD domains with 4+ parts', () => {
+    expect(generateWildcardDomain('cdn.example.co.uk')).toBe('*.example.co.uk');
+  });
+
+  it('wildcards deep ccTLD subdomains', () => {
+    expect(generateWildcardDomain('a.b.example.com.au')).toBe('*.b.example.com.au');
+  });
 });
 
 describe('normalizeBlockedUri', () => {

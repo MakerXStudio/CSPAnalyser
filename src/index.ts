@@ -94,3 +94,25 @@ export { setupViolationListener, generateInitScript } from './violation-listener
 // ── Crawler ──────────────────────────────────────────────────────────────
 export { crawl } from './crawler.js';
 export type { CrawlResult, CrawlCallbacks } from './crawler.js';
+
+// ── Policy Generation (Phase 3) ─────────────────────────────────────────
+export {
+  violationToSourceExpression,
+  violationToHashSource,
+} from './rule-builder.js';
+
+export {
+  generatePolicy,
+  generatePolicyFromViolations,
+} from './policy-generator.js';
+export type { PolicyGeneratorOptions } from './policy-generator.js';
+
+export {
+  optimizePolicy,
+  shouldUseDefaultSrc,
+} from './policy-optimizer.js';
+
+export {
+  formatPolicy,
+  directivesToString,
+} from './policy-formatter.js';

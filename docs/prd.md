@@ -179,10 +179,10 @@ Provide a standalone command-line interface with two modes.
 | 0 | PRD + ADRs | Complete | PRD, 3 ADRs committed |
 | 1 | Foundation | Complete | package.json, tsconfig, types.ts, DB schema/repository, utils, index.ts |
 | 2 | Violation Capture Pipeline | Complete | report-server, report-parser, csp-injector, violation-listener, crawler |
-| 3 | Policy Generation | Not started | rule-builder, policy-generator, policy-optimizer, policy-formatter |
+| 3 | Policy Generation | Complete | rule-builder, policy-generator, policy-optimizer, policy-formatter |
 | 4 | MITM Proxy | Not started | cert-manager, mitm-proxy |
 | 5 | Session + Entry Points | Not started | session-manager, auth, mcp-server, cli |
-| 6 | Testing | In progress | 222 unit tests passing (Phase 1 + Phase 2 coverage, 97%+ statements) |
+| 6 | Testing | In progress | 349 unit tests passing (Phase 1-3 coverage, 99%+ lines) |
 
 ### Phase 1 Artifacts
 - `src/types.ts` — All shared interfaces, enums, config types
@@ -206,13 +206,27 @@ Provide a standalone command-line interface with two modes.
 - `src/crawler.ts` — BFS page discovery with depth/maxPages limits, same-origin filtering, URL normalization; onPageCreated callback (fires before navigation) and onPageLoaded callback; graceful error handling with sanitized error messages
 - `src/utils/file-utils.ts` — Path traversal guard (validateDbPath), secure directory creation (0o700), secure file permissions (0o600)
 
-### Phase 2 Review Findings (tracked for Phase 3)
+### Phase 2 Review Findings (tracked)
 - **LOW:** `__cspViolationReport` callback trusts page-controlled data — cross-validate documentURI against page.url()
 - **LOW:** `extractOrigin`/`shouldUseMitmMode` throw on invalid URLs — callers must pre-validate
 - **LOW:** Logger JSON.stringify could throw on circular references
 - **LOW:** Init script silently swallows all errors — consider console.warn in catch
 - **NOTE:** Report-To group name uses 'csp-analyser' (code) vs 'csp-endpoint' (ADR) — cosmetic deviation
-- **NOTE:** pageId is always null for report-uri/reporting-api violations — use document_uri matching in Phase 3
+- **NOTE:** pageId is always null for report-uri/reporting-api violations — use document_uri matching
+
+### Phase 3 Artifacts
+- `src/rule-builder.ts` — Maps violations to CSP source expressions ('self', exact origins, wildcard domains, special keywords) with three strictness levels; sha256 hash generation for inline script/style samples (skips truncated samples)
+- `src/policy-generator.ts` — Aggregates violations into directive map (Record<string, string[]>) with deduplication; validates effectiveDirective against known CSP directives; DB-backed and pure function variants
+- `src/policy-optimizer.ts` — default-src factoring (intersects sources across fetch directives), source deduplication, deterministic directive/source ordering
+- `src/policy-formatter.ts` — 6 export formats (header, meta, nginx, apache, cloudflare, json) with HTML escaping for meta, quote escaping for nginx/apache, report-only variants
+
+### Phase 3 Review Findings (tracked)
+- **MEDIUM:** SQL LIKE metacharacters in violation filter origin not escaped — `%` and `_` produce unexpected results
+- **MEDIUM:** No source expression format validation (semicolons, spaces, invalid wildcards) before policy inclusion
+- **LOW:** Cloudflare format doesn't escape backslashes in JS string
+- **LOW:** `deduplicateSources` in optimizer doesn't dedup 'self' vs explicit matching origin
+- **NOTE:** Cloudflare format only outputs Workers handler, not Pages `_headers` file
+- **NOTE:** Hash of truncated sample won't match browser's hash of full script — hashes only generated for samples <256 chars
 
 ## 9. Success Metrics
 

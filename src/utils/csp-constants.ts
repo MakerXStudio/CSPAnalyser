@@ -38,6 +38,7 @@ export const FETCH_DIRECTIVES: readonly CspDirective[] = [
   'frame-src',
   'worker-src',
   'child-src',
+  'manifest-src',
 ] as const;
 
 /**
@@ -56,6 +57,7 @@ export const DIRECTIVE_FALLBACK_MAP: Readonly<Partial<Record<CspDirective, CspDi
   'frame-src': 'default-src',
   'worker-src': 'default-src',
   'child-src': 'default-src',
+  'manifest-src': 'default-src',
   'script-src-elem': 'script-src',
   'script-src-attr': 'script-src',
   'style-src-elem': 'style-src',
