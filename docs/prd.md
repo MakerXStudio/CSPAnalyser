@@ -178,11 +178,11 @@ Provide a standalone command-line interface with two modes.
 |-------|-------------|--------|-------|
 | 0 | PRD + ADRs | Complete | PRD, 3 ADRs committed |
 | 1 | Foundation | Complete | package.json, tsconfig, types.ts, DB schema/repository, utils, index.ts |
-| 2 | Violation Capture Pipeline | Not started | report-server, csp-injector, violation-listener, crawler |
+| 2 | Violation Capture Pipeline | Complete | report-server, report-parser, csp-injector, violation-listener, crawler |
 | 3 | Policy Generation | Not started | rule-builder, policy-generator, policy-optimizer, policy-formatter |
 | 4 | MITM Proxy | Not started | cert-manager, mitm-proxy |
 | 5 | Session + Entry Points | Not started | session-manager, auth, mcp-server, cli |
-| 6 | Testing | In progress | 101 unit tests passing (Phase 1 coverage) |
+| 6 | Testing | In progress | 222 unit tests passing (Phase 1 + Phase 2 coverage, 97%+ statements) |
 
 ### Phase 1 Artifacts
 - `src/types.ts` — All shared interfaces, enums, config types
@@ -193,10 +193,26 @@ Provide a standalone command-line interface with two modes.
 - `src/utils/logger.ts` — Structured JSON logger to stderr
 - `src/index.ts` — Public API exports
 
-### Phase 1 Review Findings (tracked for Phase 2)
-- **HIGH:** File permissions for .csp-analyser directory (0o700) and DB file (0o600)
-- **MEDIUM:** Path traversal guard needed on createDatabase when wired to user input
-- **MEDIUM:** Credential data (cookies) stored in plaintext in SQLite config column
+### Phase 1 Review Findings (resolved in Phase 2)
+- ~~**HIGH:** File permissions for .csp-analyser directory (0o700) and DB file (0o600)~~ — Fixed: `ensureDataDirectory()` and `setSecureFilePermissions()` in `src/utils/file-utils.ts`
+- ~~**MEDIUM:** Path traversal guard needed on createDatabase when wired to user input~~ — Fixed: `validateDbPath()` in `src/utils/file-utils.ts`
+- ~~**MEDIUM:** Credential data (cookies) stored in plaintext in SQLite config column~~ — Fixed: cookies stripped before DB persistence in `createSession()`
+
+### Phase 2 Artifacts
+- `src/report-parser.ts` — Normalizes three CSP report formats (application/csp-report, application/reports+json, DOM SecurityPolicyViolationEvent) to InsertViolationParams with field length validation
+- `src/report-server.ts` — Node HTTP server on 127.0.0.1 for CSP report collection (POST /csp-report, POST /reports, GET /health) with 1MB body limit, content-type validation, 405 method enforcement
+- `src/csp-injector.ts` — Local-mode CSP header injection via Playwright page.route(); strips existing CSP headers, injects deny-all report-only CSP + Report-To header; error fallback via route.continue()
+- `src/violation-listener.ts` — DOM-based violation capture via page.addInitScript() + page.exposeFunction(); compact ~350 byte init script with sample truncation (256 chars)
+- `src/crawler.ts` — BFS page discovery with depth/maxPages limits, same-origin filtering, URL normalization; onPageCreated callback (fires before navigation) and onPageLoaded callback; graceful error handling with sanitized error messages
+- `src/utils/file-utils.ts` — Path traversal guard (validateDbPath), secure directory creation (0o700), secure file permissions (0o600)
+
+### Phase 2 Review Findings (tracked for Phase 3)
+- **LOW:** `__cspViolationReport` callback trusts page-controlled data — cross-validate documentURI against page.url()
+- **LOW:** `extractOrigin`/`shouldUseMitmMode` throw on invalid URLs — callers must pre-validate
+- **LOW:** Logger JSON.stringify could throw on circular references
+- **LOW:** Init script silently swallows all errors — consider console.warn in catch
+- **NOTE:** Report-To group name uses 'csp-analyser' (code) vs 'csp-endpoint' (ADR) — cosmetic deviation
+- **NOTE:** pageId is always null for report-uri/reporting-api violations — use document_uri matching in Phase 3
 
 ## 9. Success Metrics
 

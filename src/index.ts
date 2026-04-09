@@ -63,3 +63,34 @@ export {
 
 export { createLogger } from './utils/logger.js';
 export type { LogLevel, Logger } from './utils/logger.js';
+
+export {
+  validateDbPath,
+  ensureDataDirectory,
+  setSecureFilePermissions,
+} from './utils/file-utils.js';
+
+// ── Report Parser ────────────────────────────────────────────────────────
+export {
+  parseCspReport,
+  parseReportingApiReport,
+  parseDomViolation,
+} from './report-parser.js';
+
+// ── Report Server ────────────────────────────────────────────────────────
+export { startReportServer } from './report-server.js';
+
+// ── CSP Injector ─────────────────────────────────────────────────────────
+export { setupCspInjection, transformResponseHeaders } from './csp-injector.js';
+export type {
+  PlaywrightPage,
+  PlaywrightRoute,
+  PlaywrightResponse,
+} from './csp-injector.js';
+
+// ── Violation Listener ───────────────────────────────────────────────────
+export { setupViolationListener, generateInitScript } from './violation-listener.js';
+
+// ── Crawler ──────────────────────────────────────────────────────────────
+export { crawl } from './crawler.js';
+export type { CrawlResult, CrawlCallbacks } from './crawler.js';

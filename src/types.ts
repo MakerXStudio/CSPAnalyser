@@ -83,6 +83,7 @@ export interface Violation {
   lineNumber: number | null;
   columnNumber: number | null;
   disposition: 'enforce' | 'report';
+  sample: string | null;
   capturedVia: ViolationSource;
   rawReport: string;
   createdAt: string;
@@ -132,6 +133,7 @@ export interface ViolationRow {
   line_number: number | null;
   column_number: number | null;
   disposition: 'enforce' | 'report';
+  sample: string | null;
   captured_via: ViolationSource;
   raw_report: string;
   created_at: string;

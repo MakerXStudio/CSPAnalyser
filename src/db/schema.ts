@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS violations (
   line_number INTEGER,
   column_number INTEGER,
   disposition TEXT DEFAULT 'report',
+  sample TEXT,
   captured_via TEXT NOT NULL,
   raw_report TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

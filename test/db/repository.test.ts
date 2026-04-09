@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import Database from 'better-sqlite3';
 import { initializeDatabase } from '../../src/db/schema.js';
 import {
@@ -57,6 +60,28 @@ describe('createDatabase', () => {
     const fk = db.pragma('foreign_keys', { simple: true });
     expect(fk).toBe(1);
     db.close();
+  });
+
+  it('rejects paths without .db extension', () => {
+    expect(() => createDatabase('/tmp/bad-path.sqlite')).toThrow('.db extension');
+  });
+
+  it('creates file-backed database with secure permissions', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csp-test-'));
+    const dbPath = path.join(tmpDir, 'test.db');
+    try {
+      const db = createDatabase(dbPath);
+      db.close();
+
+      expect(fs.existsSync(dbPath)).toBe(true);
+      const stat = fs.statSync(dbPath);
+      expect(stat.mode & 0o777).toBe(0o600);
+
+      const dirStat = fs.statSync(tmpDir);
+      expect(dirStat.mode & 0o777).toBe(0o700);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -138,6 +163,26 @@ describe('Session CRUD', () => {
   it('createSession defaults mode to local when not specified', () => {
     const session = createSession(db, { targetUrl: 'https://example.com' });
     expect(session.mode).toBe('local');
+  });
+
+  it('createSession strips cookies from persisted config', () => {
+    const configWithCookies: SessionConfig = {
+      targetUrl: 'https://example.com',
+      cookies: [{ name: 'session', value: 'secret123', domain: 'example.com' }],
+    };
+    const session = createSession(db, configWithCookies);
+
+    // The persisted config should not contain cookies
+    expect(session.config.cookies).toBeUndefined();
+
+    // Verify the original config object was not mutated
+    expect(configWithCookies.cookies).toHaveLength(1);
+  });
+
+  it('createSession persists config without cookies when none provided', () => {
+    const session = createSession(db, TEST_CONFIG);
+    expect(session.config.cookies).toBeUndefined();
+    expect(session.config.targetUrl).toBe('https://example.com');
   });
 });
 
@@ -294,6 +339,25 @@ describe('Violation repository', () => {
 
     const page1Violations = getViolations(db, sessionId, { pageUrl: 'https://example.com/page1' });
     expect(page1Violations).toHaveLength(1);
+  });
+
+  it('getViolations filters by origin prefix', () => {
+    insertViolation(db, makeViolation({ blockedUri: 'https://cdn.example.com/a.js', effectiveDirective: 'script-src' }));
+    insertViolation(db, makeViolation({ blockedUri: 'https://other.com/b.js', effectiveDirective: 'style-src' }));
+
+    const filtered = getViolations(db, sessionId, { origin: 'https://cdn.example.com' });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].blockedUri).toBe('https://cdn.example.com/a.js');
+  });
+
+  it('getViolations combines multiple filters', () => {
+    const page = insertPage(db, sessionId, 'https://example.com/page1', 200)!;
+    insertViolation(db, makeViolation({ pageId: page.id, effectiveDirective: 'script-src', blockedUri: 'https://cdn.com/a.js' }));
+    insertViolation(db, makeViolation({ pageId: page.id, effectiveDirective: 'style-src', blockedUri: 'https://cdn.com/b.css' }));
+
+    const filtered = getViolations(db, sessionId, { directive: 'script-src', pageUrl: 'https://example.com/page1' });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].effectiveDirective).toBe('script-src');
   });
 
   it('getViolations returns empty for no matches', () => {

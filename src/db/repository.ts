@@ -1,6 +1,9 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
 import { initializeDatabase } from './schema.js';
+import { createLogger } from '../utils/logger.js';
+import { validateDbPath, ensureDataDirectory, setSecureFilePermissions } from '../utils/file-utils.js';
 import type {
   Session,
   SessionConfig,
@@ -55,6 +58,7 @@ function toViolation(row: ViolationRow): Violation {
     lineNumber: row.line_number,
     columnNumber: row.column_number,
     disposition: row.disposition,
+    sample: row.sample,
     capturedVia: row.captured_via as ViolationSource,
     rawReport: row.raw_report,
     createdAt: row.created_at,
@@ -76,20 +80,41 @@ function toPolicy(row: PolicyRow): Policy {
 // ── Database factory ──────────────────────────────────────────────────────
 
 export function createDatabase(dbPath: string): Database.Database {
-  const db = new Database(dbPath);
+  const validatedPath = validateDbPath(dbPath);
+
+  if (validatedPath !== ':memory:') {
+    ensureDataDirectory(path.dirname(validatedPath));
+  }
+
+  const db = new Database(validatedPath);
   initializeDatabase(db);
+
+  if (validatedPath !== ':memory:') {
+    setSecureFilePermissions(validatedPath);
+  }
+
   return db;
 }
 
 // ── Session repository ────────────────────────────────────────────────────
 
+const logger = createLogger();
+
 export function createSession(db: Database.Database, config: SessionConfig): Session {
   const id = randomUUID();
+
+  // Strip cookies from the persisted config — they should only be used ephemerally
+  const persistConfig = { ...config };
+  if (persistConfig.cookies) {
+    logger.warn('Cookies provided for session authentication; they will not be persisted to the database for security');
+    delete persistConfig.cookies;
+  }
+
   const stmt = db.prepare(`
     INSERT INTO sessions (id, target_url, status, mode, config)
     VALUES (?, ?, 'created', ?, ?)
   `);
-  stmt.run(id, config.targetUrl, config.mode ?? 'local', JSON.stringify(config));
+  stmt.run(id, config.targetUrl, config.mode ?? 'local', JSON.stringify(persistConfig));
   const session = getSession(db, id);
   if (!session) {
     throw new Error(`Failed to retrieve session after insert: ${id}`);
@@ -175,6 +200,7 @@ export interface InsertViolationParams {
   lineNumber?: number | null;
   columnNumber?: number | null;
   disposition?: 'enforce' | 'report';
+  sample?: string | null;
   capturedVia: ViolationSource;
   rawReport?: string | null;
 }
@@ -187,8 +213,8 @@ export function insertViolation(
     INSERT OR IGNORE INTO violations
       (session_id, page_id, document_uri, blocked_uri, violated_directive,
        effective_directive, source_file, line_number, column_number,
-       disposition, captured_via, raw_report)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       disposition, sample, captured_via, raw_report)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const result = stmt.run(
     v.sessionId,
@@ -201,6 +227,7 @@ export function insertViolation(
     v.lineNumber ?? null,
     v.columnNumber ?? null,
     v.disposition ?? 'report',
+    v.sample ?? null,
     v.capturedVia,
     v.rawReport ?? null,
   );
