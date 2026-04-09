@@ -172,7 +172,33 @@ Provide a standalone command-line interface with two modes.
 | Language | TypeScript | strict mode |
 | Runtime | Node.js | 24.x |
 
-## 8. Success Metrics
+## 8. Implementation Status
+
+| Phase | Description | Status | Notes |
+|-------|-------------|--------|-------|
+| 0 | PRD + ADRs | Complete | PRD, 3 ADRs committed |
+| 1 | Foundation | Complete | package.json, tsconfig, types.ts, DB schema/repository, utils, index.ts |
+| 2 | Violation Capture Pipeline | Not started | report-server, csp-injector, violation-listener, crawler |
+| 3 | Policy Generation | Not started | rule-builder, policy-generator, policy-optimizer, policy-formatter |
+| 4 | MITM Proxy | Not started | cert-manager, mitm-proxy |
+| 5 | Session + Entry Points | Not started | session-manager, auth, mcp-server, cli |
+| 6 | Testing | In progress | 101 unit tests passing (Phase 1 coverage) |
+
+### Phase 1 Artifacts
+- `src/types.ts` — All shared interfaces, enums, config types
+- `src/db/schema.ts` — SQLite schema (sessions, pages, violations, policies) with WAL mode
+- `src/db/repository.ts` — Type-safe data access layer, parameterized queries, deduplication via UNIQUE constraints
+- `src/utils/csp-constants.ts` — CSP directives, deny-all policy builder, directive fallback map
+- `src/utils/url-utils.ts` — Origin extraction, localhost detection, MITM mode auto-detection
+- `src/utils/logger.ts` — Structured JSON logger to stderr
+- `src/index.ts` — Public API exports
+
+### Phase 1 Review Findings (tracked for Phase 2)
+- **HIGH:** File permissions for .csp-analyser directory (0o700) and DB file (0o600)
+- **MEDIUM:** Path traversal guard needed on createDatabase when wired to user input
+- **MEDIUM:** Credential data (cookies) stored in plaintext in SQLite config column
+
+## 9. Success Metrics
 
 - Can generate a working CSP for a multi-page authenticated web application in under 5 minutes
 - Generated policy allows all legitimate resources and blocks nothing that was intentionally loaded

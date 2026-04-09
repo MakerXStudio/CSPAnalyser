@@ -1,0 +1,29 @@
+{
+  "name": "csp-analyser",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Headlessly browse websites with a deny-all report-only CSP, capture violations, and generate production-ready CSP policies",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "csp-analyser": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "start": "node dist/mcp-server.js",
+    "cli": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "better-sqlite3": "12.8.0",
+    "http-mitm-proxy": "1.1.0",
+    "playwright": "1.59.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/node": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
