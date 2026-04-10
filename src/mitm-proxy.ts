@@ -82,12 +82,30 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
 
     proxy.onError((ctx, err) => {
       const errorMsg = err instanceof Error ? err.message : 'unknown';
-      logger.error('MITM proxy error', { error: errorMsg });
+      const errCode = err instanceof Error ? (err as NodeJS.ErrnoException).code : '';
+
       // If the proxy hasn't started yet, this is a fatal startup error
       if (!started) {
         started = true; // Prevent double-reject
+        logger.error('MITM proxy startup failed', { error: errorMsg });
         reject(new Error(`MITM proxy startup failed: ${errorMsg}`));
+        return;
       }
+
+      // TLS cert rejection errors are expected noise from Chrome's internal
+      // background services (autofill, telemetry) that route through the proxy
+      // but reject its certificates. These are harmless — suppress to debug.
+      if (
+        errCode === 'ECONNRESET' ||
+        errCode === 'ERR_SSL_SSL/TLS_ALERT_CERTIFICATE_UNKNOWN'
+      ) {
+        logger.debug('MITM proxy TLS rejection (expected for non-target traffic)', {
+          error: errorMsg,
+        });
+        return;
+      }
+
+      logger.error('MITM proxy error', { error: errorMsg });
     });
 
     proxy.onResponseHeaders((ctx, callback) => {

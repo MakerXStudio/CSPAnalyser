@@ -22,7 +22,7 @@ export interface PlaywrightBrowserContext {
 export interface PlaywrightBrowser {
   newContext(options?: {
     storageState?: string | StorageStateObject;
-    proxy?: { server: string };
+    proxy?: { server: string; bypass?: string };
     ignoreHTTPSErrors?: boolean;
   }): Promise<PlaywrightBrowserContext>;
   newPage(): Promise<PlaywrightBrowserPage>;
@@ -55,6 +55,8 @@ export interface AuthOptions {
   headless?: boolean;
   /** Proxy server URL for MITM mode (e.g., 'http://127.0.0.1:8080') */
   proxyServer?: string;
+  /** Proxy bypass list — domains that should NOT go through the proxy */
+  proxyBypass?: string;
 }
 
 /**
@@ -128,7 +130,13 @@ export async function createAuthenticatedContext(
   auth?: AuthOptions,
 ): Promise<{ context: PlaywrightBrowserContext; storageState?: string | StorageStateObject }> {
   const proxyOption = auth?.proxyServer
-    ? { proxy: { server: auth.proxyServer }, ignoreHTTPSErrors: true }
+    ? {
+        proxy: {
+          server: auth.proxyServer,
+          ...(auth.proxyBypass ? { bypass: auth.proxyBypass } : {}),
+        },
+        ignoreHTTPSErrors: true,
+      }
     : {};
 
   if (!auth || (!auth.storageStatePath && !auth.cookies && !auth.manualLogin)) {
