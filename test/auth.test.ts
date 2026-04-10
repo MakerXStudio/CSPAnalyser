@@ -220,7 +220,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl);
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(result.context).toBe(ctx);
     expect(result.storageState).toBeUndefined();
   });
@@ -231,7 +231,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, undefined);
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(result.context).toBe(ctx);
   });
 
@@ -241,8 +241,49 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, {});
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(result.context).toBe(ctx);
+  });
+
+  it('passes proxy server to browser context in MITM mode', async () => {
+    const ctx = createMockContext();
+    const browser = createMockBrowser(ctx);
+
+    const result = await createAuthenticatedContext(browser, targetUrl, {
+      proxyServer: 'http://127.0.0.1:8080',
+    });
+
+    expect(browser.newContext).toHaveBeenCalledWith({ proxy: { server: 'http://127.0.0.1:8080' } });
+    expect(result.context).toBe(ctx);
+  });
+
+  it('passes proxy server with storageStatePath', async () => {
+    const ctx = createMockContext();
+    const browser = createMockBrowser(ctx);
+    const statePath = path.join(tempDir, 'state.json');
+    fs.writeFileSync(statePath, '{}');
+
+    await createAuthenticatedContext(browser, targetUrl, {
+      storageStatePath: statePath,
+      proxyServer: 'http://127.0.0.1:8080',
+    });
+
+    expect(browser.newContext).toHaveBeenCalledWith({
+      storageState: statePath,
+      proxy: { server: 'http://127.0.0.1:8080' },
+    });
+  });
+
+  it('passes proxy server with cookies', async () => {
+    const ctx = createMockContext();
+    const browser = createMockBrowser(ctx);
+
+    await createAuthenticatedContext(browser, targetUrl, {
+      cookies: [{ name: 'session', value: 'abc' }],
+      proxyServer: 'http://127.0.0.1:8080',
+    });
+
+    expect(browser.newContext).toHaveBeenCalledWith({ proxy: { server: 'http://127.0.0.1:8080' } });
   });
 
   it('uses storageStatePath when provided', async () => {
@@ -269,7 +310,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, { cookies });
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(ctx.addCookies).toHaveBeenCalledWith([
       { name: 'session', value: 'abc', domain: 'example.com', path: '/', httpOnly: undefined, secure: undefined, sameSite: undefined },
       { name: 'token', value: 'xyz', domain: '.custom.com', path: '/', httpOnly: undefined, secure: undefined, sameSite: undefined },

@@ -105,6 +105,21 @@ describe('runSession', () => {
     expect(deps.startMitmProxy).toHaveBeenCalled();
   });
 
+  it('passes proxy server to auth context in MITM mode', async () => {
+    const config: SessionConfig = {
+      targetUrl: 'https://example.com',
+    };
+    const deps = createTestDeps();
+
+    await runSession(db, config, {}, deps);
+
+    expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
+      expect.anything(),
+      'https://example.com',
+      expect.objectContaining({ proxyServer: 'http://127.0.0.1:8080' }),
+    );
+  });
+
   it('respects explicit mode override', async () => {
     const config: SessionConfig = {
       targetUrl: 'https://example.com',
@@ -158,7 +173,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: '/tmp/state.json', cookies: undefined, headless: true },
+      { storageStatePath: '/tmp/state.json', cookies: undefined, headless: true, proxyServer: undefined },
     );
   });
 
@@ -174,7 +189,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: undefined, cookies: [{ name: 'session', value: 'abc' }], headless: true },
+      { storageStatePath: undefined, cookies: [{ name: 'session', value: 'abc' }], headless: true, proxyServer: undefined },
     );
   });
 
@@ -187,7 +202,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      undefined,
+      { storageStatePath: undefined, cookies: undefined, headless: true, proxyServer: undefined },
     );
   });
 

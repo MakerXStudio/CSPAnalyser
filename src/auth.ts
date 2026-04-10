@@ -52,6 +52,8 @@ export interface AuthOptions {
   manualLogin?: boolean;
   /** Whether the browser is running in headless mode. Used to prevent manual login in headless mode. */
   headless?: boolean;
+  /** Proxy server URL for MITM mode (e.g., 'http://127.0.0.1:8080') */
+  proxyServer?: string;
 }
 
 /**
@@ -124,16 +126,18 @@ export async function createAuthenticatedContext(
   targetUrl: string,
   auth?: AuthOptions,
 ): Promise<{ context: PlaywrightBrowserContext; storageState?: string | StorageStateObject }> {
+  const proxyOption = auth?.proxyServer ? { proxy: { server: auth.proxyServer } } : {};
+
   if (!auth || (!auth.storageStatePath && !auth.cookies && !auth.manualLogin)) {
     logger.info('Creating unauthenticated browser context');
-    const context = await browser.newContext();
+    const context = await browser.newContext({ ...proxyOption });
     return { context };
   }
 
   if (auth.storageStatePath) {
     const resolvedPath = validateStorageStatePath(auth.storageStatePath);
     logger.info('Creating context from storage state', { path: resolvedPath });
-    const context = await browser.newContext({ storageState: resolvedPath });
+    const context = await browser.newContext({ storageState: resolvedPath, ...proxyOption });
     return { context, storageState: resolvedPath };
   }
 
@@ -142,7 +146,7 @@ export async function createAuthenticatedContext(
     for (const cookie of auth.cookies) {
       validateCookieParam(cookie);
     }
-    const context = await browser.newContext();
+    const context = await browser.newContext({ ...proxyOption });
     const hostname = extractHostname(targetUrl);
     const playwrightCookies = mapCookies(auth.cookies, hostname);
     await context.addCookies(playwrightCookies);
@@ -157,7 +161,7 @@ export async function createAuthenticatedContext(
   }
   logger.info('Manual login requested — waiting for user interaction');
   const storageState = await performManualLogin(browser, targetUrl);
-  const context = await browser.newContext({ storageState });
+  const context = await browser.newContext({ storageState, ...proxyOption });
   return { context, storageState };
 }
 

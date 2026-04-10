@@ -149,10 +149,13 @@ export async function runSession(
 
     // 5. Create authenticated context
     progress('Setting up browser context...');
-    const authOptions: AuthOptions | undefined =
-      config.storageStatePath || config.cookies
-        ? { storageStatePath: config.storageStatePath, cookies: config.cookies, headless }
-        : undefined;
+    const proxyServer = mitmProxy ? `http://127.0.0.1:${mitmProxy.port}` : undefined;
+    const authOptions: AuthOptions = {
+      storageStatePath: config.storageStatePath,
+      cookies: config.cookies,
+      headless,
+      proxyServer,
+    };
 
     // For MITM mode, we need to cast the browser to the auth module's interface
     // The auth module uses lightweight interfaces compatible with real Playwright
@@ -347,10 +350,13 @@ export async function runInteractiveSession(
 
     // 5. Create authenticated context
     progress('Setting up browser context...');
-    const authOptions: AuthOptions | undefined =
-      config.storageStatePath || config.cookies
-        ? { storageStatePath: config.storageStatePath, cookies: config.cookies, headless: false }
-        : undefined;
+    const proxyServer = mitmProxy ? `http://127.0.0.1:${mitmProxy.port}` : undefined;
+    const authOptions: AuthOptions = {
+      storageStatePath: config.storageStatePath,
+      cookies: config.cookies,
+      headless: false,
+      proxyServer,
+    };
     const authResult = await _createAuthContext(
       browser as unknown as Parameters<typeof createAuthenticatedContext>[0],
       config.targetUrl,
