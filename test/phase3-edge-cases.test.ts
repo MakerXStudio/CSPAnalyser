@@ -229,7 +229,9 @@ describe('policy-optimizer edge cases', () => {
       'base-uri': ["'self'"],
     });
 
-    expect('default-src' in result).toBe(false);
+    // Security defaults are added for missing critical directives
+    expect(result['default-src']).toEqual(["'self'"]);
+    expect(result['object-src']).toEqual(["'none'"]);
     expect(result['base-uri']).toEqual(["'self'"]);
     expect(result['form-action']).toEqual(["'self'"]);
   });

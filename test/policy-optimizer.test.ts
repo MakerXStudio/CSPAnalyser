@@ -86,6 +86,9 @@ describe('optimizePolicy', () => {
 
     expect(result).toEqual({
       'default-src': ["'self'", 'https://cdn.example.com'],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
     });
   });
 
@@ -98,6 +101,9 @@ describe('optimizePolicy', () => {
 
     expect(result).toEqual({
       'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
       'script-src': ['https://scripts.example.com'],
       'style-src': ['https://styles.example.com'],
     });
@@ -113,11 +119,14 @@ describe('optimizePolicy', () => {
     });
 
     expect(result).toEqual({
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
       'img-src': ['https://c.com'],
+      'object-src': ["'none'"],
       'script-src': ['https://a.com'],
       'style-src': ['https://b.com'],
     });
-    expect('default-src' in result).toBe(false);
   });
 
   it('does not factor when only 2 fetch directives present', () => {
@@ -127,10 +136,13 @@ describe('optimizePolicy', () => {
     });
 
     expect(result).toEqual({
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
       'script-src': ["'self'"],
       'style-src': ["'self'"],
     });
-    expect('default-src' in result).toBe(false);
   });
 
   it('preserves non-fetch directives unchanged', () => {
@@ -181,7 +193,12 @@ describe('optimizePolicy', () => {
 
   it('handles empty input', () => {
     const result = optimizePolicy({});
-    expect(result).toEqual({});
+    expect(result).toEqual({
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
+    });
   });
 
   it('handles single directive', () => {
@@ -189,6 +206,10 @@ describe('optimizePolicy', () => {
       'script-src': ["'self'"],
     });
     expect(result).toEqual({
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
       'script-src': ["'self'"],
     });
   });

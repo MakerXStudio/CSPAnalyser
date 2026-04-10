@@ -79,6 +79,22 @@ export function optimizePolicy(
     result[name].sort();
   }
 
+  // Add security defaults for critical directives that have no violations.
+  // A missing directive means nothing was blocked — but it also means
+  // nothing is restricted. These defaults lock down common attack vectors.
+  if (!result['default-src']) {
+    result['default-src'] = ["'self'"];
+  }
+  if (!result['object-src']) {
+    result['object-src'] = ["'none'"];
+  }
+  if (!result['base-uri']) {
+    result['base-uri'] = ["'self'"];
+  }
+  if (!result['form-action']) {
+    result['form-action'] = ["'self'"];
+  }
+
   // Sort directives: default-src first, then alphabetical
   const sorted: Record<string, string[]> = {};
   const keys = Object.keys(result).sort((a, b) => {

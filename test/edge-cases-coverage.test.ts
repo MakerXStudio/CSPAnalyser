@@ -571,12 +571,23 @@ describe('policy generation edge cases', () => {
 
   it('optimizePolicy with empty directives', () => {
     const result = optimizePolicy({});
-    expect(result).toEqual({});
+    expect(result).toEqual({
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
+    });
   });
 
   it('optimizePolicy with single directive', () => {
     const result = optimizePolicy({ 'script-src': ["'self'"] });
-    expect(result).toEqual({ 'script-src': ["'self'"] });
+    expect(result).toEqual({
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'object-src': ["'none'"],
+      'script-src': ["'self'"],
+    });
   });
 
   it('optimizePolicy with all directives identical', () => {
@@ -593,8 +604,16 @@ describe('policy generation edge cases', () => {
     expect(result['default-src']).toEqual(["'self'"]);
     // Individual fetch directives should be collapsed
     for (const d of fetchDirectives) {
-      expect(result[d]).toBeUndefined();
+      // object-src gets re-added as a security default with 'none'
+      if (d === 'object-src') {
+        expect(result[d]).toEqual(["'none'"]);
+      } else {
+        expect(result[d]).toBeUndefined();
+      }
     }
+    // Security defaults for non-fetch directives
+    expect(result['base-uri']).toEqual(["'self'"]);
+    expect(result['form-action']).toEqual(["'self'"]);
   });
 
   it('formatPolicy with empty directives object', () => {
