@@ -522,30 +522,138 @@ async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
 
 // ── Setup & browser check ──────────────────────────────────────────────
 
+/**
+ * Detects the OS/distro to provide platform-specific guidance for
+ * installing Playwright's system dependencies.
+ */
+function detectPlatform(): { os: string; distro: string } {
+  const { platform } = process;
+  if (platform === 'darwin') return { os: 'macos', distro: 'macos' };
+  if (platform === 'win32') return { os: 'windows', distro: 'windows' };
+  if (platform !== 'linux') return { os: platform, distro: 'unknown' };
+
+  // Detect Linux distro
+  try {
+    const { readFileSync } = require('node:fs');
+    const osRelease = readFileSync('/etc/os-release', 'utf-8');
+    const idMatch = osRelease.match(/^ID=(.+)$/m);
+    const id = idMatch ? idMatch[1].replace(/"/g, '').toLowerCase() : '';
+    const idLikeMatch = osRelease.match(/^ID_LIKE=(.+)$/m);
+    const idLike = idLikeMatch ? idLikeMatch[1].replace(/"/g, '').toLowerCase() : '';
+
+    if (id === 'arch' || idLike.includes('arch')) return { os: 'linux', distro: 'arch' };
+    if (id === 'ubuntu' || id === 'debian' || idLike.includes('debian'))
+      return { os: 'linux', distro: 'debian' };
+    if (id === 'fedora' || idLike.includes('fedora') || idLike.includes('rhel'))
+      return { os: 'linux', distro: 'fedora' };
+    return { os: 'linux', distro: id || 'unknown' };
+  } catch {
+    return { os: 'linux', distro: 'unknown' };
+  }
+}
+
+/**
+ * Extracts missing shared library names from a Playwright launch error.
+ * Playwright errors typically include lines like:
+ *   "error while loading shared libraries: libXfoo.so.0: cannot open shared object file"
+ */
+function extractMissingLibs(errorMessage: string): string[] {
+  const libPattern = /lib[A-Za-z0-9_-]+\.so[.\d]*/g;
+  const matches = errorMessage.match(libPattern);
+  return matches ? [...new Set(matches)] : [];
+}
+
+/**
+ * Returns platform-specific instructions for installing missing dependencies.
+ */
+function getMissingDepsGuidance(distro: string, missingLibs: string[]): string {
+  const libList = missingLibs.length > 0 ? `\nMissing libraries: ${missingLibs.join(', ')}\n` : '';
+
+  switch (distro) {
+    case 'arch':
+      return (
+        libList +
+        '\nOn Arch Linux, Playwright system deps must be installed manually:\n\n' +
+        '  # Option 1: Install common Chromium deps\n' +
+        '  sudo pacman -S nss alsa-lib at-spi2-core cups libdrm mesa libxkbcommon\n\n' +
+        '  # Option 2: Use the AUR package (includes all deps)\n' +
+        '  yay -S playwright\n\n' +
+        '  # Option 3: If specific libraries are missing, search for them\n' +
+        '  pacman -F libXmissing.so  # find which package provides a library\n'
+      );
+    case 'debian':
+      return (
+        libList +
+        '\nOn Debian/Ubuntu, install system deps automatically:\n\n' +
+        '  npx playwright install-deps chromium\n'
+      );
+    case 'fedora':
+      return (
+        libList +
+        '\nOn Fedora/RHEL, install system deps automatically:\n\n' +
+        '  npx playwright install-deps chromium\n'
+      );
+    case 'macos':
+      return '\nOn macOS, no additional system dependencies are typically needed.\n';
+    case 'windows':
+      return '\nOn Windows, no additional system dependencies are typically needed.\n';
+    default:
+      return (
+        libList +
+        '\nInstall system dependencies for your platform:\n\n' +
+        '  # On supported distros (Debian/Ubuntu/Fedora):\n' +
+        '  npx playwright install-deps chromium\n\n' +
+        '  # On other distros, install Chromium deps manually.\n' +
+        '  # Search for missing libraries with your package manager.\n'
+      );
+  }
+}
+
 async function runSetupCommand(): Promise<void> {
   const { execFileSync } = await import('node:child_process');
+  const platform = detectPlatform();
 
-  process.stderr.write(cyan('Installing Playwright Chromium browser and system dependencies...\n'));
-  process.stderr.write('This may take a few minutes on first run.\n\n');
+  // Step 1: Install browser binary (works on all platforms, no root needed)
+  process.stderr.write(cyan('Step 1/2: Installing Playwright Chromium browser...\n\n'));
 
   try {
-    execFileSync('npx', ['playwright', 'install', '--with-deps', 'chromium'], {
+    execFileSync('npx', ['playwright', 'install', 'chromium'], {
       stdio: 'inherit',
       timeout: 300_000,
     });
-    process.stderr.write('\n' + cyan('Setup complete! You can now use csp-analyser.\n'));
   } catch {
     process.stderr.write(
-      red('\nSetup failed. Try running manually:\n') +
-        '  npx playwright install --with-deps chromium\n',
+      red('\nFailed to install Chromium browser. Try running manually:\n') +
+        '  npx playwright install chromium\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  // Step 2: Test if the browser actually launches
+  process.stderr.write('\n' + cyan('Step 2/2: Verifying browser launches...\n'));
+
+  try {
+    const { chromium } = await import('playwright');
+    const browser = await chromium.launch({ headless: true });
+    await browser.close();
+    process.stderr.write(cyan('\nSetup complete! You can now use csp-analyser.\n'));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const missingLibs = extractMissingLibs(message);
+
+    process.stderr.write(
+      red('\nBrowser installed but cannot launch — missing system dependencies.\n') +
+        getMissingDepsGuidance(platform.distro, missingLibs) +
+        '\nAfter installing dependencies, run "csp-analyser setup" again to verify.\n',
     );
     process.exitCode = 1;
   }
 }
 
 /**
- * Checks if Playwright's Chromium browser is installed and gives a helpful
- * error message if not, instead of crashing with a confusing Playwright error.
+ * Checks if Playwright's Chromium browser is installed and launchable.
+ * Gives a helpful, platform-specific error message if not.
  */
 async function ensureBrowserInstalled(): Promise<void> {
   try {
@@ -554,25 +662,38 @@ async function ensureBrowserInstalled(): Promise<void> {
     await browser.close();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (
-      message.includes('Executable doesn\'t exist') ||
+    const isMissingBrowser =
+      message.includes("Executable doesn't exist") ||
       message.includes('browserType.launch') ||
-      message.includes('ENOENT') ||
-      message.includes('not found') ||
-      message.includes('No such file')
-    ) {
+      message.includes('ENOENT');
+    const isMissingDeps =
+      message.includes('shared libraries') ||
+      message.includes('cannot open shared object');
+
+    if (isMissingBrowser) {
       process.stderr.write(
         red('Error: Playwright browser is not installed.\n\n') +
           'Run the following command to set up:\n\n' +
-          '  csp-analyser setup\n\n' +
-          'Or manually:\n' +
-          '  npx playwright install --with-deps chromium\n',
+          '  csp-analyser setup\n',
       );
-      process.exitCode = 1;
-      throw new Error('Browser not installed');
+    } else if (isMissingDeps) {
+      const platform = detectPlatform();
+      const missingLibs = extractMissingLibs(message);
+      process.stderr.write(
+        red('Error: Browser is installed but system dependencies are missing.\n') +
+          getMissingDepsGuidance(platform.distro, missingLibs) +
+          '\nOr run "csp-analyser setup" for guided installation.\n',
+      );
+    } else {
+      process.stderr.write(
+        red('Error: Failed to launch browser.\n\n') +
+          `Details: ${message}\n\n` +
+          'Try running "csp-analyser setup" to reinstall.\n',
+      );
     }
-    // Re-throw other errors (network issues, etc.)
-    throw err;
+
+    process.exitCode = 1;
+    throw new Error('Browser not available');
   }
 }
 
