@@ -62,7 +62,7 @@ export interface InteractiveSessionOptions {
  * Injectable dependencies for testing — production code uses the real imports.
  */
 export interface SessionDeps {
-  launchBrowser: (options: { headless: boolean }) => Promise<Browser>;
+  launchBrowser: (options: { headless: boolean; args?: string[] }) => Promise<Browser>;
   startReportServer: typeof startReportServer;
   startMitmProxy: (options: MitmProxyOptions) => Promise<MitmProxyInstance>;
   createAuthenticatedContext: typeof createAuthenticatedContext;
@@ -96,9 +96,9 @@ export async function runSession(
   // Resolve dependencies (allow injection for testing)
   const _launchBrowser =
     deps?.launchBrowser ??
-    (async (opts: { headless: boolean }) => {
+    (async (opts: { headless: boolean; args?: string[] }) => {
       const { chromium } = await import('playwright');
-      return chromium.launch({ headless: opts.headless });
+      return chromium.launch({ headless: opts.headless, args: opts.args });
     });
   const _startReportServer = deps?.startReportServer ?? startReportServer;
   const _startMitmProxy = deps?.startMitmProxy ?? startMitmProxy;
@@ -121,9 +121,10 @@ export async function runSession(
   let context: BrowserContext | null = null;
 
   try {
-    // 2. Launch browser
+    // 2. Launch browser (trust MITM proxy's self-signed CA in MITM mode)
     progress('Launching browser...');
-    browser = await _launchBrowser({ headless });
+    const launchArgs = mode === 'mitm' ? ['--ignore-certificate-errors'] : undefined;
+    browser = await _launchBrowser({ headless, args: launchArgs });
 
     // 3. Start report server
     progress('Starting report server...');
@@ -302,9 +303,9 @@ export async function runInteractiveSession(
 
   const _launchBrowser =
     deps?.launchBrowser ??
-    (async (opts: { headless: boolean }) => {
+    (async (opts: { headless: boolean; args?: string[] }) => {
       const { chromium } = await import('playwright');
-      return chromium.launch({ headless: opts.headless });
+      return chromium.launch({ headless: opts.headless, args: opts.args });
     });
   const _startReportServer = deps?.startReportServer ?? startReportServer;
   const _startMitmProxy = deps?.startMitmProxy ?? startMitmProxy;
@@ -326,9 +327,10 @@ export async function runInteractiveSession(
   let context: BrowserContext | null = null;
 
   try {
-    // 2. Launch headed browser
+    // 2. Launch headed browser (trust MITM proxy's self-signed CA in MITM mode)
     progress('Launching browser...');
-    browser = await _launchBrowser({ headless: false });
+    const launchArgs = mode === 'mitm' ? ['--ignore-certificate-errors'] : undefined;
+    browser = await _launchBrowser({ headless: false, args: launchArgs });
 
     // 3. Start report server
     progress('Starting report server...');
