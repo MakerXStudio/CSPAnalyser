@@ -50,6 +50,7 @@ export type Command =
   | 'diff'
   | 'score'
   | 'permissions'
+  | 'setup'
   | 'help'
   | 'version';
 
@@ -87,11 +88,12 @@ const VALID_MODES: ReadonlySet<string> = new Set(['local', 'mitm']);
 export const HELP_TEXT = `csp-analyser — Generate Content Security Policy headers by crawling websites
 
 Usage:
-  csp-analyser crawl <url>              Headless auto-crawl
-  csp-analyser interactive <url>        Headed manual browsing
-  csp-analyser generate <session-id>    Regenerate policy from session
-  csp-analyser export <session-id>      Export policy in a format
-  csp-analyser diff <id-a> <id-b>       Compare two sessions
+  csp-analyser setup                     Install Playwright browser + dependencies
+  csp-analyser crawl <url>               Headless auto-crawl
+  csp-analyser interactive <url>         Headed manual browsing
+  csp-analyser generate <session-id>     Regenerate policy from session
+  csp-analyser export <session-id>       Export policy in a format
+  csp-analyser diff <id-a> <id-b>        Compare two sessions
   csp-analyser score <session-id>        Score policy against best practices
   csp-analyser permissions <session-id>  Show Permissions-Policy headers
 
@@ -159,11 +161,30 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const command = positionals[0] as string | undefined;
   if (
     !command ||
-    !['crawl', 'interactive', 'generate', 'export', 'diff', 'score', 'permissions'].includes(
-      command,
-    )
+    ![
+      'crawl',
+      'interactive',
+      'generate',
+      'export',
+      'diff',
+      'score',
+      'permissions',
+      'setup',
+    ].includes(command)
   ) {
     throw new Error(`Unknown command: ${command ?? '(none)'}. Run with --help for usage.`);
+  }
+
+  // setup takes no positional args
+  if (command === 'setup') {
+    return {
+      command: 'setup',
+      depth: 1,
+      maxPages: 10,
+      strictness: 'moderate',
+      format: 'header',
+      reportOnly: false,
+    };
   }
 
   const positionalArg = positionals[1] as string | undefined;
@@ -499,6 +520,62 @@ async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+// ── Setup & browser check ──────────────────────────────────────────────
+
+async function runSetupCommand(): Promise<void> {
+  const { execFileSync } = await import('node:child_process');
+
+  process.stderr.write(cyan('Installing Playwright Chromium browser and system dependencies...\n'));
+  process.stderr.write('This may take a few minutes on first run.\n\n');
+
+  try {
+    execFileSync('npx', ['playwright', 'install', '--with-deps', 'chromium'], {
+      stdio: 'inherit',
+      timeout: 300_000,
+    });
+    process.stderr.write('\n' + cyan('Setup complete! You can now use csp-analyser.\n'));
+  } catch {
+    process.stderr.write(
+      red('\nSetup failed. Try running manually:\n') +
+        '  npx playwright install --with-deps chromium\n',
+    );
+    process.exitCode = 1;
+  }
+}
+
+/**
+ * Checks if Playwright's Chromium browser is installed and gives a helpful
+ * error message if not, instead of crashing with a confusing Playwright error.
+ */
+async function ensureBrowserInstalled(): Promise<void> {
+  try {
+    const { chromium } = await import('playwright');
+    const browser = await chromium.launch({ headless: true });
+    await browser.close();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (
+      message.includes('Executable doesn\'t exist') ||
+      message.includes('browserType.launch') ||
+      message.includes('ENOENT') ||
+      message.includes('not found') ||
+      message.includes('No such file')
+    ) {
+      process.stderr.write(
+        red('Error: Playwright browser is not installed.\n\n') +
+          'Run the following command to set up:\n\n' +
+          '  csp-analyser setup\n\n' +
+          'Or manually:\n' +
+          '  npx playwright install --with-deps chromium\n',
+      );
+      process.exitCode = 1;
+      throw new Error('Browser not installed');
+    }
+    // Re-throw other errors (network issues, etc.)
+    throw err;
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────────
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
@@ -524,9 +601,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     case 'version':
       process.stdout.write(`csp-analyser ${getVersion()}\n`);
       return;
+    case 'setup':
+      return runSetupCommand();
     case 'crawl':
+      await ensureBrowserInstalled();
       return runCrawlCommand(args);
     case 'interactive':
+      await ensureBrowserInstalled();
       return runInteractiveCommand(args);
     case 'generate':
       return runGenerateCommand(args);
