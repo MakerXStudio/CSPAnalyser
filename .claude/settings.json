@@ -1,0 +1,54 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(npm run check-types:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run lint:fix:*)",
+      "Bash(npm list:*)",
+      "Bash(npm outdated:*)",
+      "Bash(npm view:*)",
+      "Bash(npm ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(xargs ls:*)",
+      "Bash(git show:*)",
+      "Bash(git grep:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(npx jest:*)",
+      "Bash(git status:*)",
+      "Skill(kipp:*)",
+      "Bash(npm run audit:*)",
+      "Bash(npm run docs:generate:*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Edit(**/.env)",
+      "Write(**/.env)"
+    ],
+    "ask": []
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs'),path=require('path'),{execSync}=require('child_process'),input=JSON.parse(fs.readFileSync(0,'utf8')),file=input.tool_input?.file_path;if(!file||!/\\.(ts|tsx|js|jsx)$/.test(file))process.exit(0);const rel=path.relative(input.cwd,file),sub=rel.split(path.sep)[0];if(['api','web'].includes(sub)){const cwd=path.join(input.cwd,sub);execSync('npm run lint:fix -- '+JSON.stringify(path.relative(cwd,file)),{cwd,stdio:'inherit'})}\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
