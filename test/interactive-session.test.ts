@@ -194,6 +194,7 @@ describe('runInteractiveSession', () => {
       9876,
       'test-token-123',
       expect.any(Function),
+      'http://localhost:3000',
     );
   });
 

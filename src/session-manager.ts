@@ -15,7 +15,7 @@ import { setupCspInjection, type CapturedPermissionsPolicy } from './csp-injecto
 import { parsePermissionsPolicyHeaders } from './permissions-policy.js';
 import { setupViolationListener } from './violation-listener.js';
 import { crawl, type CrawlCallbacks } from './crawler.js';
-import { shouldUseMitmMode } from './utils/url-utils.js';
+import { shouldUseMitmMode, extractOrigin } from './utils/url-utils.js';
 import { createAuthenticatedContext, type AuthOptions } from './auth.js';
 import { startMitmProxy, type MitmProxyInstance, type MitmProxyOptions } from './mitm-proxy.js';
 import { ensureCACertificate, secureCertFiles } from './cert-manager.js';
@@ -137,11 +137,12 @@ export async function runSession(
     logger.info('Report server started', { port: reportServerPort });
 
     // 4. Start MITM proxy if needed
+    const targetOrigin = extractOrigin(config.targetUrl);
     let proxyPort: number | null = null;
     if (mode === 'mitm') {
       progress('Starting MITM proxy...');
       const certPaths = await ensureCACertificate(dataDir);
-      mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths });
+      mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths, targetOrigin });
       secureCertFiles(certPaths);
       proxyPort = mitmProxy.port;
       updateSession(db, sessionId, { proxyPort });
@@ -204,7 +205,7 @@ export async function runSession(
         if (mode === 'local') {
           await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
             onPermissionsPolicy(captured, reqUrl, pageId);
-          });
+          }, targetOrigin);
         }
         await _setupViolationListener(page, db, sessionId, pageId);
       },
@@ -342,10 +343,11 @@ export async function runInteractiveSession(
     updateSession(db, sessionId, { reportServerPort });
 
     // 4. Start MITM proxy if needed
+    const targetOrigin = extractOrigin(config.targetUrl);
     if (mode === 'mitm') {
       progress('Starting MITM proxy...');
       const certPaths = await ensureCACertificate(dataDir);
-      mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths });
+      mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths, targetOrigin });
       secureCertFiles(certPaths);
       updateSession(db, sessionId, { proxyPort: mitmProxy.port });
     }
@@ -387,7 +389,7 @@ export async function runInteractiveSession(
               sourceUrl: reqUrl,
             });
           }
-        });
+        }, targetOrigin);
       }
       await _setupViolationListener(page, db, sessionId, null);
 

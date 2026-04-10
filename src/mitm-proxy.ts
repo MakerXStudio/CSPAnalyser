@@ -22,6 +22,8 @@ export interface MitmProxyOptions {
   reportToken?: string;
   /** Certificate paths from ensureCACertificate() */
   certPaths: CertPaths;
+  /** Target origin — only inject CSP for responses from this origin */
+  targetOrigin?: string;
 }
 
 export interface MitmProxyInstance {
@@ -72,7 +74,7 @@ export function transformProxyResponseHeaders(
  * Listens on 127.0.0.1 with an OS-assigned port.
  */
 export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInstance> {
-  const { reportServerPort, reportToken, certPaths } = options;
+  const { reportServerPort, reportToken, certPaths, targetOrigin } = options;
 
   return new Promise((resolve, reject) => {
     const proxy = new Proxy();
@@ -91,6 +93,22 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
     proxy.onResponseHeaders((ctx, callback) => {
       const upstream = ctx.serverToProxyResponse;
       if (upstream) {
+        // Skip CSP injection for non-target origins (e.g., auth redirects)
+        if (targetOrigin && ctx.clientToProxyRequest) {
+          const host = ctx.clientToProxyRequest.headers.host;
+          if (host) {
+            try {
+              const requestOrigin = `https://${host.replace(/:\d+$/, '')}`;
+              if (requestOrigin !== targetOrigin) {
+                callback();
+                return;
+              }
+            } catch {
+              // If origin check fails, proceed with injection
+            }
+          }
+        }
+
         const transformed = transformProxyResponseHeaders(
           upstream.headers,
           reportServerPort,

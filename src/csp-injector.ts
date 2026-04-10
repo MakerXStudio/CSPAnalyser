@@ -1,4 +1,5 @@
 import { buildDenyAllCSP, buildReportToHeader } from './utils/csp-constants.js';
+import { extractOrigin } from './utils/url-utils.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -103,6 +104,10 @@ export type PermissionsPolicyCaptureCallback = (
  * Sets up CSP injection on a Playwright page by intercepting all requests
  * and modifying response headers.
  *
+ * When targetOrigin is provided, CSP injection only applies to responses
+ * from that origin — requests to other origins (e.g., auth redirects)
+ * pass through unmodified so they don't pollute the generated policy.
+ *
  * Optionally accepts a callback that is invoked when Permissions-Policy
  * or Feature-Policy headers are found in a response.
  *
@@ -113,9 +118,25 @@ export async function setupCspInjection(
   reportServerPort: number,
   reportToken?: string,
   onPermissionsPolicy?: PermissionsPolicyCaptureCallback,
+  targetOrigin?: string,
 ): Promise<() => Promise<void>> {
   const handler = async (route: PlaywrightRoute): Promise<void> => {
     try {
+      // Skip CSP injection for non-target origins (e.g., auth redirects)
+      if (targetOrigin) {
+        try {
+          const requestOrigin = extractOrigin(route.request().url());
+          if (requestOrigin !== targetOrigin) {
+            await route.continue();
+            return;
+          }
+        } catch {
+          // If URL parsing fails, skip injection
+          await route.continue();
+          return;
+        }
+      }
+
       const response = await route.fetch();
       const originalHeaders = response.headers();
       const { headers: newHeaders, permissionsPolicies } = transformResponseHeaders(
