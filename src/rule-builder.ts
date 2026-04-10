@@ -81,7 +81,10 @@ export function violationToSourceExpression(
 
   // Validate that the resulting expression can't inject additional CSP directives
   if (!isValidSourceExpression(result)) {
-    logger.warn('Source expression contains invalid characters, skipping', { source: result, blockedUri });
+    logger.warn('Source expression contains invalid characters, skipping', {
+      source: result,
+      blockedUri,
+    });
     return null;
   }
 

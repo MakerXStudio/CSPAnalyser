@@ -6,11 +6,10 @@ const logger = createLogger();
 const REPORT_GROUP = 'csp-analyser';
 
 /** CSP-related headers that should be stripped from responses. */
-const CSP_HEADERS = [
-  'content-security-policy',
-  'content-security-policy-report-only',
-  'report-to',
-];
+const CSP_HEADERS = ['content-security-policy', 'content-security-policy-report-only', 'report-to'];
+
+/** Permissions-Policy headers to capture (not strip). */
+const PERMISSIONS_POLICY_HEADERS = ['permissions-policy', 'feature-policy'];
 
 /**
  * Playwright Page interface — minimal subset needed for CSP injection.
@@ -46,9 +45,18 @@ export interface PlaywrightResponse {
   body(): Promise<Buffer>;
 }
 
+/** Captured Permissions-Policy header from a response. */
+export interface CapturedPermissionsPolicy {
+  headerName: string;
+  headerValue: string;
+}
+
 /**
  * Transforms response headers by stripping existing CSP headers
  * and injecting a deny-all CSP-Report-Only + Report-To header.
+ *
+ * Also captures any Permissions-Policy / Feature-Policy headers
+ * without modifying them.
  *
  * This is a pure function for easy testing.
  */
@@ -56,14 +64,21 @@ export function transformResponseHeaders(
   headers: Record<string, string>,
   reportServerPort: number,
   reportToken?: string,
-): Record<string, string> {
+): { headers: Record<string, string>; permissionsPolicies: CapturedPermissionsPolicy[] } {
   const result: Record<string, string> = {};
+  const permissionsPolicies: CapturedPermissionsPolicy[] = [];
 
   // Copy headers, stripping CSP-related ones (case-insensitive)
   for (const [key, value] of Object.entries(headers)) {
-    if (!CSP_HEADERS.includes(key.toLowerCase())) {
-      result[key] = value;
+    const lower = key.toLowerCase();
+    if (CSP_HEADERS.includes(lower)) {
+      continue;
     }
+    // Capture permissions-policy headers (keep them in the response)
+    if (PERMISSIONS_POLICY_HEADERS.includes(lower)) {
+      permissionsPolicies.push({ headerName: lower, headerValue: value });
+    }
+    result[key] = value;
   }
 
   const tokenSuffix = reportToken ? `/${reportToken}` : '';
@@ -76,12 +91,20 @@ export function transformResponseHeaders(
   // Add Report-To header for Reporting API
   result['report-to'] = buildReportToHeader(reportsEndpoint, REPORT_GROUP);
 
-  return result;
+  return { headers: result, permissionsPolicies };
 }
+
+export type PermissionsPolicyCaptureCallback = (
+  captured: CapturedPermissionsPolicy[],
+  requestUrl: string,
+) => void;
 
 /**
  * Sets up CSP injection on a Playwright page by intercepting all requests
  * and modifying response headers.
+ *
+ * Optionally accepts a callback that is invoked when Permissions-Policy
+ * or Feature-Policy headers are found in a response.
  *
  * Returns a cleanup function that removes the route handler.
  */
@@ -89,12 +112,21 @@ export async function setupCspInjection(
   page: PlaywrightPage,
   reportServerPort: number,
   reportToken?: string,
+  onPermissionsPolicy?: PermissionsPolicyCaptureCallback,
 ): Promise<() => Promise<void>> {
   const handler = async (route: PlaywrightRoute): Promise<void> => {
     try {
       const response = await route.fetch();
       const originalHeaders = response.headers();
-      const newHeaders = transformResponseHeaders(originalHeaders, reportServerPort, reportToken);
+      const { headers: newHeaders, permissionsPolicies } = transformResponseHeaders(
+        originalHeaders,
+        reportServerPort,
+        reportToken,
+      );
+
+      if (permissionsPolicies.length > 0 && onPermissionsPolicy) {
+        onPermissionsPolicy(permissionsPolicies, route.request().url());
+      }
 
       await route.fulfill({
         response,

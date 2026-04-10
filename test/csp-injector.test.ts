@@ -20,7 +20,7 @@ describe('transformResponseHeaders', () => {
       'report-to': '{"group":"old"}',
     };
 
-    const result = transformResponseHeaders(headers, TEST_PORT);
+    const { headers: result } = transformResponseHeaders(headers, TEST_PORT);
 
     expect(result['Content-Type']).toBe('text/html');
     expect(result['content-security-policy']).toBeUndefined();
@@ -32,14 +32,14 @@ describe('transformResponseHeaders', () => {
       'Report-To': '{"group":"old"}',
     };
 
-    const result = transformResponseHeaders(headers, TEST_PORT);
+    const { headers: result } = transformResponseHeaders(headers, TEST_PORT);
 
     expect(result['Content-Security-Policy']).toBeUndefined();
     expect(result['Report-To']).toBeUndefined();
   });
 
   it('adds CSP-Report-Only header with deny-all policy', () => {
-    const result = transformResponseHeaders({}, TEST_PORT);
+    const { headers: result } = transformResponseHeaders({}, TEST_PORT);
 
     const csp = result['content-security-policy-report-only'];
     expect(csp).toBeDefined();
@@ -51,7 +51,7 @@ describe('transformResponseHeaders', () => {
   });
 
   it('adds Report-To header pointing to report server', () => {
-    const result = transformResponseHeaders({}, TEST_PORT);
+    const { headers: result } = transformResponseHeaders({}, TEST_PORT);
 
     const reportTo = JSON.parse(result['report-to']!);
     expect(reportTo.group).toBe('csp-analyser');
@@ -66,7 +66,7 @@ describe('transformResponseHeaders', () => {
       'Set-Cookie': 'session=abc',
     };
 
-    const result = transformResponseHeaders(headers, TEST_PORT);
+    const { headers: result } = transformResponseHeaders(headers, TEST_PORT);
 
     expect(result['X-Custom']).toBe('value');
     expect(result['Cache-Control']).toBe('no-cache');
@@ -74,7 +74,7 @@ describe('transformResponseHeaders', () => {
   });
 
   it('handles empty headers', () => {
-    const result = transformResponseHeaders({}, TEST_PORT);
+    const { headers: result } = transformResponseHeaders({}, TEST_PORT);
 
     expect(result['content-security-policy-report-only']).toBeDefined();
     expect(result['report-to']).toBeDefined();
@@ -82,7 +82,7 @@ describe('transformResponseHeaders', () => {
 
   it('includes token in report-uri and report-to URLs when provided', () => {
     const token = 'test-token-abc';
-    const result = transformResponseHeaders({}, TEST_PORT, token);
+    const { headers: result } = transformResponseHeaders({}, TEST_PORT, token);
 
     const csp = result['content-security-policy-report-only'];
     expect(csp).toContain(`report-uri http://127.0.0.1:${TEST_PORT}/csp-report/${token}`);
@@ -92,7 +92,7 @@ describe('transformResponseHeaders', () => {
   });
 
   it('omits token from URLs when not provided', () => {
-    const result = transformResponseHeaders({}, TEST_PORT);
+    const { headers: result } = transformResponseHeaders({}, TEST_PORT);
 
     const csp = result['content-security-policy-report-only'];
     expect(csp).toContain(`report-uri http://127.0.0.1:${TEST_PORT}/csp-report`);
@@ -100,6 +100,38 @@ describe('transformResponseHeaders', () => {
 
     const reportTo = JSON.parse(result['report-to']!);
     expect(reportTo.endpoints[0].url).toBe(`http://127.0.0.1:${TEST_PORT}/reports`);
+  });
+
+  it('captures Permissions-Policy headers without stripping them', () => {
+    const headers = {
+      'Content-Type': 'text/html',
+      'Permissions-Policy': 'camera=(), geolocation=(self)',
+    };
+
+    const { headers: result, permissionsPolicies } = transformResponseHeaders(headers, TEST_PORT);
+
+    // Header should be preserved in the response
+    expect(result['Permissions-Policy']).toBe('camera=(), geolocation=(self)');
+    // And captured for analysis
+    expect(permissionsPolicies).toHaveLength(1);
+    expect(permissionsPolicies[0]!.headerName).toBe('permissions-policy');
+    expect(permissionsPolicies[0]!.headerValue).toBe('camera=(), geolocation=(self)');
+  });
+
+  it('captures Feature-Policy headers', () => {
+    const headers = {
+      'Feature-Policy': "camera 'none'; microphone 'self'",
+    };
+
+    const { permissionsPolicies } = transformResponseHeaders(headers, TEST_PORT);
+
+    expect(permissionsPolicies).toHaveLength(1);
+    expect(permissionsPolicies[0]!.headerName).toBe('feature-policy');
+  });
+
+  it('returns empty permissionsPolicies when no such headers exist', () => {
+    const { permissionsPolicies } = transformResponseHeaders({ 'Content-Type': 'text/html' }, TEST_PORT);
+    expect(permissionsPolicies).toHaveLength(0);
   });
 });
 

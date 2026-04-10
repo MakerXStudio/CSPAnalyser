@@ -31,17 +31,26 @@ export function getCertPaths(dataDir: string): CertPaths {
 
 /**
  * Ensures the CA certificate directory exists with secure permissions (0o700).
- * http-mitm-proxy will auto-generate the CA certificate and keys inside this
- * directory when the proxy starts.
+ * Sets a restrictive umask (0o077) before directory creation to prevent
+ * the TOCTOU race where files are briefly world-readable between creation
+ * and chmod. The umask is always restored, even on error.
  *
  * Returns the cert paths for use with MitmProxyOptions.
  */
 export async function ensureCACertificate(dataDir: string): Promise<CertPaths> {
   const certPaths = getCertPaths(dataDir);
 
-  // Ensure the sslCaDir base exists with secure permissions.
-  // http-mitm-proxy creates the certs/ and keys/ subdirectories itself.
-  ensureDataDirectory(certPaths.sslCaDir);
+  // Set restrictive umask so http-mitm-proxy creates cert/key files with
+  // 0o600 permissions from the start, eliminating the TOCTOU window where
+  // files exist with default (potentially world-readable) permissions.
+  const previousUmask = process.umask(0o077);
+  try {
+    // Ensure the sslCaDir base exists with secure permissions.
+    // http-mitm-proxy creates the certs/ and keys/ subdirectories itself.
+    ensureDataDirectory(certPaths.sslCaDir);
+  } finally {
+    process.umask(previousUmask);
+  }
 
   logger.info('CA certificate directory ready', { sslCaDir: certPaths.sslCaDir });
 
@@ -51,7 +60,8 @@ export async function ensureCACertificate(dataDir: string): Promise<CertPaths> {
 /**
  * Sets secure file permissions (0o600) on CA certificate and private key files.
  * Call this after the MITM proxy has started and http-mitm-proxy has generated
- * the CA files, since it creates them with default (insecure) permissions.
+ * the CA files. While the restrictive umask in ensureCACertificate() should
+ * ensure files are created securely, this serves as a defense-in-depth measure.
  */
 export function secureCertFiles(certPaths: CertPaths): void {
   setSecureFilePermissions(certPaths.caKeyPath);

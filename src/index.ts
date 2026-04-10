@@ -62,28 +62,21 @@ export { createLogger } from './utils/logger.js';
 export type { LogLevel, Logger } from './utils/logger.js';
 
 export {
+  resolveRealPath,
   validateDbPath,
   ensureDataDirectory,
   setSecureFilePermissions,
 } from './utils/file-utils.js';
 
 // ── Report Parser ────────────────────────────────────────────────────────
-export {
-  parseCspReport,
-  parseReportingApiReport,
-  parseDomViolation,
-} from './report-parser.js';
+export { parseCspReport, parseReportingApiReport, parseDomViolation } from './report-parser.js';
 
 // ── Report Server ────────────────────────────────────────────────────────
 export { startReportServer } from './report-server.js';
 
 // ── CSP Injector ─────────────────────────────────────────────────────────
 export { setupCspInjection, transformResponseHeaders } from './csp-injector.js';
-export type {
-  PlaywrightPage,
-  PlaywrightRoute,
-  PlaywrightResponse,
-} from './csp-injector.js';
+export type { PlaywrightPage, PlaywrightRoute, PlaywrightResponse } from './csp-injector.js';
 
 // ── Violation Listener ───────────────────────────────────────────────────
 export { setupViolationListener, generateInitScript } from './violation-listener.js';
@@ -93,40 +86,21 @@ export { crawl } from './crawler.js';
 export type { CrawlResult, CrawlCallbacks } from './crawler.js';
 
 // ── Policy Generation (Phase 3) ─────────────────────────────────────────
-export {
-  violationToSourceExpression,
-  violationToHashSource,
-} from './rule-builder.js';
+export { violationToSourceExpression, violationToHashSource } from './rule-builder.js';
 
-export {
-  generatePolicy,
-  generatePolicyFromViolations,
-} from './policy-generator.js';
+export { generatePolicy, generatePolicyFromViolations } from './policy-generator.js';
 export type { PolicyGeneratorOptions } from './policy-generator.js';
 
-export {
-  optimizePolicy,
-  shouldUseDefaultSrc,
-} from './policy-optimizer.js';
+export { optimizePolicy, shouldUseDefaultSrc } from './policy-optimizer.js';
 
-export {
-  formatPolicy,
-  directivesToString,
-} from './policy-formatter.js';
+export { formatPolicy, directivesToString } from './policy-formatter.js';
 
 // ── Certificate Manager (Phase 4) ─────────────────────────────────────
-export {
-  getCertPaths,
-  ensureCACertificate,
-  secureCertFiles,
-} from './cert-manager.js';
+export { getCertPaths, ensureCACertificate, secureCertFiles } from './cert-manager.js';
 export type { CertPaths } from './cert-manager.js';
 
 // ── MITM Proxy (Phase 4) ──────────────────────────────────────────────
-export {
-  startMitmProxy,
-  transformProxyResponseHeaders,
-} from './mitm-proxy.js';
+export { startMitmProxy, transformProxyResponseHeaders } from './mitm-proxy.js';
 export type { MitmProxyOptions, MitmProxyInstance } from './mitm-proxy.js';
 
 // ── Auth (Phase 5) ────────────────────────────────────────────────────
@@ -140,7 +114,12 @@ export type { AuthOptions } from './auth.js';
 
 // ── Session Manager (Phase 5) ─────────────────────────────────────────
 export { runSession, runInteractiveSession } from './session-manager.js';
-export type { SessionResult, InteractiveSessionResult, RunSessionOptions, InteractiveSessionOptions } from './session-manager.js';
+export type {
+  SessionResult,
+  InteractiveSessionResult,
+  RunSessionOptions,
+  InteractiveSessionOptions,
+} from './session-manager.js';
 
 // ── MCP Server (Phase 5) ──────────────────────────────────────────────
 export { createMcpServer } from './mcp-server.js';

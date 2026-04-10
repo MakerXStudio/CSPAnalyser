@@ -17,6 +17,9 @@ import {
   getViolationSummary,
   insertPolicy,
   getPolicy,
+  insertPermissionsPolicy,
+  getPermissionsPolicies,
+  getPermissionsPolicyByDirective,
   type InsertViolationParams,
 } from '../../src/db/repository.js';
 import type { SessionConfig } from '../../src/types.js';
@@ -42,6 +45,7 @@ describe('createDatabase', () => {
     expect(names).toContain('pages');
     expect(names).toContain('violations');
     expect(names).toContain('policies');
+    expect(names).toContain('permissions_policies');
     db.close();
   });
 
@@ -533,5 +537,191 @@ describe('Cascade deletes', () => {
     expect(getPages(db, session.id)).toEqual([]);
     expect(getViolations(db, session.id)).toEqual([]);
     expect(getPolicy(db, session.id)).toBeNull();
+  });
+});
+
+// ── Permissions-Policy repository ────────────────────────────────────────
+
+describe('permissions policy repository', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('inserts and retrieves a permissions policy', () => {
+    const session = createSession(db, TEST_CONFIG);
+    const result = insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.directive).toBe('camera');
+    expect(result!.allowlist).toEqual([]);
+    expect(result!.headerType).toBe('permissions-policy');
+    expect(result!.sourceUrl).toBe('https://example.com/');
+    expect(result!.sessionId).toBe(session.id);
+    expect(result!.pageId).toBeNull();
+  });
+
+  it('inserts a permissions policy with page reference', () => {
+    const session = createSession(db, TEST_CONFIG);
+    const page = insertPage(db, session.id, 'https://example.com/page', 200);
+
+    const result = insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: page!.id,
+      directive: 'geolocation',
+      allowlist: ['self', '"https://maps.example.com"'],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/page',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.pageId).toBe(page!.id);
+    expect(result!.allowlist).toEqual(['self', '"https://maps.example.com"']);
+  });
+
+  it('returns null for duplicate insert (unique constraint)', () => {
+    const session = createSession(db, TEST_CONFIG);
+    const page = insertPage(db, session.id, 'https://example.com/', 200);
+
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: page!.id,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    const dup = insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: page!.id,
+      directive: 'camera',
+      allowlist: ['self'],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/other',
+    });
+
+    expect(dup).toBeNull();
+  });
+
+  it('allows same directive from different header types', () => {
+    const session = createSession(db, TEST_CONFIG);
+    const r1 = insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+    const r2 = insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'feature-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    expect(r1).not.toBeNull();
+    expect(r2).not.toBeNull();
+  });
+
+  it('getPermissionsPolicies returns all policies for a session', () => {
+    const session = createSession(db, TEST_CONFIG);
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'geolocation',
+      allowlist: ['self'],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    const policies = getPermissionsPolicies(db, session.id);
+    expect(policies).toHaveLength(2);
+    expect(policies.map((p) => p.directive).sort()).toEqual(['camera', 'geolocation']);
+  });
+
+  it('getPermissionsPolicies returns empty for unknown session', () => {
+    expect(getPermissionsPolicies(db, 'nonexistent')).toEqual([]);
+  });
+
+  it('getPermissionsPolicyByDirective filters by directive', () => {
+    const session = createSession(db, TEST_CONFIG);
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'geolocation',
+      allowlist: ['self'],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    const cameraPolicies = getPermissionsPolicyByDirective(db, session.id, 'camera');
+    expect(cameraPolicies).toHaveLength(1);
+    expect(cameraPolicies[0]!.directive).toBe('camera');
+
+    const geoPolicies = getPermissionsPolicyByDirective(db, session.id, 'geolocation');
+    expect(geoPolicies).toHaveLength(1);
+    expect(geoPolicies[0]!.directive).toBe('geolocation');
+  });
+
+  it('getPermissionsPolicyByDirective returns empty for non-matching directive', () => {
+    const session = createSession(db, TEST_CONFIG);
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    expect(getPermissionsPolicyByDirective(db, session.id, 'microphone')).toEqual([]);
+  });
+
+  it('cascades delete when session is deleted', () => {
+    const session = createSession(db, TEST_CONFIG);
+    insertPermissionsPolicy(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'camera',
+      allowlist: [],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+    });
+
+    expect(getPermissionsPolicies(db, session.id)).toHaveLength(1);
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);
+    expect(getPermissionsPolicies(db, session.id)).toEqual([]);
   });
 });

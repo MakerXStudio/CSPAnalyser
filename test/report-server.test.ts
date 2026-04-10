@@ -250,3 +250,146 @@ describe('report-server', () => {
     expect(port).toBeLessThan(65536);
   });
 });
+
+// ── Rate limiting ─────────────────────────────────────────────────────
+
+describe('report-server rate limiting', () => {
+  let rateLimitDb: Database.Database;
+  let rateLimitSessionId: string;
+  let rateLimitPort: number;
+  let rateLimitToken: string;
+  let rateLimitClose: () => Promise<void>;
+
+  function makeReport(blockedUri: string) {
+    return {
+      'csp-report': {
+        'document-uri': 'https://example.com/',
+        'blocked-uri': blockedUri,
+        'violated-directive': 'script-src',
+        'effective-directive': 'script-src',
+      },
+    };
+  }
+
+  async function postReport(body: unknown): Promise<Response> {
+    return fetch(`http://127.0.0.1:${rateLimitPort}/csp-report/${rateLimitToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/csp-report' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  afterEach(async () => {
+    if (rateLimitClose) await rateLimitClose();
+    if (rateLimitDb) rateLimitDb.close();
+  });
+
+  it('accepts reports under the violation limit', async () => {
+    rateLimitDb = createDatabase(':memory:');
+    const session = createSession(rateLimitDb, { targetUrl: 'https://example.com' });
+    rateLimitSessionId = session.id;
+    const server = await startReportServer(rateLimitDb, rateLimitSessionId, { violationLimit: 3 });
+    rateLimitPort = server.port;
+    rateLimitToken = server.token;
+    rateLimitClose = server.close;
+
+    const res1 = await postReport(makeReport('https://cdn.example.com/a.js'));
+    expect(res1.status).toBe(204);
+
+    const res2 = await postReport(makeReport('https://cdn.example.com/b.js'));
+    expect(res2.status).toBe(204);
+
+    const violations = getViolations(rateLimitDb, rateLimitSessionId);
+    expect(violations).toHaveLength(2);
+  });
+
+  it('returns 429 once violation limit is reached', async () => {
+    rateLimitDb = createDatabase(':memory:');
+    const session = createSession(rateLimitDb, { targetUrl: 'https://example.com' });
+    rateLimitSessionId = session.id;
+    const server = await startReportServer(rateLimitDb, rateLimitSessionId, { violationLimit: 2 });
+    rateLimitPort = server.port;
+    rateLimitToken = server.token;
+    rateLimitClose = server.close;
+
+    // Fill up to limit
+    const res1 = await postReport(makeReport('https://cdn.example.com/a.js'));
+    expect(res1.status).toBe(204);
+
+    const res2 = await postReport(makeReport('https://cdn.example.com/b.js'));
+    expect(res2.status).toBe(204);
+
+    // This should be rejected
+    const res3 = await postReport(makeReport('https://cdn.example.com/c.js'));
+    expect(res3.status).toBe(429);
+    const body = await res3.json();
+    expect(body.error).toBe('violation limit reached');
+
+    // Only 2 violations should be stored
+    const violations = getViolations(rateLimitDb, rateLimitSessionId);
+    expect(violations).toHaveLength(2);
+  });
+
+  it('returns 429 for reporting API endpoint when limit reached', async () => {
+    rateLimitDb = createDatabase(':memory:');
+    const session = createSession(rateLimitDb, { targetUrl: 'https://example.com' });
+    rateLimitSessionId = session.id;
+    const server = await startReportServer(rateLimitDb, rateLimitSessionId, { violationLimit: 1 });
+    rateLimitPort = server.port;
+    rateLimitToken = server.token;
+    rateLimitClose = server.close;
+
+    // Fill the limit with one report
+    const res1 = await postReport(makeReport('https://cdn.example.com/a.js'));
+    expect(res1.status).toBe(204);
+
+    // Reporting API endpoint should also be rate-limited
+    const res2 = await fetch(`http://127.0.0.1:${rateLimitPort}/reports/${rateLimitToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/reports+json' },
+      body: JSON.stringify([{
+        type: 'csp-violation',
+        body: {
+          documentURL: 'https://example.com/',
+          blockedURL: 'https://cdn.example.com/b.js',
+          effectiveDirective: 'script-src',
+        },
+      }]),
+    });
+    expect(res2.status).toBe(429);
+  });
+
+  it('allows unlimited violations when violationLimit is 0', async () => {
+    rateLimitDb = createDatabase(':memory:');
+    const session = createSession(rateLimitDb, { targetUrl: 'https://example.com' });
+    rateLimitSessionId = session.id;
+    const server = await startReportServer(rateLimitDb, rateLimitSessionId, { violationLimit: 0 });
+    rateLimitPort = server.port;
+    rateLimitToken = server.token;
+    rateLimitClose = server.close;
+
+    // Send multiple reports — none should be rejected
+    for (let i = 0; i < 5; i++) {
+      const res = await postReport(makeReport(`https://cdn.example.com/${i}.js`));
+      expect(res.status).toBe(204);
+    }
+
+    const violations = getViolations(rateLimitDb, rateLimitSessionId);
+    expect(violations).toHaveLength(5);
+  });
+
+  it('uses default limit of 10,000 when no option provided', async () => {
+    rateLimitDb = createDatabase(':memory:');
+    const session = createSession(rateLimitDb, { targetUrl: 'https://example.com' });
+    rateLimitSessionId = session.id;
+    // No options — uses default
+    const server = await startReportServer(rateLimitDb, rateLimitSessionId);
+    rateLimitPort = server.port;
+    rateLimitToken = server.token;
+    rateLimitClose = server.close;
+
+    // Just verify it accepts reports (default limit is 10,000)
+    const res = await postReport(makeReport('https://cdn.example.com/a.js'));
+    expect(res.status).toBe(204);
+  });
+});

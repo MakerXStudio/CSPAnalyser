@@ -3,11 +3,14 @@ import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import { initializeDatabase } from './schema.js';
 import { createLogger } from '../utils/logger.js';
-import { validateDbPath, ensureDataDirectory, setSecureFilePermissions } from '../utils/file-utils.js';
+import {
+  validateDbPath,
+  ensureDataDirectory,
+  setSecureFilePermissions,
+} from '../utils/file-utils.js';
 import type {
   Session,
   SessionConfig,
-  SessionStatus,
   SessionRow,
   Page,
   PageRow,
@@ -17,9 +20,27 @@ import type {
   Policy,
   PolicyRow,
   ExportFormat,
+  PermissionsPolicy,
+  PermissionsPolicyRow,
 } from '../types.js';
 
+const logger = createLogger();
+
 // ── Row → Entity mappers ─────────────────────────────────────────────────
+
+/**
+ * Safely parses a JSON string from a database column.
+ * Returns the fallback value if parsing fails (e.g. corrupted DB data),
+ * preventing an unhandled exception from crashing the process.
+ */
+function safeJsonParse<T>(raw: string | null | undefined, fallback: T, context: string): T {
+  try {
+    return JSON.parse(raw ?? JSON.stringify(fallback)) as T;
+  } catch {
+    logger.warn('Failed to parse JSON from database column', { context, raw: raw?.slice(0, 100) });
+    return fallback;
+  }
+}
 
 function toSession(row: SessionRow): Session {
   return {
@@ -27,7 +48,7 @@ function toSession(row: SessionRow): Session {
     targetUrl: row.target_url,
     status: row.status,
     mode: row.mode,
-    config: JSON.parse(row.config ?? '{}') as SessionConfig,
+    config: safeJsonParse<SessionConfig>(row.config, {} as SessionConfig, 'sessions.config'),
     reportServerPort: row.report_server_port,
     proxyPort: row.proxy_port,
     createdAt: row.created_at,
@@ -59,7 +80,7 @@ function toViolation(row: ViolationRow): Violation {
     columnNumber: row.column_number,
     disposition: row.disposition,
     sample: row.sample,
-    capturedVia: row.captured_via as ViolationSource,
+    capturedVia: row.captured_via,
     rawReport: row.raw_report,
     createdAt: row.created_at,
   };
@@ -70,8 +91,8 @@ function toPolicy(row: PolicyRow): Policy {
     id: String(row.id),
     sessionId: row.session_id,
     policyHeader: row.policy_header,
-    directives: JSON.parse(row.directives) as Record<string, string[]>,
-    format: row.format as ExportFormat,
+    directives: safeJsonParse<Record<string, string[]>>(row.directives, {}, 'policies.directives'),
+    format: row.format,
     isReportOnly: row.is_report_only === 1,
     createdAt: row.created_at,
   };
@@ -108,15 +129,15 @@ export function createDatabase(dbPath: string): Database.Database {
 
 // ── Session repository ────────────────────────────────────────────────────
 
-const logger = createLogger();
-
 export function createSession(db: Database.Database, config: SessionConfig): Session {
   const id = randomUUID();
 
   // Strip cookies from the persisted config — they should only be used ephemerally
   const persistConfig = { ...config };
   if (persistConfig.cookies) {
-    logger.warn('Cookies provided for session authentication; they will not be persisted to the database for security');
+    logger.warn(
+      'Cookies provided for session authentication; they will not be persisted to the database for security',
+    );
     delete persistConfig.cookies;
   }
 
@@ -223,10 +244,7 @@ export interface InsertViolationParams {
   rawReport?: string | null;
 }
 
-export function insertViolation(
-  db: Database.Database,
-  v: InsertViolationParams,
-): Violation | null {
+export function insertViolation(db: Database.Database, v: InsertViolationParams): Violation | null {
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO violations
       (session_id, page_id, document_uri, blocked_uri, violated_directive,
@@ -286,9 +304,7 @@ export function getViolations(
   }
 
   const needsJoin = filters?.pageUrl != null;
-  const from = needsJoin
-    ? 'violations v LEFT JOIN pages p ON v.page_id = p.id'
-    : 'violations v';
+  const from = needsJoin ? 'violations v LEFT JOIN pages p ON v.page_id = p.id' : 'violations v';
 
   const rows = db
     .prepare(`SELECT v.* FROM ${from} WHERE ${conditions.join(' AND ')} ORDER BY v.created_at`)
@@ -355,9 +371,81 @@ export function insertPolicy(db: Database.Database, p: InsertPolicyParams): Poli
 
 export function getPolicy(db: Database.Database, sessionId: string): Policy | null {
   const row = db
-    .prepare(
-      'SELECT * FROM policies WHERE session_id = ? ORDER BY id DESC LIMIT 1',
-    )
+    .prepare('SELECT * FROM policies WHERE session_id = ? ORDER BY id DESC LIMIT 1')
     .get(sessionId) as PolicyRow | undefined;
   return row ? toPolicy(row) : null;
+}
+
+// ── Permissions-Policy repository ────────────────────────────────────────
+
+function toPermissionsPolicy(row: PermissionsPolicyRow): PermissionsPolicy {
+  return {
+    id: String(row.id),
+    sessionId: row.session_id,
+    pageId: row.page_id != null ? String(row.page_id) : null,
+    directive: row.directive,
+    allowlist: safeJsonParse<string[]>(row.allowlist, [], 'permissions_policies.allowlist'),
+    headerType: row.header_type,
+    sourceUrl: row.source_url,
+    createdAt: row.created_at,
+  };
+}
+
+export interface InsertPermissionsPolicyParams {
+  sessionId: string;
+  pageId: string | null;
+  directive: string;
+  allowlist: string[];
+  headerType: 'permissions-policy' | 'feature-policy';
+  sourceUrl: string;
+}
+
+export function insertPermissionsPolicy(
+  db: Database.Database,
+  p: InsertPermissionsPolicyParams,
+): PermissionsPolicy | null {
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO permissions_policies
+      (session_id, page_id, directive, allowlist, header_type, source_url)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const result = stmt.run(
+    p.sessionId,
+    p.pageId != null ? Number(p.pageId) : null,
+    p.directive,
+    JSON.stringify(p.allowlist),
+    p.headerType,
+    p.sourceUrl,
+  );
+  if (result.changes === 0) return null;
+
+  const row = db
+    .prepare('SELECT * FROM permissions_policies WHERE id = ?')
+    .get(result.lastInsertRowid) as PermissionsPolicyRow;
+  return toPermissionsPolicy(row);
+}
+
+export function getPermissionsPolicies(
+  db: Database.Database,
+  sessionId: string,
+): PermissionsPolicy[] {
+  const rows = db
+    .prepare(
+      'SELECT * FROM permissions_policies WHERE session_id = ? ORDER BY directive, created_at',
+    )
+    .all(sessionId) as PermissionsPolicyRow[];
+  return rows.map(toPermissionsPolicy);
+}
+
+export function getPermissionsPolicyByDirective(
+  db: Database.Database,
+  sessionId: string,
+  directive: string,
+): PermissionsPolicy[] {
+  const rows = db
+    .prepare(
+      'SELECT * FROM permissions_policies WHERE session_id = ? AND directive = ? ORDER BY created_at',
+    )
+    .all(sessionId, directive) as PermissionsPolicyRow[];
+  return rows.map(toPermissionsPolicy);
 }

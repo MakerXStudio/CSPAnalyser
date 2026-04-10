@@ -722,6 +722,12 @@ describe('CLI onProgress callbacks', () => {
     }));
     vi.doMock('../src/db/repository.js', () => ({
       createDatabase: (...args: unknown[]) => mockCreateDatabase(...args),
+      getSession: () => ({ targetUrl: 'https://example.com' }),
+      getViolationSummary: () => [],
+    }));
+    vi.doMock('../src/policy-diff.js', () => ({
+      compareSessions: vi.fn(),
+      formatDiff: vi.fn().mockReturnValue('no changes'),
     }));
   });
 
@@ -731,6 +737,7 @@ describe('CLI onProgress callbacks', () => {
     vi.doUnmock('../src/policy-optimizer.js');
     vi.doUnmock('../src/policy-formatter.js');
     vi.doUnmock('../src/db/repository.js');
+    vi.doUnmock('../src/policy-diff.js');
     vi.restoreAllMocks();
   });
 
@@ -755,8 +762,8 @@ describe('CLI onProgress callbacks', () => {
     const { main } = await import('../src/cli.js');
     await main(['crawl', 'https://example.com']);
 
-    // Line 204: onProgress writes to stderr
-    expect(stderrWrite).toHaveBeenCalledWith('Test progress message\n');
+    // onProgress writes to stderr (now with color formatting)
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Test progress message'));
 
     stderrWrite.mockRestore();
     stdoutWrite.mockRestore();
@@ -781,8 +788,8 @@ describe('CLI onProgress callbacks', () => {
     const { main } = await import('../src/cli.js');
     await main(['interactive', 'https://example.com']);
 
-    // Line 230: onProgress writes to stderr
-    expect(stderrWrite).toHaveBeenCalledWith('Interactive progress\n');
+    // onProgress writes to stderr (now with color formatting)
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Interactive progress'));
 
     stderrWrite.mockRestore();
     stdoutWrite.mockRestore();

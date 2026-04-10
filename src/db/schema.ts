@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS policies (
   format TEXT NOT NULL DEFAULT 'header',
   is_report_only INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS permissions_policies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+  directive TEXT NOT NULL,
+  allowlist TEXT NOT NULL DEFAULT '[]',
+  header_type TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(session_id, page_id, directive, header_type)
 );
 `;
 

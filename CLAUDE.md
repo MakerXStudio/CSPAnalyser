@@ -15,11 +15,13 @@ npm run test           # Run all tests (vitest run)
 npm run test:watch     # Watch mode (vitest)
 npm run test:coverage  # Tests with coverage (vitest run --coverage)
 npm run test -- test/report-parser.test.ts  # Run a single test file
+npm run lint           # Run ESLint (must have 0 errors)
+npm run lint:fix       # Auto-fix ESLint issues
+npm run format         # Format with Prettier
+npm run format:check   # Check formatting without writing
 npm run start          # Start MCP server (node dist/mcp-server.js)
 npm run cli            # Run CLI (node dist/cli.js)
 ```
-
-There is no linter or formatter configured in this project yet.
 
 ## Development Workflow
 

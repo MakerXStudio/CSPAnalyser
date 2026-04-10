@@ -19,7 +19,11 @@ function headerName(isReportOnly: boolean): string {
 }
 
 function escapeHtmlAttr(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function stripMetaDirectives(directives: Record<string, string[]>): Record<string, string[]> {
@@ -74,6 +78,11 @@ export function formatPolicy(
     return newResponse;
   }
 };`;
+    }
+
+    case 'cloudflare-pages': {
+      const policy = directivesToString(directives);
+      return `/*\n  ${name}: ${policy}`;
     }
 
     case 'json': {

@@ -142,7 +142,7 @@ describe('runSession', () => {
 
     const result = await runSession(db, config, {}, deps);
 
-    expect(deps.startReportServer).toHaveBeenCalledWith(db, result.session.id);
+    expect(deps.startReportServer).toHaveBeenCalledWith(db, result.session.id, expect.objectContaining({}));
     expect(result.session.reportServerPort).toBe(9876);
   });
 

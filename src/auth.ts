@@ -55,7 +55,8 @@ export interface AuthOptions {
 }
 
 /**
- * Validates a storageStatePath: resolves it, checks .json extension, and verifies it exists.
+ * Validates a storageStatePath: resolves it through symlinks, checks .json extension,
+ * and verifies it exists. Uses fs.realpathSync() to prevent symlink-based path traversal.
  * Throws a descriptive error for invalid paths.
  */
 export function validateStorageStatePath(storageStatePath: string): string {
@@ -69,7 +70,16 @@ export function validateStorageStatePath(storageStatePath: string): string {
     throw new Error(`Invalid storageStatePath: file does not exist ("${resolved}")`);
   }
 
-  return resolved;
+  // Resolve symlinks to get the real path — prevents symlink-based traversal
+  const realPath = fs.realpathSync(resolved);
+
+  if (!realPath.endsWith('.json')) {
+    throw new Error(
+      `Invalid storageStatePath: symlink target must have .json extension (got "${realPath}")`,
+    );
+  }
+
+  return realPath;
 }
 
 // ── Cookie validation (RFC 6265) ─────────────────────────────────────────
@@ -88,10 +98,14 @@ const INVALID_COOKIE_VALUE = /[\x00-\x1f\x7f;"\\ ,]/;
 
 export function validateCookieParam(cookie: CookieParam): void {
   if (!cookie.name || INVALID_COOKIE_NAME.test(cookie.name)) {
-    throw new Error(`Invalid cookie name: "${cookie.name}" — must be a valid HTTP token (RFC 6265)`);
+    throw new Error(
+      `Invalid cookie name: "${cookie.name}" — must be a valid HTTP token (RFC 6265)`,
+    );
   }
   if (INVALID_COOKIE_VALUE.test(cookie.value)) {
-    throw new Error(`Invalid cookie value for "${cookie.name}" — contains disallowed characters (RFC 6265)`);
+    throw new Error(
+      `Invalid cookie value for "${cookie.name}" — contains disallowed characters (RFC 6265)`,
+    );
   }
 }
 
@@ -137,7 +151,9 @@ export async function createAuthenticatedContext(
 
   // manualLogin
   if (auth.headless !== false) {
-    throw new Error('Manual login requires headed mode (headless: false). The browser must be visible for user interaction.');
+    throw new Error(
+      'Manual login requires headed mode (headless: false). The browser must be visible for user interaction.',
+    );
   }
   logger.info('Manual login requested — waiting for user interaction');
   const storageState = await performManualLogin(browser, targetUrl);
@@ -176,10 +192,7 @@ export function extractHostname(url: string): string {
  * Maps CookieParam[] to Playwright's cookie format,
  * defaulting domain to the target URL's hostname.
  */
-export function mapCookies(
-  cookies: CookieParam[],
-  defaultDomain: string,
-): PlaywrightCookie[] {
+export function mapCookies(cookies: CookieParam[], defaultDomain: string): PlaywrightCookie[] {
   return cookies.map((c) => ({
     name: c.name,
     value: c.value,

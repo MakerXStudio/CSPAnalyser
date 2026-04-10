@@ -8,6 +8,12 @@ import { createLogger } from './utils/logger.js';
 const logger = createLogger();
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+const DEFAULT_VIOLATION_LIMIT = 10_000;
+
+export interface ReportServerOptions {
+  /** Maximum violations to accept per session (default: 10,000). Set to 0 for unlimited. */
+  violationLimit?: number;
+}
 
 export interface ReportServerResult {
   port: number;
@@ -28,10 +34,14 @@ export interface ReportServerResult {
 export async function startReportServer(
   db: Database.Database,
   sessionId: string,
+  options?: ReportServerOptions,
 ): Promise<ReportServerResult> {
   const token = randomUUID();
   const cspReportPath = `/csp-report/${token}`;
   const reportsPath = `/reports/${token}`;
+  const violationLimit = options?.violationLimit ?? DEFAULT_VIOLATION_LIMIT;
+  let violationCount = 0;
+  let limitWarningLogged = false;
 
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -46,7 +56,24 @@ export async function startReportServer(
         res.end(JSON.stringify({ error: 'method not allowed' }));
         return;
       }
-      handleReport(req, res, db, sessionId, req.url === cspReportPath);
+
+      // Rate limit: reject new reports once violation limit is reached
+      if (violationLimit > 0 && violationCount >= violationLimit) {
+        if (!limitWarningLogged) {
+          logger.warn('Violation limit reached, rejecting further reports', {
+            sessionId,
+            limit: violationLimit,
+          });
+          limitWarningLogged = true;
+        }
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'violation limit reached' }));
+        return;
+      }
+
+      handleReport(req, res, db, sessionId, req.url === cspReportPath, (count: number) => {
+        violationCount += count;
+      });
       return;
     }
 
@@ -86,18 +113,27 @@ function handleReport(
   db: Database.Database,
   sessionId: string,
   isCspReport: boolean,
+  onViolationsInserted: (count: number) => void,
 ): void {
   const contentType = req.headers['content-type'] ?? '';
   const isReportsApi = !isCspReport;
 
   // Validate content type
-  if (isCspReport && !contentType.includes('application/csp-report') && !contentType.includes('application/json')) {
+  if (
+    isCspReport &&
+    !contentType.includes('application/csp-report') &&
+    !contentType.includes('application/json')
+  ) {
     res.writeHead(415, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'unsupported content type' }));
     return;
   }
 
-  if (isReportsApi && !contentType.includes('application/reports+json') && !contentType.includes('application/json')) {
+  if (
+    isReportsApi &&
+    !contentType.includes('application/reports+json') &&
+    !contentType.includes('application/json')
+  ) {
     res.writeHead(415, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'unsupported content type' }));
     return;
@@ -137,6 +173,7 @@ function handleReport(
         const violation = parseCspReport(body, sessionId, null);
         if (violation) {
           insertViolation(db, violation);
+          onViolationsInserted(1);
           logger.debug('CSP report stored', { directive: violation.effectiveDirective });
         }
         res.writeHead(204);
@@ -145,6 +182,9 @@ function handleReport(
         const violations = parseReportingApiReport(body, sessionId, null);
         for (const v of violations) {
           insertViolation(db, v);
+        }
+        if (violations.length > 0) {
+          onViolationsInserted(violations.length);
         }
         logger.debug('Reporting API reports stored', { count: violations.length });
         res.writeHead(204);

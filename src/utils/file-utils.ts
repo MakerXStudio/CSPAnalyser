@@ -2,7 +2,38 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
+ * Resolves a path through symlinks where possible.
+ *
+ * If the full path exists, uses fs.realpathSync() to resolve all symlinks.
+ * If the path doesn't exist yet (e.g. DB file before first run), resolves
+ * the parent directory's realpath and appends the filename — this ensures
+ * the parent isn't a symlink pointing elsewhere.
+ *
+ * Throws if neither the path nor its parent directory exists.
+ */
+export function resolveRealPath(filePath: string): string {
+  const resolved = path.resolve(filePath);
+
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    // File doesn't exist yet — resolve the parent directory instead
+    const dir = path.dirname(resolved);
+    const base = path.basename(resolved);
+    try {
+      const realDir = fs.realpathSync(dir);
+      return path.join(realDir, base);
+    } catch {
+      // Parent doesn't exist either — return the path.resolve() result
+      // (ensureDataDirectory will create it later)
+      return resolved;
+    }
+  }
+}
+
+/**
  * Validates a database path to prevent path traversal attacks.
+ * Resolves symlinks to prevent symlink-based traversal.
  * Returns the resolved, validated path.
  */
 export function validateDbPath(dbPath: string): string {
@@ -11,7 +42,7 @@ export function validateDbPath(dbPath: string): string {
     return dbPath;
   }
 
-  const resolved = path.resolve(dbPath);
+  const resolved = resolveRealPath(dbPath);
 
   // Ensure .db extension
   if (!resolved.endsWith('.db')) {

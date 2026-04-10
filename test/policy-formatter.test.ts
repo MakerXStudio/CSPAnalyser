@@ -158,6 +158,36 @@ describe('formatPolicy — cloudflare', () => {
   });
 });
 
+// ── formatPolicy: cloudflare-pages ─────────────────────────────────────
+
+describe('formatPolicy — cloudflare-pages', () => {
+  it('produces a Cloudflare Pages _headers file snippet', () => {
+    const result = formatPolicy({ 'default-src': ["'self'"] }, 'cloudflare-pages');
+    expect(result).toBe("/*\n  Content-Security-Policy: default-src 'self'");
+  });
+
+  it('includes multiple directives on a single line', () => {
+    const result = formatPolicy(
+      { 'default-src': ["'self'"], 'script-src': ["'self'", 'https://cdn.example.com'] },
+      'cloudflare-pages',
+    );
+    expect(result).toBe(
+      "/*\n  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com",
+    );
+  });
+
+  it('uses report-only header name when isReportOnly is true', () => {
+    const result = formatPolicy({ 'default-src': ["'self'"] }, 'cloudflare-pages', true);
+    expect(result).toContain('Content-Security-Policy-Report-Only');
+    expect(result).toMatch(/^\/\*\n  Content-Security-Policy-Report-Only:/);
+  });
+
+  it('handles empty directives', () => {
+    const result = formatPolicy({}, 'cloudflare-pages');
+    expect(result).toBe('/*\n  Content-Security-Policy: ');
+  });
+});
+
 // ── formatPolicy: json ──────────────────────────────────────────────────
 
 describe('formatPolicy — json', () => {

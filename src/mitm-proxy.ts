@@ -79,7 +79,7 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
     let started = false;
 
     proxy.onError((ctx, err) => {
-      const errorMsg = err instanceof Error ? err.message : String(err ?? 'unknown');
+      const errorMsg = err instanceof Error ? err.message : 'unknown';
       logger.error('MITM proxy error', { error: errorMsg });
       // If the proxy hasn't started yet, this is a fatal startup error
       if (!started) {
@@ -91,7 +91,11 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
     proxy.onResponseHeaders((ctx, callback) => {
       const upstream = ctx.serverToProxyResponse;
       if (upstream) {
-        const transformed = transformProxyResponseHeaders(upstream.headers, reportServerPort, reportToken);
+        const transformed = transformProxyResponseHeaders(
+          upstream.headers,
+          reportServerPort,
+          reportToken,
+        );
         // Replace headers in-place — the proxy writes these to the client response
         for (const key of Object.keys(upstream.headers)) {
           delete upstream.headers[key];
@@ -100,7 +104,7 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
           upstream.headers[key] = value;
         }
       }
-      return callback();
+      callback();
     });
 
     proxy.listen(

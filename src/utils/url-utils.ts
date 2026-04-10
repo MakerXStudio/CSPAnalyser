@@ -27,13 +27,17 @@ export function validateTargetUrl(url: string, options?: { allowPrivateIps?: boo
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`Invalid target URL scheme: "${parsed.protocol}" — only http: and https: are allowed`);
+    throw new Error(
+      `Invalid target URL scheme: "${parsed.protocol}" — only http: and https: are allowed`,
+    );
   }
 
   if (!options?.allowPrivateIps && !isLocalhost(parsed.hostname)) {
     for (const pattern of PRIVATE_IP_PATTERNS) {
       if (pattern.test(parsed.hostname)) {
-        throw new Error(`Invalid target URL: private/internal IP addresses are not allowed ("${parsed.hostname}"). Use --allow-private-ips to override.`);
+        throw new Error(
+          `Invalid target URL: private/internal IP addresses are not allowed ("${parsed.hostname}"). Use --allow-private-ips to override.`,
+        );
       }
     }
   }
@@ -94,9 +98,7 @@ export function shouldUseMitmMode(targetUrl: string): boolean {
  * Common multi-part ccTLD suffixes where wildcarding the second-level
  * domain would be catastrophically permissive (e.g., *.co.uk).
  */
-const MULTI_PART_TLD_PATTERNS = new Set([
-  'co', 'com', 'org', 'net', 'ac', 'gov', 'edu',
-]);
+const MULTI_PART_TLD_PATTERNS = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'edu']);
 
 /**
  * Returns true if the last two labels of a hostname form a known
@@ -104,8 +106,8 @@ const MULTI_PART_TLD_PATTERNS = new Set([
  */
 function isMultiPartTld(parts: string[]): boolean {
   if (parts.length < 2) return false;
-  const secondLevel = parts[parts.length - 2]!;
-  const topLevel = parts[parts.length - 1]!;
+  const secondLevel = parts[parts.length - 2];
+  const topLevel = parts[parts.length - 1];
   // Only applies to short ccTLDs (2-3 char), not gTLDs like .com
   return topLevel.length <= 3 && MULTI_PART_TLD_PATTERNS.has(secondLevel);
 }

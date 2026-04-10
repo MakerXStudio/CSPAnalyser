@@ -116,7 +116,8 @@ Output the generated policy in multiple formats suitable for different deploymen
 - HTML meta tag: `<meta http-equiv="Content-Security-Policy" content="...">`
 - nginx config: `add_header Content-Security-Policy "..." always;`
 - Apache config: `Header always set Content-Security-Policy "..."`
-- Cloudflare Workers/Pages format
+- Cloudflare Workers handler format
+- Cloudflare Pages `_headers` file format
 - Structured JSON for programmatic consumption
 
 ### F10: MCP Server Interface
@@ -124,9 +125,12 @@ Output the generated policy in multiple formats suitable for different deploymen
 Expose all functionality as MCP tools for AI coding agent consumption.
 
 **Acceptance criteria:**
-- Register tools: `start_session`, `crawl_url`, `get_violations`, `generate_policy`, `export_policy`, `get_session`, `list_sessions`
+- Register tools: `start_session`, `crawl_url`, `get_violations`, `generate_policy`, `export_policy`, `get_session`, `list_sessions`, `compare_sessions`, `score_policy`, `get_permissions_policy`
 - `start_session` consolidates authentication (via `storageStatePath` param) and multi-page crawling into a single tool
 - `crawl_url` is a convenience wrapper for single-page analysis (depth=0, maxPages=1)
+- `compare_sessions` compares two session policies showing added/removed/changed directives and violation diffs
+- `score_policy` evaluates a session's CSP against best practices with a letter grade (A–F) and findings
+- `get_permissions_policy` retrieves Permissions-Policy analysis for a session
 - Each tool has a typed JSON Schema input definition (using Zod schemas)
 - Tools return structured JSON responses suitable for agent consumption
 - Configurable in Claude Code, Codex, and other MCP-compatible agents
@@ -140,7 +144,55 @@ Provide a standalone command-line interface with two modes.
 - `csp-analyser interactive <url>` — headed manual browsing mode with live terminal output
 - `csp-analyser generate <session-id>` — regenerate policy from existing session data
 - `csp-analyser export <session-id> --format <format>` — export policy in specified format
+- `csp-analyser diff <id-a> <id-b>` — compare two session policies showing added/removed/changed directives
+- `csp-analyser score <session-id>` — evaluate CSP quality with a letter grade (A–F) and findings
+- `csp-analyser permissions <session-id>` — display Permissions-Policy analysis
+- Colored terminal output with ANSI codes (respects NO_COLOR env var and --no-color flag)
+- Progress indicators during crawling: page count, URL, elapsed time
+- Summary table after completion: pages crawled, violations found, unique directives, top 5 violated directives
 - Clear help text and error messages
+
+### F12: Permissions-Policy Analysis
+
+Parse and analyze Permissions-Policy and legacy Feature-Policy response headers captured during crawling.
+
+**Acceptance criteria:**
+- Parse both modern `Permissions-Policy` and legacy `Feature-Policy` header formats
+- Store parsed policies per page in a `permissions_policies` database table
+- Identify known W3C Permissions-Policy directives and flag unknown ones
+- Expose via MCP tool (`get_permissions_policy`) and CLI command (`permissions`)
+- Report which features are allowed/denied and for which origins
+
+### F13: Session Comparison/Diff
+
+Compare two analysis sessions to show how a site's CSP posture has changed over time.
+
+**Acceptance criteria:**
+- Compare generated policies: added/removed/changed directives with per-directive source diffs
+- Compare violations: new, resolved, and unchanged violations between sessions
+- Expose via MCP tool (`compare_sessions`) and CLI command (`diff <id-a> <id-b>`)
+- Human-readable formatted diff output for CLI
+
+### F14: CSP Scoring and Evaluation
+
+Score a generated CSP policy against security best practices with a letter grade.
+
+**Acceptance criteria:**
+- Score starts at 100 points, deducted for security weaknesses (e.g., `'unsafe-inline'`, `'unsafe-eval'`, missing `object-src`, wildcard sources)
+- Grade mapping: A (90+), B (75+), C (55+), D (35+), F (<35)
+- Findings categorized by severity: critical, warning, info, positive
+- Expose via MCP tool (`score_policy`) and CLI command (`score <session-id>`)
+
+### F15: Enhanced CLI Output
+
+Provide rich terminal output with colors, progress indicators, and summary tables.
+
+**Acceptance criteria:**
+- ANSI color-coded output: green (success), yellow (warnings), red (errors), cyan (info)
+- Respect `NO_COLOR` env var (https://no-color.org/) and `--no-color` CLI flag
+- Progress indicators during crawling: `Crawling [3/10] <url>`
+- Summary table after completion: pages crawled, violations found, unique directives, elapsed time, top 5 violated directives
+- `src/utils/terminal.ts` utility module with zero external dependencies
 
 ## 5. Non-Functional Requirements
 
@@ -152,10 +204,11 @@ Provide a standalone command-line interface with two modes.
 | Idempotent crawling | Re-crawling a URL in a session updates rather than duplicates |
 | Fast startup | MCP server starts in under 2 seconds |
 | TypeScript strict mode | Full type safety across the codebase |
+| Code quality | ESLint + Prettier enforced across all source files |
 
 ## 6. Out of Scope (Initial Release)
 
-- Permissions-Policy analysis (future addition)
+- ~~Permissions-Policy analysis~~ — Implemented in Phase 9a (see F12)
 - Distributed/remote analysis (this is a local tool)
 - Browser extensions
 - GUI/web dashboard
@@ -171,6 +224,8 @@ Provide a standalone command-line interface with two modes.
 | HTTPS proxy | http-mitm-proxy | 1.1.0 |
 | Agent protocol | @modelcontextprotocol/sdk | 1.29.0 |
 | Testing | Vitest | latest |
+| Linting | ESLint | latest |
+| Formatting | Prettier | latest |
 | Language | TypeScript | strict mode |
 | Runtime | Node.js | 24.x |
 
@@ -186,6 +241,8 @@ Provide a standalone command-line interface with two modes.
 | 5 | Session + Entry Points | Complete | session-manager, auth, mcp-server, cli |
 | 6 | Testing | Complete | 473 unit tests passing (95%+ statement/line coverage) |
 | 7 | Hardening & Review | Complete | Security audit, architecture review, bug fixes, test improvements. 627 tests (97% line coverage) |
+| 8 | DX & Robustness | Complete | ESLint/Prettier, Cloudflare Pages export, symlink path validation, rate limiting, TOCTOU fix, npm publish readiness, defensive JSON.parse |
+| 9 | Advanced Features | Complete | Permissions-Policy analysis, session diff, CSP scoring, enhanced CLI output. 781 tests across 28 test files |
 
 ### Phase 1 Artifacts
 - `src/types.ts` — All shared interfaces, enums, config types
@@ -228,7 +285,7 @@ Provide a standalone command-line interface with two modes.
 - ~~**MEDIUM:** No source expression format validation before policy inclusion~~ — Fixed: `isValidSourceExpression()` in `rule-builder.ts`
 - ~~**LOW:** Cloudflare format doesn't escape backslashes in JS string~~ — Fixed in `policy-formatter.ts`
 - ~~**LOW:** `deduplicateSources` in optimizer doesn't dedup 'self' vs explicit matching origin~~ — Fixed in `policy-optimizer.ts`
-- **NOTE:** Cloudflare format only outputs Workers handler, not Pages `_headers` file
+- ~~**NOTE:** Cloudflare format only outputs Workers handler, not Pages `_headers` file~~ — Fixed in Phase 8b: added `cloudflare-pages` export format
 - **NOTE:** Hash of truncated sample won't match browser's hash of full script — hashes only generated for samples <256 chars
 
 ### Phase 4 Artifacts
@@ -337,15 +394,98 @@ All P0, P1, HIGH, and MEDIUM findings from the security audit and architecture r
 - 6 LOW security fixes: cookie validation, headed mode check, error sanitization, failed status, Cloudflare escaping, self dedup
 - Code quality: empty directories removed, unused interfaces removed, +154 tests
 
-#### Recommendations for Future Work
+#### Recommendations from Phase 7 (all resolved in Phase 8)
 
-**Nice to have:**
-1. **Linter & formatter** — No linter or formatter is configured; consider adding ESLint + Prettier
-2. **Cloudflare Pages `_headers` format** — Currently only outputs Workers handler; add Pages format
-3. **Symlink-aware path validation** — Strengthen path traversal guards with realpath resolution
-4. **Report server rate limiting** — No per-session violation count limit (L2 from security audit)
-5. **StorageState symlink traversal** — Validated but symlink resolution not fully covered (M1 from security audit)
-6. **CA key TOCTOU race** — File permissions race between creation and securing (M5 from security audit)
+1. ~~**Linter & formatter**~~ — Resolved: ESLint + Prettier configured (Phase 8a)
+2. ~~**Cloudflare Pages `_headers` format**~~ — Resolved: `cloudflare-pages` export format added (Phase 8b)
+3. ~~**Symlink-aware path validation**~~ — Resolved: realpath-based validation (Phase 8c)
+4. ~~**Report server rate limiting**~~ — Resolved: per-session violation limit (10,000 default, configurable) with 429 responses (Phase 8d)
+5. ~~**StorageState symlink traversal**~~ — Resolved: covered by symlink-aware path validation (Phase 8c)
+6. ~~**CA key TOCTOU race**~~ — Resolved: umask-based atomic secure file creation (Phase 8e)
+
+### Phase 8 — DX & Robustness
+
+Phase 8 addresses all recommendations from Phase 7, adds code quality tooling, and prepares the package for publication.
+
+#### Phase 8a: ESLint + Prettier Configuration
+- ESLint with TypeScript-aware rules enforcing strict type safety
+- Prettier for consistent code formatting
+- `npm run lint` and `npm run format` scripts added
+- All existing source code passes lint and format checks
+
+#### Phase 8b: Cloudflare Pages `_headers` Export Format
+- `src/policy-formatter.ts` extended with `cloudflare-pages` format
+- Outputs `_headers` file syntax: path rule with `Content-Security-Policy` header
+- `ExportFormat` union type updated in `src/types.ts`
+
+#### Phase 8c: Symlink-Aware Path Validation
+- Path traversal guards strengthened with `fs.realpathSync` resolution
+- Prevents symlink-based escapes from data directories
+- Applied to storage state paths and database paths
+
+#### Phase 8d: Report Server Rate Limiting
+- Per-session violation counter with configurable limit (default: 10,000)
+- Returns 429 Too Many Requests when limit is reached
+- Warning logged once when limit is first hit
+- `ReportServerOptions` interface with `violationLimit` option
+- `violationLimit: 0` disables the limit
+
+#### Phase 8e: CA Key TOCTOU Fix
+- File permissions race between CA key creation and `chmod` resolved
+- Uses umask-based approach for atomic secure file creation
+
+#### Phase 8f: npm Publish Readiness
+- `package.json` updated with required metadata: description, keywords, repository, license, author, homepage, bugs
+- `files` field configured to include only distribution artifacts
+- `bin` field configured for CLI entry point
+
+#### Phase 8g: Defensive JSON.parse in Repository Layer
+- All `JSON.parse` calls in repository row mappers wrapped with error handling
+- Prevents crashes from corrupted JSON in database rows
+
+### Phase 9 — Advanced Features
+
+Phase 9 adds analytical features that enhance the tool's value beyond basic CSP generation.
+
+#### Phase 9a: Permissions-Policy Analysis
+- `src/permissions-policy.ts` — Parses modern `Permissions-Policy` and legacy `Feature-Policy` headers
+- Comprehensive set of known W3C Permissions-Policy directives
+- `permissions_policies` database table for per-page storage
+- MCP tool: `get_permissions_policy`
+- CLI command: `csp-analyser permissions <session-id>`
+
+#### Phase 9b: Session Comparison/Diff
+- `src/policy-diff.ts` — Compares two sessions' generated policies and violations
+- Policy diff: added/removed/changed directives with per-source granularity
+- Violation diff: new, resolved, and unchanged violations
+- MCP tool: `compare_sessions`
+- CLI command: `csp-analyser diff <id-a> <id-b>`
+
+#### Phase 9c: CSP Scoring and Evaluation
+- `src/policy-scorer.ts` — Scores CSP policies against security best practices
+- 100-point scale with grade mapping: A (90+), B (75+), C (55+), D (35+), F (<35)
+- Findings categorized: critical, warning, info, positive
+- Checks for `'unsafe-inline'`, `'unsafe-eval'`, missing `object-src`, wildcard sources, and more
+- MCP tool: `score_policy`
+- CLI command: `csp-analyser score <session-id>`
+
+#### Phase 9d: Enhanced CLI Output
+- `src/utils/terminal.ts` — ANSI color utilities with zero external dependencies
+- Color functions: `green()`, `yellow()`, `red()`, `cyan()`, `bold()`, `dim()`
+- Respects `NO_COLOR` env var (https://no-color.org/) and `--no-color` CLI flag
+- Progress indicators during crawling: `Crawling [3/10] <url>`
+- Summary table after completion: pages crawled, violations found, unique directives, elapsed time, top 5 violated directives
+
+#### Phase 8+9 Security Audit Results
+- CISO-level review of all Phase 8+9 changes completed
+- No new HIGH or MEDIUM findings introduced
+- All Phase 7 recommendations fully addressed
+
+#### Phase 8+9 Architecture Review Results
+- Full architecture review of Phase 8+9 implementation completed
+- Pipeline correctness verified across all new features
+- Module boundaries and type safety maintained
+- No circular dependencies introduced
 
 ## 9. Success Metrics
 

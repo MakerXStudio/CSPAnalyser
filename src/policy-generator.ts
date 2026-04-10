@@ -31,7 +31,10 @@ export function generatePolicyFromViolations(
     const directive = violation.effectiveDirective;
 
     if (!VALID_DIRECTIVES.has(directive)) {
-      logger.warn('Skipping violation with unknown directive', { directive, violationId: violation.id });
+      logger.warn('Skipping violation with unknown directive', {
+        directive,
+        violationId: violation.id,
+      });
       continue;
     }
 

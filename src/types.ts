@@ -20,6 +20,7 @@ export type ExportFormat =
   | 'nginx'
   | 'apache'
   | 'cloudflare'
+  | 'cloudflare-pages'
   | 'json';
 
 // ── Config types ───────────────────────────────────────────────────────────
@@ -40,6 +41,8 @@ export interface SessionConfig {
   crawlConfig?: Partial<CrawlConfig>;
   storageStatePath?: string;
   cookies?: CookieParam[];
+  /** Maximum violations to accept per session (default: 10,000). Set to 0 for unlimited. */
+  violationLimit?: number;
 }
 
 export interface CookieParam {
@@ -149,6 +152,30 @@ export interface PolicyRow {
   directives: string; // JSON-serialized Record<string, string[]>
   format: ExportFormat;
   is_report_only: number; // SQLite boolean (0 or 1)
+  created_at: string;
+}
+
+// ── Permissions-Policy types ─────────────────────────────────────────────────
+
+export interface PermissionsPolicy {
+  id: string;
+  sessionId: string;
+  pageId: string | null;
+  directive: string;
+  allowlist: string[];
+  headerType: 'permissions-policy' | 'feature-policy';
+  sourceUrl: string;
+  createdAt: string;
+}
+
+export interface PermissionsPolicyRow {
+  id: number;
+  session_id: string;
+  page_id: number | null;
+  directive: string;
+  allowlist: string; // JSON-serialized string[]
+  header_type: 'permissions-policy' | 'feature-policy';
+  source_url: string;
   created_at: string;
 }
 

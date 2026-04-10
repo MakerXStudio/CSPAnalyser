@@ -8,6 +8,7 @@ const mockOptimizePolicy = vi.fn().mockImplementation((d) => d);
 const mockFormatPolicy = vi.fn().mockReturnValue("Content-Security-Policy: default-src 'self'");
 const mockCreateDatabase = vi.fn().mockReturnValue({ close: vi.fn() });
 const mockGetSession = vi.fn().mockReturnValue({ targetUrl: 'https://example.com' });
+const mockGetViolationSummary = vi.fn().mockReturnValue([]);
 
 vi.mock('../src/session-manager.js', () => ({
   runSession: (...args: unknown[]) => mockRunSession(...args),
@@ -26,13 +27,40 @@ vi.mock('../src/policy-formatter.js', () => ({
   formatPolicy: (...args: unknown[]) => mockFormatPolicy(...args),
 }));
 
+const mockCompareSessions = vi.fn().mockReturnValue({
+  sessionA: 'id-a',
+  sessionB: 'id-b',
+  policyDiff: { addedDirectives: [], removedDirectives: [], changedDirectives: [], unchangedDirectives: [] },
+  violationDiff: { newViolations: [], resolvedViolations: [], unchangedViolations: [] },
+});
+const mockFormatDiff = vi.fn().mockReturnValue('Session comparison: id-a → id-b\n\n=== Policy Changes ===\n  No policy changes.');
+vi.mock('../src/policy-diff.js', () => ({
+  compareSessions: (...args: unknown[]) => mockCompareSessions(...args),
+  formatDiff: (...args: unknown[]) => mockFormatDiff(...args),
+}));
+
+const mockScoreCspPolicy = vi.fn().mockReturnValue({
+  overall: 85,
+  grade: 'B',
+  findings: [],
+});
+const mockFormatScore = vi.fn().mockReturnValue('CSP Score: 85/100 (Grade: B)');
+vi.mock('../src/policy-scorer.js', () => ({
+  scoreCspPolicy: (...args: unknown[]) => mockScoreCspPolicy(...args),
+  formatScore: (...args: unknown[]) => mockFormatScore(...args),
+}));
+
+const mockGetPermissionsPolicies = vi.fn().mockReturnValue([]);
 vi.mock('../src/db/repository.js', () => ({
   createDatabase: (...args: unknown[]) => mockCreateDatabase(...args),
   getSession: (...args: unknown[]) => mockGetSession(...args),
+  getViolationSummary: (...args: unknown[]) => mockGetViolationSummary(...args),
+  getPermissionsPolicies: (...args: unknown[]) => mockGetPermissionsPolicies(...args),
 }));
 
 import { parseCliArgs, HELP_TEXT, main } from '../src/cli.js';
 import type { ParsedArgs } from '../src/cli.js';
+import { setNoColor } from '../src/utils/terminal.js';
 
 // ── parseCliArgs ────────────────────────────────────────────────────────
 
@@ -154,6 +182,51 @@ describe('parseCliArgs', () => {
     });
   });
 
+  describe('diff command', () => {
+    it('parses diff args with two session IDs', () => {
+      const result = parseCliArgs(['diff', 'session-a', 'session-b']);
+      expect(result).toMatchObject({
+        command: 'diff',
+        sessionId: 'session-a',
+        sessionIdB: 'session-b',
+      });
+    });
+
+    it('parses diff args with strictness', () => {
+      const result = parseCliArgs(['diff', 'session-a', 'session-b', '--strictness', 'strict']);
+      expect(result).toMatchObject({
+        command: 'diff',
+        sessionId: 'session-a',
+        sessionIdB: 'session-b',
+        strictness: 'strict',
+      });
+    });
+
+    it('throws on missing second session ID', () => {
+      expect(() => parseCliArgs(['diff', 'session-a'])).toThrow('Missing second session ID');
+    });
+  });
+
+  describe('score command', () => {
+    it('parses score args with session ID', () => {
+      const result = parseCliArgs(['score', 'session-id']);
+      expect(result).toMatchObject({
+        command: 'score',
+        sessionId: 'session-id',
+      });
+    });
+  });
+
+  describe('permissions command', () => {
+    it('parses permissions args with session ID', () => {
+      const result = parseCliArgs(['permissions', 'session-id']);
+      expect(result).toMatchObject({
+        command: 'permissions',
+        sessionId: 'session-id',
+      });
+    });
+  });
+
   describe('export command', () => {
     it('parses export args with session-id and format', () => {
       const result = parseCliArgs(['export', 'abc-123', '--format', 'cloudflare']);
@@ -256,6 +329,7 @@ describe('main', () => {
     stdoutWrite.mockRestore();
     stderrWrite.mockRestore();
     process.exitCode = undefined;
+    setNoColor(undefined);
   });
 
   it('prints help text for --help', async () => {
@@ -299,7 +373,8 @@ describe('main', () => {
       }),
       expect.objectContaining({ headless: true }),
     );
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Crawled 3 pages'));
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Pages crawled:'));
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Violations found:'));
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Content-Security-Policy'));
   });
 
@@ -322,8 +397,8 @@ describe('main', () => {
     // No crawlConfig should be passed (interactive doesn't use the crawler)
     const configArg = mockRunInteractiveSession.mock.calls[0][1] as Record<string, unknown>;
     expect(configArg.crawlConfig).toBeUndefined();
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Visited 3 pages'));
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('found 5 violations'));
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Pages crawled:'));
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Violations found:'));
   });
 
   it('runs generate command and outputs formatted policy', async () => {
@@ -349,6 +424,86 @@ describe('main', () => {
       false,
     );
     expect(stdoutWrite).toHaveBeenCalled();
+  });
+
+  it('runs diff command and outputs comparison', async () => {
+    await main(['diff', 'session-a', 'session-b']);
+
+    expect(mockCompareSessions).toHaveBeenCalledWith(
+      expect.anything(),
+      'session-a',
+      'session-b',
+      'moderate',
+    );
+    expect(mockFormatDiff).toHaveBeenCalled();
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Session comparison'));
+  });
+
+  it('runs diff command with strictness option', async () => {
+    await main(['diff', 'session-a', 'session-b', '--strictness', 'strict']);
+
+    expect(mockCompareSessions).toHaveBeenCalledWith(
+      expect.anything(),
+      'session-a',
+      'session-b',
+      'strict',
+    );
+  });
+
+  it('prints error when diff is missing second session ID', async () => {
+    await main(['diff', 'session-a']);
+    expect(process.exitCode).toBe(1);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Missing second session ID'));
+  });
+
+  it('runs score command and outputs score', async () => {
+    await main(['score', 'session-id']);
+
+    expect(mockGeneratePolicy).toHaveBeenCalledWith(
+      expect.anything(),
+      'session-id',
+      expect.objectContaining({ strictness: 'moderate' }),
+    );
+    expect(mockScoreCspPolicy).toHaveBeenCalled();
+    expect(mockFormatScore).toHaveBeenCalled();
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('CSP Score'));
+  });
+
+  it('runs permissions command with policies', async () => {
+    mockGetPermissionsPolicies.mockReturnValueOnce([
+      {
+        id: '1',
+        sessionId: 'session-id',
+        pageId: null,
+        directive: 'camera',
+        allowlist: ['self'],
+        headerType: 'permissions-policy',
+        sourceUrl: 'https://example.com/',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
+
+    await main(['permissions', 'session-id']);
+
+    expect(mockGetPermissionsPolicies).toHaveBeenCalledWith(expect.anything(), 'session-id');
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('camera'));
+  });
+
+  it('runs permissions command with no policies found', async () => {
+    mockGetPermissionsPolicies.mockReturnValueOnce([]);
+
+    await main(['permissions', 'session-id']);
+
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('No Permissions-Policy'));
+  });
+
+  it('runs permissions command with nonexistent session', async () => {
+    mockGetSession.mockReturnValueOnce(null);
+
+    await main(['permissions', 'session-id']);
+
+    expect(process.exitCode).toBe(1);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Session not found'));
   });
 
   it('passes crawl options through to runSession', async () => {

@@ -3,8 +3,28 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Headlessly browse websites with a deny-all report-only CSP, capture violations, and generate production-ready CSP policies",
+  "license": "MIT",
+  "keywords": [
+    "csp",
+    "content-security-policy",
+    "security",
+    "mcp",
+    "playwright"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MakerX/csp-analyser.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "csp-analyser": "./dist/cli.js"
   },
@@ -14,6 +34,11 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build",
     "start": "node dist/mcp-server.js",
     "cli": "node dist/cli.js"
   },
@@ -24,10 +49,17 @@
     "playwright": "1.59.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "latest",
     "@types/node": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
     "@vitest/coverage-v8": "^4.1.4",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.2",
     "typescript": "latest",
+    "typescript-eslint": "^8.58.1",
     "vitest": "latest"
   }
 }

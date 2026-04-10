@@ -10,14 +10,17 @@ import {
   getViolations,
   getViolationSummary,
   getPages,
+  getPermissionsPolicies,
+  getPermissionsPolicyByDirective,
 } from './db/repository.js';
 import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy, directivesToString } from './policy-formatter.js';
 import { createLogger } from './utils/logger.js';
 import { validateTargetUrl } from './utils/url-utils.js';
-// Lazy import type for session-manager
-type SessionManagerModule = { runSession: typeof import('./session-manager.js')['runSession'] };
+// Lazy import type for session-manager (dynamic import requires inline type annotation)
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+type SessionManagerModule = { runSession: (typeof import('./session-manager.js'))['runSession'] };
 
 const logger = createLogger();
 
@@ -37,7 +40,10 @@ export function sanitizeErrorMessage(message: string): string {
   return message.replace(/(?:\/[\w.-]+){2,}(?:\/[\w.-]*)*|[A-Z]:\\(?:[\w.-]+\\)*/g, '<path>');
 }
 
-function toolError(message: string): { content: Array<{ type: 'text'; text: string }>; isError: true } {
+function toolError(message: string): {
+  content: Array<{ type: 'text'; text: string }>;
+  isError: true;
+} {
   return {
     content: [{ type: 'text' as const, text: sanitizeErrorMessage(message) }],
     isError: true,
@@ -61,16 +67,40 @@ export function createMcpServer(db: Database.Database): McpServer {
       targetUrl: z.string().url().describe('The URL to analyse'),
       mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
       depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
-      maxPages: z.number().int().min(1).max(1000).optional().describe('Maximum pages to crawl (default: 10)'),
-      settlementDelay: z.number().int().min(0).max(10000).optional().describe('Milliseconds to wait after page load for late violations (default: 500)'),
-      storageStatePath: z.string().optional().describe('Path to Playwright storageState JSON for authenticated sessions'),
-      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness level (default: moderate)'),
+      maxPages: z
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .optional()
+        .describe('Maximum pages to crawl (default: 10)'),
+      settlementDelay: z
+        .number()
+        .int()
+        .min(0)
+        .max(10000)
+        .optional()
+        .describe('Milliseconds to wait after page load for late violations (default: 500)'),
+      storageStatePath: z
+        .string()
+        .optional()
+        .describe('Path to Playwright storageState JSON for authenticated sessions'),
+      strictness: z
+        .enum(['strict', 'moderate', 'permissive'])
+        .optional()
+        .describe('Policy strictness level (default: moderate)'),
+      violationLimit: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Maximum violations to accept per session (default: 10000, 0 for unlimited)'),
     },
     async (args) => {
       try {
         validateTargetUrl(args.targetUrl);
         // Dynamic import so the server module compiles even before session-manager exists
-        const { runSession } = await import('./session-manager.js') as SessionManagerModule;
+        const { runSession } = (await import('./session-manager.js')) as SessionManagerModule;
 
         const result = await runSession(db, {
           targetUrl: args.targetUrl,
@@ -81,6 +111,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             settlementDelay: args.settlementDelay,
           },
           storageStatePath: args.storageStatePath,
+          violationLimit: args.violationLimit,
         });
 
         return toolResult({
@@ -107,13 +138,19 @@ export function createMcpServer(db: Database.Database): McpServer {
     {
       url: z.string().url().describe('The URL to analyse'),
       mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
-      storageStatePath: z.string().optional().describe('Path to Playwright storageState JSON for authenticated sessions'),
-      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness level (default: moderate)'),
+      storageStatePath: z
+        .string()
+        .optional()
+        .describe('Path to Playwright storageState JSON for authenticated sessions'),
+      strictness: z
+        .enum(['strict', 'moderate', 'permissive'])
+        .optional()
+        .describe('Policy strictness level (default: moderate)'),
     },
     async (args) => {
       try {
         validateTargetUrl(args.url);
-        const { runSession } = await import('./session-manager.js') as SessionManagerModule;
+        const { runSession } = (await import('./session-manager.js')) as SessionManagerModule;
 
         const result = await runSession(db, {
           targetUrl: args.url,
@@ -194,8 +231,14 @@ export function createMcpServer(db: Database.Database): McpServer {
     'Generate an optimised CSP policy from violations captured in a session',
     {
       sessionId: z.string().uuid().describe('The session ID'),
-      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness (default: moderate)'),
-      includeHashes: z.boolean().optional().describe('Include SHA-256 hashes for inline scripts/styles (default: false)'),
+      strictness: z
+        .enum(['strict', 'moderate', 'permissive'])
+        .optional()
+        .describe('Policy strictness (default: moderate)'),
+      includeHashes: z
+        .boolean()
+        .optional()
+        .describe('Include SHA-256 hashes for inline scripts/styles (default: false)'),
     },
     async (args) => {
       try {
@@ -229,12 +272,20 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   server.tool(
     'export_policy',
-    'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, json)',
+    'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, json)',
     {
       sessionId: z.string().uuid().describe('The session ID'),
-      format: z.enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'json']).describe('Output format'),
-      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness (default: moderate)'),
-      isReportOnly: z.boolean().optional().describe('Use Content-Security-Policy-Report-Only header (default: false)'),
+      format: z
+        .enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'cloudflare-pages', 'json'])
+        .describe('Output format'),
+      strictness: z
+        .enum(['strict', 'moderate', 'permissive'])
+        .optional()
+        .describe('Policy strictness (default: moderate)'),
+      isReportOnly: z
+        .boolean()
+        .optional()
+        .describe('Use Content-Security-Policy-Report-Only header (default: false)'),
     },
     async (args) => {
       try {
@@ -260,6 +311,78 @@ export function createMcpServer(db: Database.Database): McpServer {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return toolError(`Failed to export policy: ${message}`);
+      }
+    },
+  );
+
+  // ── score_policy ────────────────────────────────────────────────────
+
+  server.tool(
+    'score_policy',
+    'Score a CSP policy against best practices (0-100 with grade A-F)',
+    {
+      sessionId: z.string().uuid().describe('The session ID'),
+      strictness: z
+        .enum(['strict', 'moderate', 'permissive'])
+        .optional()
+        .describe('Policy strictness (default: moderate)'),
+    },
+    async (args) => {
+      try {
+        const session = getSession(db, args.sessionId);
+        if (!session) {
+          return toolError(`Session not found: ${args.sessionId}`);
+        }
+
+        const directives = generatePolicy(db, args.sessionId, {
+          strictness: args.strictness ?? 'moderate',
+          includeHashes: false,
+        });
+        const optimized = optimizePolicy(directives, session.targetUrl);
+
+        const { scoreCspPolicy, formatScore } = await import('./policy-scorer.js');
+        const score = scoreCspPolicy(optimized);
+
+        return toolResult({
+          ...score,
+          formatted: formatScore(score),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to score policy: ${message}`);
+      }
+    },
+  );
+
+  // ── compare_sessions ────────────────────────────────────────────────
+
+  server.tool(
+    'compare_sessions',
+    'Compare two CSP analysis sessions and show policy/violation differences',
+    {
+      sessionIdA: z.string().uuid().describe('First session ID (baseline)'),
+      sessionIdB: z.string().uuid().describe('Second session ID (comparison)'),
+      strictness: z
+        .enum(['strict', 'moderate', 'permissive'])
+        .optional()
+        .describe('Policy strictness (default: moderate)'),
+    },
+    async (args) => {
+      try {
+        const { compareSessions: compare, formatDiff: format } = await import('./policy-diff.js');
+        const comparison = compare(
+          db,
+          args.sessionIdA,
+          args.sessionIdB,
+          args.strictness ?? 'moderate',
+        );
+        return toolResult({
+          ...comparison,
+          formatted: format(comparison),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to compare sessions: ${message}`);
       }
     },
   );
@@ -304,27 +427,63 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── list_sessions ───────────────────────────────────────────────────
 
+  server.tool('list_sessions', 'List all CSP analysis sessions', {}, async () => {
+    try {
+      const sessions = listSessions(db);
+
+      return toolResult({
+        count: sessions.length,
+        sessions: sessions.map((s) => ({
+          id: s.id,
+          targetUrl: s.targetUrl,
+          status: s.status,
+          mode: s.mode,
+          createdAt: s.createdAt,
+        })),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return toolError(`Failed to list sessions: ${message}`);
+    }
+  });
+
+  // ── get_permissions_policy ──────────────────────────────────────────
+
   server.tool(
-    'list_sessions',
-    'List all CSP analysis sessions',
-    {},
-    async () => {
+    'get_permissions_policy',
+    'Get Permissions-Policy and Feature-Policy headers captured during a session, optionally filtered by directive',
+    {
+      sessionId: z.string().uuid().describe('The session ID'),
+      directive: z
+        .string()
+        .optional()
+        .describe('Filter by directive name (e.g. camera, geolocation)'),
+    },
+    async (args) => {
       try {
-        const sessions = listSessions(db);
+        const session = getSession(db, args.sessionId);
+        if (!session) {
+          return toolError(`Session not found: ${args.sessionId}`);
+        }
+
+        const policies = args.directive
+          ? getPermissionsPolicyByDirective(db, args.sessionId, args.directive)
+          : getPermissionsPolicies(db, args.sessionId);
 
         return toolResult({
-          count: sessions.length,
-          sessions: sessions.map((s) => ({
-            id: s.id,
-            targetUrl: s.targetUrl,
-            status: s.status,
-            mode: s.mode,
-            createdAt: s.createdAt,
+          sessionId: args.sessionId,
+          count: policies.length,
+          policies: policies.map((p) => ({
+            id: p.id,
+            directive: p.directive,
+            allowlist: p.allowlist,
+            headerType: p.headerType,
+            sourceUrl: p.sourceUrl,
           })),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return toolError(`Failed to list sessions: ${message}`);
+        return toolError(`Failed to get permissions policies: ${message}`);
       }
     },
   );
@@ -352,7 +511,9 @@ export async function main(): Promise<void> {
       process.exit(0);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     process.on('SIGINT', shutdown);
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     process.on('SIGTERM', shutdown);
 
     await server.connect(transport);
@@ -365,11 +526,11 @@ export async function main(): Promise<void> {
 
 // Run when executed directly
 const __mcp_url = new URL(import.meta.url).pathname;
-const isDirectExecution = process.argv[1] &&
-  (__mcp_url === new URL(`file://${process.argv[1]}`).pathname);
+const isDirectExecution =
+  process.argv[1] && __mcp_url === new URL(`file://${process.argv[1]}`).pathname;
 
 if (isDirectExecution) {
-  main().catch((error) => {
+  main().catch((error: unknown) => {
     logger.error('MCP server failed to start', { error: String(error) });
     process.exit(1);
   });

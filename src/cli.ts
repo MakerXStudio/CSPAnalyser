@@ -6,12 +6,27 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLogger } from './utils/logger.js';
 import { validateTargetUrl } from './utils/url-utils.js';
-import { createDatabase, getSession } from './db/repository.js';
+import {
+  createDatabase,
+  getSession,
+  getViolationSummary,
+  getPermissionsPolicies,
+} from './db/repository.js';
 import { runSession, runInteractiveSession } from './session-manager.js';
 import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy } from './policy-formatter.js';
+import {
+  setNoColor,
+  red,
+  cyan,
+  formatCrawlProgress,
+  formatElapsed,
+  formatSummaryTable,
+} from './utils/terminal.js';
 
+import { compareSessions, formatDiff } from './policy-diff.js';
+import { scoreCspPolicy, formatScore } from './policy-scorer.js';
 import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
 
 const logger = createLogger();
@@ -27,12 +42,22 @@ function getVersion(): string {
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-export type Command = 'crawl' | 'interactive' | 'generate' | 'export' | 'help' | 'version';
+export type Command =
+  | 'crawl'
+  | 'interactive'
+  | 'generate'
+  | 'export'
+  | 'diff'
+  | 'score'
+  | 'permissions'
+  | 'help'
+  | 'version';
 
 export interface ParsedArgs {
   command: Command;
   url?: string;
   sessionId?: string;
+  sessionIdB?: string;
   depth: number;
   maxPages: number;
   strictness: StrictnessLevel;
@@ -40,12 +65,21 @@ export interface ParsedArgs {
   mode?: 'local' | 'mitm';
   storageState?: string;
   reportOnly: boolean;
+  violationLimit?: number;
 }
 
 // ── Valid values ─────────────────────────────────────────────────────────
 
 const VALID_STRICTNESS: ReadonlySet<string> = new Set(['strict', 'moderate', 'permissive']);
-const VALID_FORMATS: ReadonlySet<string> = new Set(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'json']);
+const VALID_FORMATS: ReadonlySet<string> = new Set([
+  'header',
+  'meta',
+  'nginx',
+  'apache',
+  'cloudflare',
+  'cloudflare-pages',
+  'json',
+]);
 const VALID_MODES: ReadonlySet<string> = new Set(['local', 'mitm']);
 
 // ── Help text ───────────────────────────────────────────────────────────
@@ -57,15 +91,20 @@ Usage:
   csp-analyser interactive <url>        Headed manual browsing
   csp-analyser generate <session-id>    Regenerate policy from session
   csp-analyser export <session-id>      Export policy in a format
+  csp-analyser diff <id-a> <id-b>       Compare two sessions
+  csp-analyser score <session-id>        Score policy against best practices
+  csp-analyser permissions <session-id>  Show Permissions-Policy headers
 
 Options:
   --depth <n>            Crawl depth (default: 1, crawl only)
   --max-pages <n>        Max pages to visit (default: 10, crawl only)
   --strictness <level>   strict | moderate | permissive (default: moderate)
-  --format <fmt>         header | meta | nginx | apache | cloudflare | json (default: header)
+  --format <fmt>         header | meta | nginx | apache | cloudflare | cloudflare-pages | json (default: header)
   --mode <mode>          local | mitm (default: auto-detect)
   --storage-state <path> Playwright storage state file for auth
+  --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
   --report-only          Generate report-only policy
+  --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help
   --version, -v          Show version
 `;
@@ -75,10 +114,24 @@ Options:
 export function parseCliArgs(argv: string[]): ParsedArgs {
   // Handle --help / -h and --version / -v before parseArgs
   if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
-    return { command: 'help', depth: 1, maxPages: 10, strictness: 'moderate', format: 'header', reportOnly: false };
+    return {
+      command: 'help',
+      depth: 1,
+      maxPages: 10,
+      strictness: 'moderate',
+      format: 'header',
+      reportOnly: false,
+    };
   }
   if (argv.includes('--version') || argv.includes('-v')) {
-    return { command: 'version', depth: 1, maxPages: 10, strictness: 'moderate', format: 'header', reportOnly: false };
+    return {
+      command: 'version',
+      depth: 1,
+      maxPages: 10,
+      strictness: 'moderate',
+      format: 'header',
+      reportOnly: false,
+    };
   }
 
   const { values, positionals } = nodeParseArgs({
@@ -90,14 +143,26 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       format: { type: 'string' },
       mode: { type: 'string' },
       'storage-state': { type: 'string' },
+      'violation-limit': { type: 'string' },
       'report-only': { type: 'boolean', default: false },
+      'no-color': { type: 'boolean', default: false },
     },
     allowPositionals: true,
     strict: false,
   });
 
+  // Apply --no-color flag
+  if (values['no-color']) {
+    setNoColor(true);
+  }
+
   const command = positionals[0] as string | undefined;
-  if (!command || !['crawl', 'interactive', 'generate', 'export'].includes(command)) {
+  if (
+    !command ||
+    !['crawl', 'interactive', 'generate', 'export', 'diff', 'score', 'permissions'].includes(
+      command,
+    )
+  ) {
     throw new Error(`Unknown command: ${command ?? '(none)'}. Run with --help for usage.`);
   }
 
@@ -106,18 +171,35 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     throw new Error(`Missing argument for "${command}". Run with --help for usage.`);
   }
 
+  if (command === 'diff') {
+    const positionalArgB = positionals[2] as string | undefined;
+    if (!positionalArgB) {
+      throw new Error(
+        'Missing second session ID for "diff". Usage: diff <session-id-a> <session-id-b>',
+      );
+    }
+  }
+
   // Validate options
-  const depth = values.depth !== undefined ? parseNonNegativeInt(values.depth as string, 'depth') : 1;
-  const maxPages = values['max-pages'] !== undefined ? parsePositiveInt(values['max-pages'] as string, 'max-pages') : 10;
+  const depth =
+    values.depth !== undefined ? parseNonNegativeInt(values.depth as string, 'depth') : 1;
+  const maxPages =
+    values['max-pages'] !== undefined
+      ? parsePositiveInt(values['max-pages'] as string, 'max-pages')
+      : 10;
 
   const strictness = (values.strictness as string | undefined) ?? 'moderate';
   if (!VALID_STRICTNESS.has(strictness)) {
-    throw new Error(`Invalid strictness: "${strictness}". Must be strict, moderate, or permissive.`);
+    throw new Error(
+      `Invalid strictness: "${strictness}". Must be strict, moderate, or permissive.`,
+    );
   }
 
   const format = (values.format as string | undefined) ?? 'header';
   if (!VALID_FORMATS.has(format)) {
-    throw new Error(`Invalid format: "${format}". Must be header, meta, nginx, apache, cloudflare, or json.`);
+    throw new Error(
+      `Invalid format: "${format}". Must be header, meta, nginx, apache, cloudflare, cloudflare-pages, or json.`,
+    );
   }
 
   const mode = values.mode as string | undefined;
@@ -137,6 +219,9 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   if (command === 'crawl' || command === 'interactive') {
     validateTargetUrl(positionalArg);
     parsed.url = positionalArg;
+  } else if (command === 'diff') {
+    parsed.sessionId = positionalArg;
+    parsed.sessionIdB = positionals[2];
   } else {
     parsed.sessionId = positionalArg;
   }
@@ -148,6 +233,11 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const storageState = values['storage-state'] as string | undefined;
   if (storageState !== undefined) {
     parsed.storageState = storageState;
+  }
+
+  const violationLimitStr = values['violation-limit'] as string | undefined;
+  if (violationLimitStr !== undefined) {
+    parsed.violationLimit = parseNonNegativeInt(violationLimitStr, 'violation-limit');
   }
 
   return parsed;
@@ -200,18 +290,57 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
       mode: args.mode,
       crawlConfig: { depth: args.depth, maxPages: args.maxPages },
       storageStatePath: args.storageState,
+      violationLimit: args.violationLimit,
     };
+
+    const startTime = Date.now();
+    let pageCount = 0;
 
     const result = await runSession(db, config, {
       headless: true,
-      onProgress: (msg) => process.stderr.write(`${msg}\n`),
+      onProgress: (msg) => {
+        if (msg.startsWith('Visited: ')) {
+          pageCount++;
+          const url = msg.slice('Visited: '.length);
+          process.stderr.write(formatCrawlProgress(pageCount, args.maxPages, url) + '\n');
+        } else {
+          process.stderr.write(cyan(msg) + '\n');
+        }
+      },
     });
 
+    const elapsed = formatElapsed(Date.now() - startTime);
+
+    // Build summary with top violated directives
+    const summary = getViolationSummary(db, result.session.id);
+    const directiveCounts = new Map<string, number>();
+    for (const entry of summary) {
+      const prev = directiveCounts.get(entry.effectiveDirective) ?? 0;
+      directiveCounts.set(entry.effectiveDirective, prev + entry.count);
+    }
+    const topDirectives = [...directiveCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([directive, count]) => ({ directive, count }));
+
+    const directives = generatePolicy(db, result.session.id, {
+      strictness: args.strictness,
+      includeHashes: true,
+    });
+    const uniqueDirectives = Object.keys(directives).length;
+
     process.stderr.write(
-      `Crawled ${result.pagesVisited} pages, found ${result.violationsFound} violations\n`,
+      formatSummaryTable({
+        pagesVisited: result.pagesVisited,
+        violationsFound: result.violationsFound,
+        uniqueDirectives,
+        elapsed,
+        topDirectives,
+      }) + '\n',
     );
 
-    const output = generateAndFormat(db, result.session.id, args, result.session.targetUrl);
+    const optimized = optimizePolicy(directives, result.session.targetUrl);
+    const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -225,17 +354,53 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
       targetUrl: args.url!,
       mode: args.mode,
       storageStatePath: args.storageState,
+      violationLimit: args.violationLimit,
     };
 
+    const startTime = Date.now();
+
     const result = await runInteractiveSession(db, config, {
-      onProgress: (msg) => process.stderr.write(`${msg}\n`),
+      onProgress: (msg) => {
+        if (msg.startsWith('Visited: ')) {
+          const url = msg.slice('Visited: '.length);
+          process.stderr.write(`${cyan('Visited')} ${url}\n`);
+        } else {
+          process.stderr.write(cyan(msg) + '\n');
+        }
+      },
     });
 
+    const elapsed = formatElapsed(Date.now() - startTime);
+
+    const summary = getViolationSummary(db, result.session.id);
+    const directiveCounts = new Map<string, number>();
+    for (const entry of summary) {
+      const prev = directiveCounts.get(entry.effectiveDirective) ?? 0;
+      directiveCounts.set(entry.effectiveDirective, prev + entry.count);
+    }
+    const topDirectives = [...directiveCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([directive, count]) => ({ directive, count }));
+
+    const directives = generatePolicy(db, result.session.id, {
+      strictness: args.strictness,
+      includeHashes: true,
+    });
+    const uniqueDirectives = Object.keys(directives).length;
+
     process.stderr.write(
-      `Session complete. Visited ${result.pagesVisited} pages, found ${result.violationsFound} violations\n`,
+      formatSummaryTable({
+        pagesVisited: result.pagesVisited,
+        violationsFound: result.violationsFound,
+        uniqueDirectives,
+        elapsed,
+        topDirectives,
+      }) + '\n',
     );
 
-    const output = generateAndFormat(db, result.session.id, args, result.session.targetUrl);
+    const optimized = optimizePolicy(directives, result.session.targetUrl);
+    const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -264,15 +429,90 @@ async function runExportCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function runDiffCommand(args: ParsedArgs): Promise<void> {
+  const db = initDb();
+  try {
+    const comparison = compareSessions(db, args.sessionId!, args.sessionIdB!, args.strictness);
+    process.stdout.write(formatDiff(comparison) + '\n');
+  } finally {
+    db.close();
+  }
+}
+
+async function runScoreCommand(args: ParsedArgs): Promise<void> {
+  const db = initDb();
+  try {
+    const session = getSession(db, args.sessionId!);
+    const directives = generatePolicy(db, args.sessionId!, {
+      strictness: args.strictness,
+      includeHashes: false,
+    });
+    const optimized = optimizePolicy(directives, session?.targetUrl);
+    const score = scoreCspPolicy(optimized);
+    process.stdout.write(formatScore(score) + '\n');
+  } finally {
+    db.close();
+  }
+}
+
+async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
+  const db = initDb();
+  try {
+    const session = getSession(db, args.sessionId!);
+    if (!session) {
+      process.stderr.write(`${red('Error:')} Session not found: ${args.sessionId}\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const policies = getPermissionsPolicies(db, args.sessionId!);
+    if (policies.length === 0) {
+      process.stderr.write('No Permissions-Policy headers captured for this session.\n');
+      return;
+    }
+
+    // Group by directive
+    const byDirective = new Map<
+      string,
+      Array<{ allowlist: string[]; headerType: string; sourceUrl: string }>
+    >();
+    for (const p of policies) {
+      const existing = byDirective.get(p.directive) ?? [];
+      existing.push({ allowlist: p.allowlist, headerType: p.headerType, sourceUrl: p.sourceUrl });
+      byDirective.set(p.directive, existing);
+    }
+
+    const lines: string[] = [`Permissions-Policy for session ${args.sessionId}`, ''];
+    for (const [directive, entries] of [...byDirective.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      lines.push(`  ${cyan(directive)}`);
+      for (const entry of entries) {
+        const allowStr = entry.allowlist.length > 0 ? entry.allowlist.join(' ') : '(none)';
+        lines.push(`    ${allowStr}  [${entry.headerType}] from ${entry.sourceUrl}`);
+      }
+    }
+
+    process.stdout.write(lines.join('\n') + '\n');
+  } finally {
+    db.close();
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────────
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+  // Check for --no-color early (before parseCliArgs, which may throw)
+  if (argv.includes('--no-color')) {
+    setNoColor(true);
+  }
+
   let args: ParsedArgs;
   try {
     args = parseCliArgs(argv);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Error: ${message}\n`);
+    process.stderr.write(`${red('Error:')} ${message}\n`);
     process.exitCode = 1;
     return;
   }
@@ -292,13 +532,19 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       return runGenerateCommand(args);
     case 'export':
       return runExportCommand(args);
+    case 'diff':
+      return runDiffCommand(args);
+    case 'score':
+      return runScoreCommand(args);
+    case 'permissions':
+      return runPermissionsCommand(args);
   }
 }
 
 // Run when executed directly
 const __cli_url = new URL(import.meta.url).pathname;
-const isDirectExecution = process.argv[1] &&
-  (__cli_url === new URL(`file://${process.argv[1]}`).pathname);
+const isDirectExecution =
+  process.argv[1] && __cli_url === new URL(`file://${process.argv[1]}`).pathname;
 
 if (isDirectExecution) {
   main().catch((err: unknown) => {

@@ -1,9 +1,18 @@
 import type { Browser, BrowserContext, Page } from 'playwright';
 import type Database from 'better-sqlite3';
 import type { Session, SessionConfig, CrawlConfig, SessionMode } from './types.js';
-import { createSession, updateSession, getSession, getViolations, insertPage, getPages } from './db/repository.js';
+import {
+  createSession,
+  updateSession,
+  getSession,
+  getViolations,
+  insertPage,
+  getPages,
+  insertPermissionsPolicy,
+} from './db/repository.js';
 import { startReportServer } from './report-server.js';
-import { setupCspInjection } from './csp-injector.js';
+import { setupCspInjection, type CapturedPermissionsPolicy } from './csp-injector.js';
+import { parsePermissionsPolicyHeaders } from './permissions-policy.js';
 import { setupViolationListener } from './violation-listener.js';
 import { crawl, type CrawlCallbacks } from './crawler.js';
 import { shouldUseMitmMode } from './utils/url-utils.js';
@@ -85,10 +94,12 @@ export async function runSession(
   const progress = options?.onProgress ?? (() => {});
 
   // Resolve dependencies (allow injection for testing)
-  const _launchBrowser = deps?.launchBrowser ?? (async (opts: { headless: boolean }) => {
-    const { chromium } = await import('playwright');
-    return chromium.launch({ headless: opts.headless });
-  });
+  const _launchBrowser =
+    deps?.launchBrowser ??
+    (async (opts: { headless: boolean }) => {
+      const { chromium } = await import('playwright');
+      return chromium.launch({ headless: opts.headless });
+    });
   const _startReportServer = deps?.startReportServer ?? startReportServer;
   const _startMitmProxy = deps?.startMitmProxy ?? startMitmProxy;
   const _createAuthContext = deps?.createAuthenticatedContext ?? createAuthenticatedContext;
@@ -116,7 +127,9 @@ export async function runSession(
 
     // 3. Start report server
     progress('Starting report server...');
-    reportServer = await _startReportServer(db, sessionId);
+    reportServer = await _startReportServer(db, sessionId, {
+      violationLimit: config.violationLimit,
+    });
     const reportServerPort = reportServer.port;
     const reportToken = reportServer.token;
     updateSession(db, sessionId, { reportServerPort });
@@ -160,10 +173,34 @@ export async function runSession(
       ...config.crawlConfig,
     };
 
+    const onPermissionsPolicy = (
+      captured: CapturedPermissionsPolicy[],
+      requestUrl: string,
+      pageId: string,
+    ) => {
+      const headers: Record<string, string> = {};
+      for (const c of captured) {
+        headers[c.headerName] = c.headerValue;
+      }
+      const parsed = parsePermissionsPolicyHeaders(headers);
+      for (const p of parsed) {
+        insertPermissionsPolicy(db, {
+          sessionId,
+          pageId,
+          directive: p.directive,
+          allowlist: p.allowlist,
+          headerType: p.headerType,
+          sourceUrl: requestUrl,
+        });
+      }
+    };
+
     const callbacks: CrawlCallbacks = {
-      onPageCreated: async (page: Page, url: string, pageId: string) => {
+      onPageCreated: async (page: Page, _url: string, pageId: string) => {
         if (mode === 'local') {
-          await _setupCspInjection(page, reportServerPort, reportToken);
+          await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
+            onPermissionsPolicy(captured, reqUrl, pageId);
+          });
         }
         await _setupViolationListener(page, db, sessionId, pageId);
       },
@@ -173,7 +210,14 @@ export async function runSession(
     };
 
     // 8. Crawl
-    const crawlResult = await _crawl(context, db, sessionId, config.targetUrl, crawlConfig, callbacks);
+    const crawlResult = await _crawl(
+      context,
+      db,
+      sessionId,
+      config.targetUrl,
+      crawlConfig,
+      callbacks,
+    );
 
     // 9. Update to analyzing then complete
     updateSession(db, sessionId, { status: 'analyzing' });
@@ -204,16 +248,32 @@ export async function runSession(
   } finally {
     // Cleanup in reverse order
     if (context) {
-      try { await context.close(); } catch { /* ignore */ }
+      try {
+        await context.close();
+      } catch {
+        /* ignore */
+      }
     }
     if (mitmProxy) {
-      try { mitmProxy.close(); } catch { /* ignore */ }
+      try {
+        mitmProxy.close();
+      } catch {
+        /* ignore */
+      }
     }
     if (reportServer) {
-      try { await reportServer.close(); } catch { /* ignore */ }
+      try {
+        await reportServer.close();
+      } catch {
+        /* ignore */
+      }
     }
     if (browser) {
-      try { await browser.close(); } catch { /* ignore */ }
+      try {
+        await browser.close();
+      } catch {
+        /* ignore */
+      }
     }
     logger.info('Session cleanup complete', { sessionId });
   }
@@ -237,10 +297,12 @@ export async function runInteractiveSession(
   const dataDir = options?.dataDir ?? DEFAULT_DATA_DIR;
   const progress = options?.onProgress ?? (() => {});
 
-  const _launchBrowser = deps?.launchBrowser ?? (async (opts: { headless: boolean }) => {
-    const { chromium } = await import('playwright');
-    return chromium.launch({ headless: opts.headless });
-  });
+  const _launchBrowser =
+    deps?.launchBrowser ??
+    (async (opts: { headless: boolean }) => {
+      const { chromium } = await import('playwright');
+      return chromium.launch({ headless: opts.headless });
+    });
   const _startReportServer = deps?.startReportServer ?? startReportServer;
   const _startMitmProxy = deps?.startMitmProxy ?? startMitmProxy;
   const _createAuthContext = deps?.createAuthenticatedContext ?? createAuthenticatedContext;
@@ -267,7 +329,9 @@ export async function runInteractiveSession(
 
     // 3. Start report server
     progress('Starting report server...');
-    reportServer = await _startReportServer(db, sessionId);
+    reportServer = await _startReportServer(db, sessionId, {
+      violationLimit: config.violationLimit,
+    });
     const reportServerPort = reportServer.port;
     const reportToken = reportServer.token;
     updateSession(db, sessionId, { reportServerPort });
@@ -299,7 +363,23 @@ export async function runInteractiveSession(
     // 6. Helper: set up CSP injection + violation capture on a page
     const setupPage = async (page: Page): Promise<void> => {
       if (mode === 'local') {
-        await _setupCspInjection(page, reportServerPort, reportToken);
+        await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
+          const headers: Record<string, string> = {};
+          for (const c of captured) {
+            headers[c.headerName] = c.headerValue;
+          }
+          const parsed = parsePermissionsPolicyHeaders(headers);
+          for (const p of parsed) {
+            insertPermissionsPolicy(db, {
+              sessionId,
+              pageId: null,
+              directive: p.directive,
+              allowlist: p.allowlist,
+              headerType: p.headerType,
+              sourceUrl: reqUrl,
+            });
+          }
+        });
       }
       await _setupViolationListener(page, db, sessionId, null);
 
@@ -341,7 +421,9 @@ export async function runInteractiveSession(
     const pages = getPages(db, sessionId);
     const finalSession = getSession(db, sessionId)!;
 
-    progress(`Session complete. Visited ${pages.length} pages, found ${violations.length} violations`);
+    progress(
+      `Session complete. Visited ${pages.length} pages, found ${violations.length} violations`,
+    );
 
     return {
       session: finalSession,
@@ -361,16 +443,32 @@ export async function runInteractiveSession(
     throw err;
   } finally {
     if (context) {
-      try { await context.close(); } catch { /* ignore */ }
+      try {
+        await context.close();
+      } catch {
+        /* ignore */
+      }
     }
     if (mitmProxy) {
-      try { mitmProxy.close(); } catch { /* ignore */ }
+      try {
+        mitmProxy.close();
+      } catch {
+        /* ignore */
+      }
     }
     if (reportServer) {
-      try { await reportServer.close(); } catch { /* ignore */ }
+      try {
+        await reportServer.close();
+      } catch {
+        /* ignore */
+      }
     }
     if (browser) {
-      try { await browser.close(); } catch { /* ignore */ }
+      try {
+        await browser.close();
+      } catch {
+        /* ignore */
+      }
     }
     logger.info('Interactive session cleanup complete', { sessionId });
   }

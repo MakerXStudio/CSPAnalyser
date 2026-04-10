@@ -6,6 +6,7 @@ import {
   insertViolation,
   insertPage,
   getSession,
+  insertPermissionsPolicy,
 } from '../src/db/repository.js';
 import { createMcpServer, sanitizeErrorMessage, main } from '../src/mcp-server.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -58,16 +59,19 @@ afterEach(() => {
 // ── Tool registration ───────────────────────────────────────────────────
 
 describe('tool registration', () => {
-  it('registers all seven tools', () => {
+  it('registers all expected tools', () => {
     const tools = getRegisteredTools(server);
     expect('start_session' in tools).toBe(true);
     expect('crawl_url' in tools).toBe(true);
     expect('get_violations' in tools).toBe(true);
     expect('generate_policy' in tools).toBe(true);
     expect('export_policy' in tools).toBe(true);
+    expect('score_policy' in tools).toBe(true);
+    expect('compare_sessions' in tools).toBe(true);
     expect('get_session' in tools).toBe(true);
     expect('list_sessions' in tools).toBe(true);
-    expect(Object.keys(tools).length).toBe(7);
+    expect('get_permissions_policy' in tools).toBe(true);
+    expect(Object.keys(tools).length).toBe(10);
   });
 });
 
@@ -451,6 +455,273 @@ describe('crawl_url', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Failed to crawl URL');
+  });
+});
+
+// ── score_policy ─────────────────────────────────────────────────────
+
+describe('score_policy', () => {
+  it('scores a session policy and returns grade', async () => {
+    const session = createTestSession();
+    addTestViolation(session.id);
+    addTestViolation(session.id, {
+      blockedUri: 'https://fonts.gstatic.com/font.woff2',
+      effectiveDirective: 'font-src',
+      violatedDirective: 'font-src',
+    });
+
+    const result = await callTool('score_policy', { sessionId: session.id });
+    const data = parseToolResult(result);
+
+    expect(result.isError).toBeUndefined();
+    expect(data.overall).toBeTypeOf('number');
+    expect(data.overall).toBeGreaterThanOrEqual(0);
+    expect(data.overall).toBeLessThanOrEqual(100);
+    expect(['A', 'B', 'C', 'D', 'F']).toContain(data.grade);
+    expect(Array.isArray(data.findings)).toBe(true);
+    expect(typeof data.formatted).toBe('string');
+  });
+
+  it('returns error for nonexistent session', async () => {
+    const result = await callTool('score_policy', {
+      sessionId: '00000000-0000-0000-0000-000000000000',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Session not found');
+  });
+
+  it('respects strictness parameter', async () => {
+    const session = createTestSession();
+    addTestViolation(session.id);
+
+    const result = await callTool('score_policy', {
+      sessionId: session.id,
+      strictness: 'strict',
+    });
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.overall).toBeTypeOf('number');
+  });
+
+  it('returns error when DB query fails', async () => {
+    const session = createTestSession();
+    db.exec('DROP TABLE violations');
+
+    const result = await callTool('score_policy', { sessionId: session.id });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Failed to score policy');
+  });
+});
+
+// ── compare_sessions ─────────────────────────────────────────────────
+
+describe('compare_sessions', () => {
+  it('compares two sessions with different violations', async () => {
+    const sessionA = createTestSession('https://example.com');
+    addTestViolation(sessionA.id);
+
+    const sessionB = createTestSession('https://example.com');
+    addTestViolation(sessionB.id, {
+      blockedUri: 'https://other.com/style.css',
+      effectiveDirective: 'style-src',
+      violatedDirective: 'style-src',
+    });
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: sessionB.id,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.sessionA).toBe(sessionA.id);
+    expect(data.sessionB).toBe(sessionB.id);
+    expect(data.policyDiff).toBeDefined();
+    expect(data.violationDiff).toBeDefined();
+    expect(typeof data.formatted).toBe('string');
+  });
+
+  it('compares two identical sessions', async () => {
+    const sessionA = createTestSession('https://example.com');
+    addTestViolation(sessionA.id);
+
+    const sessionB = createTestSession('https://example.com');
+    addTestViolation(sessionB.id);
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: sessionB.id,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.policyDiff.addedDirectives).toEqual([]);
+    expect(data.policyDiff.removedDirectives).toEqual([]);
+    expect(data.violationDiff.newViolations).toEqual([]);
+    expect(data.violationDiff.resolvedViolations).toEqual([]);
+  });
+
+  it('returns error when first session not found', async () => {
+    const sessionB = createTestSession();
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: '00000000-0000-0000-0000-000000000000',
+      sessionIdB: sessionB.id,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Failed to compare sessions');
+  });
+
+  it('returns error when second session not found', async () => {
+    const sessionA = createTestSession();
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: '00000000-0000-0000-0000-000000000000',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Failed to compare sessions');
+  });
+
+  it('compares sessions with no violations', async () => {
+    const sessionA = createTestSession('https://example.com');
+    const sessionB = createTestSession('https://example.com');
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: sessionB.id,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.policyDiff.addedDirectives).toEqual([]);
+    expect(data.policyDiff.removedDirectives).toEqual([]);
+    expect(data.violationDiff.newViolations).toEqual([]);
+    expect(data.violationDiff.resolvedViolations).toEqual([]);
+  });
+
+  it('respects strictness parameter', async () => {
+    const sessionA = createTestSession('https://example.com');
+    addTestViolation(sessionA.id);
+    const sessionB = createTestSession('https://example.com');
+    addTestViolation(sessionB.id);
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: sessionB.id,
+      strictness: 'strict',
+    });
+
+    expect(result.isError).toBeUndefined();
+  });
+});
+
+// ── get_permissions_policy ───────────────────────────────────────────
+
+describe('get_permissions_policy', () => {
+  function addTestPermissionsPolicy(sessionId: string, overrides: Record<string, unknown> = {}) {
+    return insertPermissionsPolicy(db, {
+      sessionId,
+      pageId: null,
+      directive: 'camera',
+      allowlist: ['self'],
+      headerType: 'permissions-policy',
+      sourceUrl: 'https://example.com/',
+      ...overrides,
+    });
+  }
+
+  it('returns permissions policies for a session', async () => {
+    const session = createTestSession();
+    addTestPermissionsPolicy(session.id);
+    addTestPermissionsPolicy(session.id, {
+      directive: 'geolocation',
+      allowlist: ['self', 'https://maps.google.com'],
+    });
+
+    const result = await callTool('get_permissions_policy', {
+      sessionId: session.id,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.sessionId).toBe(session.id);
+    expect(data.count).toBe(2);
+    expect(data.policies).toHaveLength(2);
+
+    const directives = data.policies.map((p: { directive: string }) => p.directive).sort();
+    expect(directives).toEqual(['camera', 'geolocation']);
+  });
+
+  it('filters by directive name', async () => {
+    const session = createTestSession();
+    addTestPermissionsPolicy(session.id, { directive: 'camera' });
+    addTestPermissionsPolicy(session.id, { directive: 'geolocation' });
+    addTestPermissionsPolicy(session.id, { directive: 'microphone' });
+
+    const result = await callTool('get_permissions_policy', {
+      sessionId: session.id,
+      directive: 'camera',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.count).toBe(1);
+    expect(data.policies[0].directive).toBe('camera');
+  });
+
+  it('returns empty list when no policies captured', async () => {
+    const session = createTestSession();
+
+    const result = await callTool('get_permissions_policy', {
+      sessionId: session.id,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.count).toBe(0);
+    expect(data.policies).toEqual([]);
+  });
+
+  it('returns error for nonexistent session', async () => {
+    const result = await callTool('get_permissions_policy', {
+      sessionId: '00000000-0000-0000-0000-000000000000',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Session not found');
+  });
+
+  it('includes all expected fields in policy entries', async () => {
+    const session = createTestSession();
+    addTestPermissionsPolicy(session.id, {
+      directive: 'autoplay',
+      allowlist: ['self', '*'],
+      headerType: 'feature-policy',
+      sourceUrl: 'https://example.com/page',
+    });
+
+    const result = await callTool('get_permissions_policy', {
+      sessionId: session.id,
+    });
+
+    const data = parseToolResult(result);
+    const policy = data.policies[0];
+    expect(policy.id).toBeDefined();
+    expect(policy.directive).toBe('autoplay');
+    expect(policy.allowlist).toEqual(['self', '*']);
+    expect(policy.headerType).toBe('feature-policy');
+    expect(policy.sourceUrl).toBe('https://example.com/page');
+  });
+
+  it('returns error when DB query fails', async () => {
+    const session = createTestSession();
+    db.exec('DROP TABLE permissions_policies');
+
+    const result = await callTool('get_permissions_policy', {
+      sessionId: session.id,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Failed to get permissions policies');
   });
 });
 

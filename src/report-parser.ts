@@ -84,7 +84,10 @@ export function parseCspReport(
     documentUri: truncate(documentUri, MAX_URI_LENGTH),
     blockedUri: truncate(normalizeBlockedUri(blockedUri ?? ''), MAX_URI_LENGTH),
     violatedDirective: truncate(extractDirectiveName(violatedDirective), MAX_DIRECTIVE_LENGTH),
-    effectiveDirective: truncate(extractDirectiveName(effectiveDirective ?? violatedDirective), MAX_DIRECTIVE_LENGTH),
+    effectiveDirective: truncate(
+      extractDirectiveName(effectiveDirective ?? violatedDirective),
+      MAX_DIRECTIVE_LENGTH,
+    ),
     sourceFile: truncateNullable(str(report['source-file']), MAX_SOURCE_FILE_LENGTH),
     lineNumber: num(report['line-number']),
     columnNumber: num(report['column-number']),
@@ -183,7 +186,10 @@ export function parseDomViolation(
     documentUri: truncate(documentURI, MAX_URI_LENGTH),
     blockedUri: truncate(normalizeBlockedUri(blockedURI ?? ''), MAX_URI_LENGTH),
     violatedDirective: truncate(extractDirectiveName(violatedDirective), MAX_DIRECTIVE_LENGTH),
-    effectiveDirective: truncate(extractDirectiveName(effectiveDirective ?? violatedDirective), MAX_DIRECTIVE_LENGTH),
+    effectiveDirective: truncate(
+      extractDirectiveName(effectiveDirective ?? violatedDirective),
+      MAX_DIRECTIVE_LENGTH,
+    ),
     sourceFile: truncateNullable(str(data['sourceFile']), MAX_SOURCE_FILE_LENGTH),
     lineNumber: num(data['lineNumber']),
     columnNumber: num(data['columnNumber']),

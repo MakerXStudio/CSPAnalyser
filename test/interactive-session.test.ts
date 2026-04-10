@@ -181,7 +181,7 @@ describe('runInteractiveSession', () => {
 
     await runInteractiveSession(db, { targetUrl: 'http://localhost:3000' }, {}, deps);
 
-    expect(deps.startReportServer).toHaveBeenCalledWith(db, expect.any(String));
+    expect(deps.startReportServer).toHaveBeenCalledWith(db, expect.any(String), expect.objectContaining({}));
   });
 
   it('sets up CSP injection on initial page in local mode', async () => {
@@ -193,6 +193,7 @@ describe('runInteractiveSession', () => {
       expect.anything(),
       9876,
       'test-token-123',
+      expect.any(Function),
     );
   });
 
@@ -557,6 +558,100 @@ describe('runInteractiveSession', () => {
 
     expect(result.session.mode).toBe('mitm');
     expect(deps.startMitmProxy).toHaveBeenCalled();
+  });
+
+  it('tracks page navigations via the load event handler', async () => {
+    const mockBrowser = createMockBrowser();
+    let disconnectHandler: EventHandler | null = null;
+
+    mockBrowser.on = vi.fn().mockImplementation((event: string, handler: EventHandler) => {
+      if (event === 'disconnected') {
+        disconnectHandler = handler;
+      }
+    });
+
+    const deps = createTestDeps({
+      launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
+      createAuthenticatedContext: vi.fn().mockResolvedValue({
+        context: mockBrowser._mockContext,
+      }),
+    });
+
+    const progressMessages: string[] = [];
+
+    const promise = runInteractiveSession(
+      db,
+      { targetUrl: 'http://localhost:3000' },
+      { onProgress: (msg) => progressMessages.push(msg) },
+      deps,
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Get the initial page and find the 'load' event handler
+    const mockPage = mockBrowser._mockContext._mockPage;
+    const loadHandlers = mockPage._eventHandlers.get('load');
+    expect(loadHandlers).toBeDefined();
+    expect(loadHandlers!.length).toBeGreaterThan(0);
+
+    // Simulate page navigation to a real URL
+    mockPage.url.mockReturnValue('http://localhost:3000/dashboard');
+    loadHandlers![0]!();
+
+    // Verify the page was recorded in the DB
+    const session = (await db.prepare('SELECT id FROM sessions LIMIT 1').get()) as { id: string };
+    const pages = getPages(db, session.id);
+    expect(pages.length).toBeGreaterThanOrEqual(1);
+    expect(pages.some((p) => p.url === 'http://localhost:3000/dashboard')).toBe(true);
+
+    // Verify progress callback was called
+    expect(progressMessages).toContainEqual('Visited: http://localhost:3000/dashboard');
+
+    disconnectHandler!();
+    await promise;
+  });
+
+  it('load handler skips about:blank pages', async () => {
+    const mockBrowser = createMockBrowser();
+    let disconnectHandler: EventHandler | null = null;
+
+    mockBrowser.on = vi.fn().mockImplementation((event: string, handler: EventHandler) => {
+      if (event === 'disconnected') {
+        disconnectHandler = handler;
+      }
+    });
+
+    const deps = createTestDeps({
+      launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
+      createAuthenticatedContext: vi.fn().mockResolvedValue({
+        context: mockBrowser._mockContext,
+      }),
+    });
+
+    const promise = runInteractiveSession(
+      db,
+      { targetUrl: 'http://localhost:3000' },
+      {},
+      deps,
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Get the load handler
+    const mockPage = mockBrowser._mockContext._mockPage;
+    const loadHandlers = mockPage._eventHandlers.get('load');
+    expect(loadHandlers).toBeDefined();
+
+    // Simulate about:blank load (should be skipped)
+    mockPage.url.mockReturnValue('about:blank');
+    loadHandlers![0]!();
+
+    const session = (await db.prepare('SELECT id FROM sessions LIMIT 1').get()) as { id: string };
+    const pages = getPages(db, session.id);
+    expect(pages).toHaveLength(0);
+
+    disconnectHandler!();
+    await promise;
   });
 
   it('respects explicit mode override', async () => {
