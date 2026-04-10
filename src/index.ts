@@ -116,3 +116,34 @@ export {
   formatPolicy,
   directivesToString,
 } from './policy-formatter.js';
+
+// ── Certificate Manager (Phase 4) ─────────────────────────────────────
+export {
+  getCertPaths,
+  ensureCACertificate,
+  secureCertFiles,
+} from './cert-manager.js';
+export type { CertPaths } from './cert-manager.js';
+
+// ── MITM Proxy (Phase 4) ──────────────────────────────────────────────
+export {
+  startMitmProxy,
+  transformProxyResponseHeaders,
+} from './mitm-proxy.js';
+export type { MitmProxyOptions, MitmProxyInstance } from './mitm-proxy.js';
+
+// ── Auth (Phase 5) ────────────────────────────────────────────────────
+export {
+  createAuthenticatedContext,
+  performManualLogin,
+  extractHostname,
+  mapCookies,
+} from './auth.js';
+export type { AuthOptions } from './auth.js';
+
+// ── Session Manager (Phase 5) ─────────────────────────────────────────
+export { runSession } from './session-manager.js';
+export type { SessionResult, RunSessionOptions } from './session-manager.js';
+
+// ── MCP Server (Phase 5) ──────────────────────────────────────────────
+export { createMcpServer } from './mcp-server.js';

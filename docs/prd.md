@@ -124,9 +124,11 @@ Output the generated policy in multiple formats suitable for different deploymen
 Expose all functionality as MCP tools for AI coding agent consumption.
 
 **Acceptance criteria:**
-- Register tools: `start_session`, `authenticate_session`, `crawl_url`, `crawl_site`, `get_violations`, `generate_policy`, `export_policy`
-- Each tool has a typed JSON Schema input definition
-- Tools return structured responses suitable for agent consumption
+- Register tools: `start_session`, `crawl_url`, `get_violations`, `generate_policy`, `export_policy`, `get_session`, `list_sessions`
+- `start_session` consolidates authentication (via `storageStatePath` param) and multi-page crawling into a single tool
+- `crawl_url` is a convenience wrapper for single-page analysis (depth=0, maxPages=1)
+- Each tool has a typed JSON Schema input definition (using Zod schemas)
+- Tools return structured JSON responses suitable for agent consumption
 - Configurable in Claude Code, Codex, and other MCP-compatible agents
 
 ### F11: CLI Interface
@@ -180,9 +182,9 @@ Provide a standalone command-line interface with two modes.
 | 1 | Foundation | Complete | package.json, tsconfig, types.ts, DB schema/repository, utils, index.ts |
 | 2 | Violation Capture Pipeline | Complete | report-server, report-parser, csp-injector, violation-listener, crawler |
 | 3 | Policy Generation | Complete | rule-builder, policy-generator, policy-optimizer, policy-formatter |
-| 4 | MITM Proxy | Not started | cert-manager, mitm-proxy |
-| 5 | Session + Entry Points | Not started | session-manager, auth, mcp-server, cli |
-| 6 | Testing | In progress | 349 unit tests passing (Phase 1-3 coverage, 99%+ lines) |
+| 4 | MITM Proxy | Complete | cert-manager, mitm-proxy |
+| 5 | Session + Entry Points | Complete | session-manager, auth, mcp-server, cli |
+| 6 | Testing | Complete | 473 unit tests passing (95%+ statement/line coverage) |
 
 ### Phase 1 Artifacts
 - `src/types.ts` — All shared interfaces, enums, config types
@@ -227,6 +229,22 @@ Provide a standalone command-line interface with two modes.
 - **LOW:** `deduplicateSources` in optimizer doesn't dedup 'self' vs explicit matching origin
 - **NOTE:** Cloudflare format only outputs Workers handler, not Pages `_headers` file
 - **NOTE:** Hash of truncated sample won't match browser's hash of full script — hashes only generated for samples <256 chars
+
+### Phase 4 Artifacts
+- `src/cert-manager.ts` — Manages CA certificate directory for MITM proxy; creates certs dir with 0o700, secures CA key files with 0o600 after generation
+- `src/mitm-proxy.ts` — Wraps http-mitm-proxy; strips existing CSP headers and injects deny-all CSP on HTTPS responses; binds to 127.0.0.1 only; uses same buildDenyAllCSP() as local mode
+
+### Phase 5 Artifacts
+- `src/session-manager.ts` — Central orchestrator: creates session → launches browser → report server → MITM proxy (if needed) → auth → crawl → cleanup; auto-detects local vs MITM mode; guaranteed cleanup in finally block
+- `src/auth.ts` — Three auth patterns: storageState file (validated for path traversal), cookie injection (mapped to Playwright format), manual login (headed browser with storageState export); lightweight Playwright interfaces for testing
+- `src/mcp-server.ts` — MCP server with 7 tools: start_session, crawl_url, get_violations, generate_policy, export_policy, get_session, list_sessions; Zod-validated inputs; StdioServerTransport
+- `src/cli.ts` — CLI with 4 commands: crawl, interactive, generate, export; Node util.parseArgs; policy to stdout, progress to stderr; import.meta.url execution guard
+
+### Phase 4+5 Review Findings (tracked)
+- **LOW:** Cookie name/value not sanitized against RFC 6265 — low risk (local user input only)
+- **LOW:** `performManualLogin` doesn't verify headed mode — will hang if browser is headless
+- **LOW:** MCP error responses may expose internal paths — acceptable for local stdio
+- **LOW:** Sessions that error stay in 'crawling'/'analyzing' status — no 'failed' status type
 
 ## 9. Success Metrics
 

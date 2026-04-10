@@ -1,0 +1,358 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+import * as path from 'node:path';
+import type Database from 'better-sqlite3';
+import {
+  createDatabase,
+  getSession,
+  listSessions,
+  getViolations,
+  getViolationSummary,
+  getPages,
+} from './db/repository.js';
+import { generatePolicy } from './policy-generator.js';
+import { optimizePolicy } from './policy-optimizer.js';
+import { formatPolicy, directivesToString } from './policy-formatter.js';
+import { createLogger } from './utils/logger.js';
+// Lazy import type for session-manager
+type SessionManagerModule = { runSession: typeof import('./session-manager.js')['runSession'] };
+
+const logger = createLogger();
+
+// ── Tool result helpers ─────────────────────────────────────────────────
+
+function toolResult(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+  };
+}
+
+function toolError(message: string): { content: Array<{ type: 'text'; text: string }>; isError: true } {
+  return {
+    content: [{ type: 'text' as const, text: message }],
+    isError: true,
+  };
+}
+
+// ── Server factory ──────────────────────────────────────────────────────
+
+export function createMcpServer(db: Database.Database): McpServer {
+  const server = new McpServer({
+    name: 'csp-analyser',
+    version: '0.1.0',
+  });
+
+  // ── start_session ───────────────────────────────────────────────────
+
+  server.tool(
+    'start_session',
+    'Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations',
+    {
+      targetUrl: z.string().url().describe('The URL to analyse'),
+      mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
+      depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
+      maxPages: z.number().int().min(1).max(1000).optional().describe('Maximum pages to crawl (default: 10)'),
+      storageStatePath: z.string().optional().describe('Path to Playwright storageState JSON for authenticated sessions'),
+      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness level (default: moderate)'),
+    },
+    async (args) => {
+      try {
+        // Dynamic import so the server module compiles even before session-manager exists
+        const { runSession } = await import('./session-manager.js') as SessionManagerModule;
+
+        const result = await runSession(db, {
+          targetUrl: args.targetUrl,
+          mode: args.mode,
+          crawlConfig: {
+            depth: args.depth,
+            maxPages: args.maxPages,
+          },
+          storageStatePath: args.storageStatePath,
+        });
+
+        return toolResult({
+          sessionId: result.session.id,
+          targetUrl: result.session.targetUrl,
+          mode: result.session.mode,
+          pagesVisited: result.pagesVisited,
+          violationsFound: result.violationsFound,
+          errors: result.errors,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('start_session failed', { error: message });
+        return toolError(`Failed to start session: ${message}`);
+      }
+    },
+  );
+
+  // ── crawl_url ───────────────────────────────────────────────────────
+
+  server.tool(
+    'crawl_url',
+    'Analyse a single page for CSP violations (convenience wrapper: depth=0, maxPages=1)',
+    {
+      url: z.string().url().describe('The URL to analyse'),
+      mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
+      storageStatePath: z.string().optional().describe('Path to Playwright storageState JSON for authenticated sessions'),
+      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness level (default: moderate)'),
+    },
+    async (args) => {
+      try {
+        const { runSession } = await import('./session-manager.js') as SessionManagerModule;
+
+        const result = await runSession(db, {
+          targetUrl: args.url,
+          mode: args.mode,
+          crawlConfig: {
+            depth: 0,
+            maxPages: 1,
+          },
+          storageStatePath: args.storageStatePath,
+        });
+
+        return toolResult({
+          sessionId: result.session.id,
+          targetUrl: result.session.targetUrl,
+          mode: result.session.mode,
+          pagesVisited: result.pagesVisited,
+          violationsFound: result.violationsFound,
+          errors: result.errors,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('crawl_url failed', { error: message });
+        return toolError(`Failed to crawl URL: ${message}`);
+      }
+    },
+  );
+
+  // ── get_violations ──────────────────────────────────────────────────
+
+  server.tool(
+    'get_violations',
+    'Get CSP violations captured during a session, optionally filtered by directive, page URL, or origin',
+    {
+      sessionId: z.string().uuid().describe('The session ID'),
+      directive: z.string().optional().describe('Filter by CSP directive (e.g. script-src)'),
+      pageUrl: z.string().optional().describe('Filter by page URL'),
+      origin: z.string().optional().describe('Filter by blocked resource origin'),
+    },
+    async (args) => {
+      try {
+        const session = getSession(db, args.sessionId);
+        if (!session) {
+          return toolError(`Session not found: ${args.sessionId}`);
+        }
+
+        const violations = getViolations(db, args.sessionId, {
+          directive: args.directive,
+          pageUrl: args.pageUrl,
+          origin: args.origin,
+        });
+
+        return toolResult({
+          sessionId: args.sessionId,
+          count: violations.length,
+          violations: violations.map((v) => ({
+            id: v.id,
+            documentUri: v.documentUri,
+            blockedUri: v.blockedUri,
+            effectiveDirective: v.effectiveDirective,
+            violatedDirective: v.violatedDirective,
+            sourceFile: v.sourceFile,
+            lineNumber: v.lineNumber,
+            sample: v.sample,
+            capturedVia: v.capturedVia,
+          })),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to get violations: ${message}`);
+      }
+    },
+  );
+
+  // ── generate_policy ─────────────────────────────────────────────────
+
+  server.tool(
+    'generate_policy',
+    'Generate an optimised CSP policy from violations captured in a session',
+    {
+      sessionId: z.string().uuid().describe('The session ID'),
+      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness (default: moderate)'),
+      includeHashes: z.boolean().optional().describe('Include SHA-256 hashes for inline scripts/styles (default: false)'),
+    },
+    async (args) => {
+      try {
+        const session = getSession(db, args.sessionId);
+        if (!session) {
+          return toolError(`Session not found: ${args.sessionId}`);
+        }
+
+        const directives = generatePolicy(db, args.sessionId, {
+          strictness: args.strictness ?? 'moderate',
+          includeHashes: args.includeHashes ?? false,
+        });
+
+        const optimized = optimizePolicy(directives);
+        const policyString = directivesToString(optimized);
+
+        return toolResult({
+          sessionId: args.sessionId,
+          strictness: args.strictness ?? 'moderate',
+          directives: optimized,
+          policyString,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to generate policy: ${message}`);
+      }
+    },
+  );
+
+  // ── export_policy ───────────────────────────────────────────────────
+
+  server.tool(
+    'export_policy',
+    'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, json)',
+    {
+      sessionId: z.string().uuid().describe('The session ID'),
+      format: z.enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'json']).describe('Output format'),
+      strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness (default: moderate)'),
+      isReportOnly: z.boolean().optional().describe('Use Content-Security-Policy-Report-Only header (default: false)'),
+    },
+    async (args) => {
+      try {
+        const session = getSession(db, args.sessionId);
+        if (!session) {
+          return toolError(`Session not found: ${args.sessionId}`);
+        }
+
+        const directives = generatePolicy(db, args.sessionId, {
+          strictness: args.strictness ?? 'moderate',
+          includeHashes: false,
+        });
+
+        const optimized = optimizePolicy(directives);
+        const formatted = formatPolicy(optimized, args.format, args.isReportOnly ?? false);
+
+        return toolResult({
+          sessionId: args.sessionId,
+          format: args.format,
+          isReportOnly: args.isReportOnly ?? false,
+          policy: formatted,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to export policy: ${message}`);
+      }
+    },
+  );
+
+  // ── get_session ─────────────────────────────────────────────────────
+
+  server.tool(
+    'get_session',
+    'Get details and violation summary for a CSP analysis session',
+    {
+      sessionId: z.string().uuid().describe('The session ID'),
+    },
+    async (args) => {
+      try {
+        const session = getSession(db, args.sessionId);
+        if (!session) {
+          return toolError(`Session not found: ${args.sessionId}`);
+        }
+
+        const pages = getPages(db, args.sessionId);
+        const summary = getViolationSummary(db, args.sessionId);
+
+        return toolResult({
+          session: {
+            id: session.id,
+            targetUrl: session.targetUrl,
+            status: session.status,
+            mode: session.mode,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+          },
+          pagesVisited: pages.length,
+          pages: pages.map((p) => ({ url: p.url, statusCode: p.statusCode })),
+          violationSummary: summary,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to get session: ${message}`);
+      }
+    },
+  );
+
+  // ── list_sessions ───────────────────────────────────────────────────
+
+  server.tool(
+    'list_sessions',
+    'List all CSP analysis sessions',
+    {},
+    async () => {
+      try {
+        const sessions = listSessions(db);
+
+        return toolResult({
+          count: sessions.length,
+          sessions: sessions.map((s) => ({
+            id: s.id,
+            targetUrl: s.targetUrl,
+            status: s.status,
+            mode: s.mode,
+            createdAt: s.createdAt,
+          })),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to list sessions: ${message}`);
+      }
+    },
+  );
+
+  return server;
+}
+
+// ── Main entry point ────────────────────────────────────────────────────
+
+export async function main(): Promise<void> {
+  const dbPath = path.resolve(process.cwd(), '.csp-analyser', 'data.db');
+  logger.info('Starting CSP Analyser MCP server', { dbPath });
+
+  const db = createDatabase(dbPath);
+
+  const server = createMcpServer(db);
+  const transport = new StdioServerTransport();
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    logger.info('Shutting down MCP server');
+    await server.close();
+    db.close();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  await server.connect(transport);
+  logger.info('MCP server connected via stdio');
+}
+
+// Run when executed directly
+const __mcp_url = new URL(import.meta.url).pathname;
+const isDirectExecution = process.argv[1] &&
+  (__mcp_url === new URL(`file://${process.argv[1]}`).pathname);
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    logger.error('MCP server failed to start', { error: String(error) });
+    process.exit(1);
+  });
+}
