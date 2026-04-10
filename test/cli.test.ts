@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock dependencies for command execution tests
 const mockRunSession = vi.fn();
+const mockRunInteractiveSession = vi.fn();
 const mockGeneratePolicy = vi.fn().mockReturnValue({ 'default-src': ["'self'"] });
 const mockOptimizePolicy = vi.fn().mockImplementation((d) => d);
 const mockFormatPolicy = vi.fn().mockReturnValue("Content-Security-Policy: default-src 'self'");
 const mockCreateDatabase = vi.fn().mockReturnValue({ close: vi.fn() });
+const mockGetSession = vi.fn().mockReturnValue({ targetUrl: 'https://example.com' });
 
 vi.mock('../src/session-manager.js', () => ({
   runSession: (...args: unknown[]) => mockRunSession(...args),
+  runInteractiveSession: (...args: unknown[]) => mockRunInteractiveSession(...args),
 }));
 
 vi.mock('../src/policy-generator.js', () => ({
@@ -25,6 +28,7 @@ vi.mock('../src/policy-formatter.js', () => ({
 
 vi.mock('../src/db/repository.js', () => ({
   createDatabase: (...args: unknown[]) => mockCreateDatabase(...args),
+  getSession: (...args: unknown[]) => mockGetSession(...args),
 }));
 
 import { parseCliArgs, HELP_TEXT, main } from '../src/cli.js';
@@ -299,25 +303,27 @@ describe('main', () => {
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Content-Security-Policy'));
   });
 
-  it('runs interactive command with headless false', async () => {
-    mockRunSession.mockResolvedValue({
-      session: { id: 'test-session-id' },
-      pagesVisited: 1,
-      violationsFound: 2,
-      errors: [],
+  it('runs interactive command using runInteractiveSession', async () => {
+    mockRunInteractiveSession.mockResolvedValue({
+      session: { id: 'test-session-id', targetUrl: 'https://example.com' },
+      pagesVisited: 3,
+      violationsFound: 5,
     });
 
     await main(['interactive', 'https://example.com']);
 
-    expect(mockRunSession).toHaveBeenCalledWith(
+    expect(mockRunInteractiveSession).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         targetUrl: 'https://example.com',
-        crawlConfig: { depth: 0, maxPages: 1 },
       }),
-      expect.objectContaining({ headless: false }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     );
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Found 2 violations'));
+    // No crawlConfig should be passed (interactive doesn't use the crawler)
+    const configArg = mockRunInteractiveSession.mock.calls[0][1] as Record<string, unknown>;
+    expect(configArg.crawlConfig).toBeUndefined();
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Visited 3 pages'));
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('found 5 violations'));
   });
 
   it('runs generate command and outputs formatted policy', async () => {

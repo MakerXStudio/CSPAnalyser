@@ -350,6 +350,19 @@ describe('Violation repository', () => {
     expect(filtered[0].blockedUri).toBe('https://cdn.example.com/a.js');
   });
 
+  it('getViolations escapes LIKE metacharacters in origin filter', () => {
+    insertViolation(db, makeViolation({ blockedUri: 'https://cdn.example.com/a.js', effectiveDirective: 'script-src' }));
+    insertViolation(db, makeViolation({ blockedUri: 'https://other.com/b.js', effectiveDirective: 'style-src' }));
+
+    // The % character should be treated as a literal, not a wildcard
+    const withPercent = getViolations(db, sessionId, { origin: 'https://%' });
+    expect(withPercent).toHaveLength(0);
+
+    // The _ character should be treated as a literal, not a single-character wildcard
+    const withUnderscore = getViolations(db, sessionId, { origin: 'https://cdn_example.com' });
+    expect(withUnderscore).toHaveLength(0);
+  });
+
   it('getViolations combines multiple filters', () => {
     const page = insertPage(db, sessionId, 'https://example.com/page1', 200)!;
     insertViolation(db, makeViolation({ pageId: page.id, effectiveDirective: 'script-src', blockedUri: 'https://cdn.com/a.js' }));

@@ -15,6 +15,7 @@ import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy, directivesToString } from './policy-formatter.js';
 import { createLogger } from './utils/logger.js';
+import { validateTargetUrl } from './utils/url-utils.js';
 // Lazy import type for session-manager
 type SessionManagerModule = { runSession: typeof import('./session-manager.js')['runSession'] };
 
@@ -28,9 +29,17 @@ function toolResult(data: unknown): { content: Array<{ type: 'text'; text: strin
   };
 }
 
+/**
+ * Strips internal file paths from error messages to avoid leaking server internals.
+ * Matches absolute paths like /home/user/project/... or C:\Users\...
+ */
+export function sanitizeErrorMessage(message: string): string {
+  return message.replace(/(?:\/[\w.-]+){2,}(?:\/[\w.-]*)*|[A-Z]:\\(?:[\w.-]+\\)*/g, '<path>');
+}
+
 function toolError(message: string): { content: Array<{ type: 'text'; text: string }>; isError: true } {
   return {
-    content: [{ type: 'text' as const, text: message }],
+    content: [{ type: 'text' as const, text: sanitizeErrorMessage(message) }],
     isError: true,
   };
 }
@@ -53,11 +62,13 @@ export function createMcpServer(db: Database.Database): McpServer {
       mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
       depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
       maxPages: z.number().int().min(1).max(1000).optional().describe('Maximum pages to crawl (default: 10)'),
+      settlementDelay: z.number().int().min(0).max(10000).optional().describe('Milliseconds to wait after page load for late violations (default: 500)'),
       storageStatePath: z.string().optional().describe('Path to Playwright storageState JSON for authenticated sessions'),
       strictness: z.enum(['strict', 'moderate', 'permissive']).optional().describe('Policy strictness level (default: moderate)'),
     },
     async (args) => {
       try {
+        validateTargetUrl(args.targetUrl);
         // Dynamic import so the server module compiles even before session-manager exists
         const { runSession } = await import('./session-manager.js') as SessionManagerModule;
 
@@ -67,6 +78,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           crawlConfig: {
             depth: args.depth,
             maxPages: args.maxPages,
+            settlementDelay: args.settlementDelay,
           },
           storageStatePath: args.storageStatePath,
         });
@@ -100,6 +112,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
+        validateTargetUrl(args.url);
         const { runSession } = await import('./session-manager.js') as SessionManagerModule;
 
         const result = await runSession(db, {
@@ -196,7 +209,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           includeHashes: args.includeHashes ?? false,
         });
 
-        const optimized = optimizePolicy(directives);
+        const optimized = optimizePolicy(directives, session.targetUrl);
         const policyString = directivesToString(optimized);
 
         return toolResult({
@@ -235,7 +248,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           includeHashes: false,
         });
 
-        const optimized = optimizePolicy(directives);
+        const optimized = optimizePolicy(directives, session.targetUrl);
         const formatted = formatPolicy(optimized, args.format, args.isReportOnly ?? false);
 
         return toolResult({
@@ -327,22 +340,27 @@ export async function main(): Promise<void> {
 
   const db = createDatabase(dbPath);
 
-  const server = createMcpServer(db);
-  const transport = new StdioServerTransport();
+  try {
+    const server = createMcpServer(db);
+    const transport = new StdioServerTransport();
 
-  // Graceful shutdown
-  const shutdown = async () => {
-    logger.info('Shutting down MCP server');
-    await server.close();
+    // Graceful shutdown
+    const shutdown = async () => {
+      logger.info('Shutting down MCP server');
+      await server.close();
+      db.close();
+      process.exit(0);
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+
+    await server.connect(transport);
+    logger.info('MCP server connected via stdio');
+  } catch (error) {
     db.close();
-    process.exit(0);
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
-  await server.connect(transport);
-  logger.info('MCP server connected via stdio');
+    throw error;
+  }
 }
 
 // Run when executed directly

@@ -8,6 +8,7 @@ import type Database from 'better-sqlite3';
 let db: Database.Database;
 let sessionId: string;
 let port: number;
+let token: string;
 let close: () => Promise<void>;
 
 async function post(path: string, body: unknown, contentType: string): Promise<Response> {
@@ -24,6 +25,7 @@ beforeEach(async () => {
   sessionId = session.id;
   const server = await startReportServer(db, sessionId);
   port = server.port;
+  token = server.token;
   close = server.close;
 });
 
@@ -42,6 +44,29 @@ describe('report-server', () => {
     expect(body.status).toBe('ok');
   });
 
+  // ── Token auth ───────────────────────────────────────────────────────
+
+  it('returns a per-session auth token', () => {
+    expect(token).toBeDefined();
+    expect(typeof token).toBe('string');
+    expect(token.length).toBeGreaterThan(0);
+  });
+
+  it('returns 404 for report paths without token', async () => {
+    const res = await post('/csp-report', { 'csp-report': {} }, 'application/csp-report');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 for report paths with wrong token', async () => {
+    const res = await post('/csp-report/wrong-token', { 'csp-report': {} }, 'application/csp-report');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 for reports API path without token', async () => {
+    const res = await post('/reports', [], 'application/reports+json');
+    expect(res.status).toBe(404);
+  });
+
   // ── 404 ──────────────────────────────────────────────────────────────
 
   it('returns 404 for unknown routes', async () => {
@@ -50,19 +75,19 @@ describe('report-server', () => {
   });
 
   it('returns 405 for GET on report endpoints', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/csp-report`);
+    const res = await fetch(`http://127.0.0.1:${port}/csp-report/${token}`);
     expect(res.status).toBe(405);
     const body = await res.json();
     expect(body.error).toBe('method not allowed');
   });
 
   it('returns 405 for PUT on report endpoints', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/reports`, { method: 'PUT' });
+    const res = await fetch(`http://127.0.0.1:${port}/reports/${token}`, { method: 'PUT' });
     expect(res.status).toBe(405);
   });
 
   it('returns 405 with Allow: POST header', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/csp-report`, { method: 'DELETE' });
+    const res = await fetch(`http://127.0.0.1:${port}/csp-report/${token}`, { method: 'DELETE' });
     expect(res.status).toBe(405);
     expect(res.headers.get('allow')).toBe('POST');
   });
@@ -79,7 +104,7 @@ describe('report-server', () => {
       },
     };
 
-    const res = await post('/csp-report', body, 'application/csp-report');
+    const res = await post(`/csp-report/${token}`, body, 'application/csp-report');
     expect(res.status).toBe(204);
 
     const violations = getViolations(db, sessionId);
@@ -98,7 +123,7 @@ describe('report-server', () => {
       },
     };
 
-    const res = await post('/csp-report', body, 'application/json');
+    const res = await post(`/csp-report/${token}`, body, 'application/json');
     expect(res.status).toBe(204);
 
     const violations = getViolations(db, sessionId);
@@ -106,7 +131,7 @@ describe('report-server', () => {
   });
 
   it('POST /csp-report returns 204 even for unparseable reports', async () => {
-    const res = await post('/csp-report', { invalid: 'data' }, 'application/csp-report');
+    const res = await post(`/csp-report/${token}`, { invalid: 'data' }, 'application/csp-report');
     expect(res.status).toBe(204);
 
     const violations = getViolations(db, sessionId);
@@ -114,12 +139,12 @@ describe('report-server', () => {
   });
 
   it('POST /csp-report rejects unsupported content type', async () => {
-    const res = await post('/csp-report', {}, 'text/plain');
+    const res = await post(`/csp-report/${token}`, {}, 'text/plain');
     expect(res.status).toBe(415);
   });
 
   it('POST /csp-report rejects invalid JSON', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/csp-report`, {
+    const res = await fetch(`http://127.0.0.1:${port}/csp-report/${token}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/csp-report' },
       body: 'not json{{{',
@@ -149,7 +174,7 @@ describe('report-server', () => {
       },
     ];
 
-    const res = await post('/reports', body, 'application/reports+json');
+    const res = await post(`/reports/${token}`, body, 'application/reports+json');
     expect(res.status).toBe(204);
 
     const violations = getViolations(db, sessionId);
@@ -169,7 +194,7 @@ describe('report-server', () => {
       },
     ];
 
-    const res = await post('/reports', body, 'application/json');
+    const res = await post(`/reports/${token}`, body, 'application/json');
     expect(res.status).toBe(204);
 
     const violations = getViolations(db, sessionId);
@@ -177,7 +202,7 @@ describe('report-server', () => {
   });
 
   it('POST /reports rejects unsupported content type', async () => {
-    const res = await post('/reports', [], 'text/plain');
+    const res = await post(`/reports/${token}`, [], 'text/plain');
     expect(res.status).toBe(415);
   });
 
@@ -185,7 +210,7 @@ describe('report-server', () => {
 
   it('rejects bodies larger than 1MB', async () => {
     const largeBody = 'x'.repeat(1024 * 1024 + 1);
-    const res = await fetch(`http://127.0.0.1:${port}/csp-report`, {
+    const res = await fetch(`http://127.0.0.1:${port}/csp-report/${token}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/csp-report' },
       body: largeBody,
@@ -209,7 +234,7 @@ describe('report-server', () => {
       },
     };
 
-    const res = await post('/csp-report', body, 'application/csp-report');
+    const res = await post(`/csp-report/${token}`, body, 'application/csp-report');
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error).toBe('internal error');

@@ -6,6 +6,19 @@ import { createLogger } from './utils/logger.js';
 const logger = createLogger();
 
 /**
+ * Validates that a CSP source expression does not contain characters that could
+ * inject additional directives or break the policy. Returns true if safe.
+ *
+ * Rejects expressions containing semicolons, newlines, carriage returns, or
+ * null bytes — all of which could be used to inject additional CSP directives.
+ */
+export function isValidSourceExpression(source: string): boolean {
+  // Semicolons delimit CSP directives — a source containing one could inject directives
+  // Newlines/CR could break header parsing; null bytes are never valid
+  return !/[;\r\n\0]/.test(source);
+}
+
+/**
  * Maps a single violation to a CSP source expression based on strictness level.
  *
  * Returns null if the violation should be skipped (e.g. blocked-uri is 'none').
@@ -40,28 +53,39 @@ export function violationToSourceExpression(
   }
 
   // External origin — strictness determines the source expression
+  let result: string;
+
   if (strictness === 'strict') {
-    return extractOrigin(blockedUri);
-  }
+    result = extractOrigin(blockedUri);
+  } else {
+    // moderate: wildcard for 3+ label hostnames, else exact origin
+    // permissive: wildcard for 2+ label hostnames (more lenient)
+    const hostname = parsed.hostname;
+    const labels = hostname.split('.');
 
-  // moderate: wildcard for 3+ label hostnames, else exact origin
-  // permissive: wildcard for 2+ label hostnames (more lenient)
-  const hostname = parsed.hostname;
-  const labels = hostname.split('.');
-
-  if (strictness === 'permissive') {
-    if (labels.length >= 2) {
-      return `*.${hostname}`;
+    if (strictness === 'permissive') {
+      // permissive: wildcard for 3+ labels (same as moderate), plus wildcard 2-label hostnames
+      // This is always at least as broad as moderate
+      if (labels.length >= 3) {
+        result = generateWildcardDomain(hostname);
+      } else if (labels.length >= 2) {
+        result = `*.${hostname}`;
+      } else {
+        result = extractOrigin(blockedUri);
+      }
+    } else {
+      // moderate: wildcard for 3+ label hostnames, else exact origin
+      result = labels.length >= 3 ? generateWildcardDomain(hostname) : extractOrigin(blockedUri);
     }
-    return extractOrigin(blockedUri);
   }
 
-  // moderate
-  if (labels.length >= 3) {
-    return generateWildcardDomain(hostname);
+  // Validate that the resulting expression can't inject additional CSP directives
+  if (!isValidSourceExpression(result)) {
+    logger.warn('Source expression contains invalid characters, skipping', { source: result, blockedUri });
+    return null;
   }
 
-  return extractOrigin(blockedUri);
+  return result;
 }
 
 /**

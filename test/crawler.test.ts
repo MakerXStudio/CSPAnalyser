@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { BrowserContext, Page } from 'playwright';
 import Database from 'better-sqlite3';
-import { createDatabase, createSession, getPages } from '../src/db/repository.js';
+import { createDatabase, createSession, getPages, getViolations, insertViolation } from '../src/db/repository.js';
 import { crawl, type CrawlCallbacks } from '../src/crawler.js';
 import type { CrawlConfig, SessionConfig } from '../src/types.js';
 
@@ -14,6 +14,7 @@ const DEFAULT_CRAWL_CONFIG: CrawlConfig = {
   depth: 1,
   maxPages: 10,
   waitStrategy: 'load',
+  settlementDelay: 0, // No delay in tests for speed
 };
 
 // ── Mock helpers ──────────────────────────────────────────────────────────
@@ -273,7 +274,7 @@ describe('crawl', () => {
     expect(callOrder).toEqual(['onPageCreated', 'goto']);
   });
 
-  it('passes page and url to onPageCreated callback', async () => {
+  it('passes page, url, and pageId to onPageCreated callback', async () => {
     const context = createMockContext({
       'https://example.com/': { links: [] },
     });
@@ -283,9 +284,10 @@ describe('crawl', () => {
     await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG, { onPageCreated });
 
     expect(onPageCreated).toHaveBeenCalledTimes(1);
-    const [page, url] = onPageCreated.mock.calls[0];
+    const [page, url, pageId] = onPageCreated.mock.calls[0];
     expect(page).toBeDefined();
     expect(url).toBe('https://example.com/');
+    expect(pageId).toBeTruthy();
   });
 
   it('invokes onPageCreated for every page in BFS traversal', async () => {
@@ -300,7 +302,9 @@ describe('crawl', () => {
 
     expect(onPageCreated).toHaveBeenCalledTimes(2);
     expect(onPageCreated.mock.calls[0][1]).toBe('https://example.com/');
+    expect(onPageCreated.mock.calls[0][2]).toBeTruthy(); // pageId
     expect(onPageCreated.mock.calls[1][1]).toBe('https://example.com/about');
+    expect(onPageCreated.mock.calls[1][2]).toBeTruthy(); // pageId
   });
 
   it('closes each page after processing', async () => {
@@ -372,5 +376,159 @@ describe('crawl', () => {
     const result = await crawl(context, db, sessionId, 'https://example.com/', config);
 
     expect(result.pagesVisited).toBe(1);
+  });
+
+  it('provides pageId to onPageCreated before navigation for violation association', async () => {
+    const context = createMockContext({
+      'https://example.com/': { links: [] },
+    });
+
+    let capturedPageId: string | undefined;
+    const onPageCreated = vi.fn().mockImplementation(
+      async (_page: Page, _url: string, pageId: string) => {
+        capturedPageId = pageId;
+        // Simulate what violation-listener does: insert a violation with the pageId
+        insertViolation(db, {
+          sessionId,
+          pageId,
+          documentUri: 'https://example.com/',
+          blockedUri: 'https://cdn.example.com/script.js',
+          violatedDirective: 'script-src',
+          effectiveDirective: 'script-src',
+          capturedVia: 'dom_event',
+        });
+      },
+    );
+
+    await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG, { onPageCreated });
+
+    // Verify pageId was provided
+    expect(capturedPageId).toBeTruthy();
+
+    // Verify violations are associated with the correct page
+    const violations = getViolations(db, sessionId);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].pageId).toBe(capturedPageId);
+
+    // Verify the page record exists and matches
+    const pages = getPages(db, sessionId);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].id).toBe(capturedPageId);
+  });
+
+  it('updates page status code after navigation completes', async () => {
+    const context = createMockContext({
+      'https://example.com/': { links: [], status: 201 },
+    });
+
+    await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG);
+
+    const pages = getPages(db, sessionId);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].statusCode).toBe(201);
+  });
+
+  describe('settlement delay', () => {
+    it('waits the configured settlementDelay before closing the page', async () => {
+      const callOrder: string[] = [];
+
+      const context = {
+        newPage: vi.fn().mockImplementation(() => {
+          const page = {
+            goto: vi.fn().mockResolvedValue({ status: () => 200 }),
+            $$eval: vi.fn().mockResolvedValue([]),
+            close: vi.fn().mockImplementation(() => {
+              callOrder.push('close');
+              return Promise.resolve();
+            }),
+          };
+          return Promise.resolve(page as unknown as Page);
+        }),
+      } as unknown as BrowserContext;
+
+      const config: CrawlConfig = { ...DEFAULT_CRAWL_CONFIG, depth: 0, settlementDelay: 50 };
+
+      const start = Date.now();
+      await crawl(context, db, sessionId, 'https://example.com/', config);
+      const elapsed = Date.now() - start;
+
+      // Should have waited at least the settlement delay
+      expect(elapsed).toBeGreaterThanOrEqual(40); // allow small timing tolerance
+    });
+
+    it('allows late violations to be captured during settlement delay', async () => {
+      let violationTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const context = {
+        newPage: vi.fn().mockImplementation(() => {
+          const page = {
+            goto: vi.fn().mockImplementation(() => {
+              // Simulate a late-arriving violation that fires 20ms after navigation completes
+              violationTimer = setTimeout(() => {
+                insertViolation(db, {
+                  sessionId,
+                  pageId: null,
+                  documentUri: 'https://example.com/',
+                  blockedUri: 'https://late-cdn.example.com/lazy.js',
+                  violatedDirective: 'script-src',
+                  effectiveDirective: 'script-src',
+                  capturedVia: 'dom_event',
+                });
+              }, 20);
+              return Promise.resolve({ status: () => 200 });
+            }),
+            $$eval: vi.fn().mockResolvedValue([]),
+            close: vi.fn().mockImplementation(() => {
+              if (violationTimer) clearTimeout(violationTimer);
+              return Promise.resolve();
+            }),
+          };
+          return Promise.resolve(page as unknown as Page);
+        }),
+      } as unknown as BrowserContext;
+
+      // With 0 delay, the page closes immediately and the timer is cleared — no violation
+      const configNoDelay: CrawlConfig = { ...DEFAULT_CRAWL_CONFIG, depth: 0, settlementDelay: 0 };
+      await crawl(context, db, sessionId, 'https://example.com/', configNoDelay);
+      const violationsWithout = getViolations(db, sessionId);
+      expect(violationsWithout).toHaveLength(0);
+
+      // With 50ms delay, the late violation (at 20ms) fires before page closes
+      const configWithDelay: CrawlConfig = { ...DEFAULT_CRAWL_CONFIG, depth: 0, settlementDelay: 50 };
+      await crawl(context, db, sessionId, 'https://example.com/', configWithDelay);
+      const violationsWith = getViolations(db, sessionId);
+      expect(violationsWith).toHaveLength(1);
+      expect(violationsWith[0].blockedUri).toBe('https://late-cdn.example.com/lazy.js');
+    });
+
+    it('does not delay when settlementDelay is 0', async () => {
+      const context = createMockContext({
+        'https://example.com/': { links: [] },
+      });
+
+      const config: CrawlConfig = { ...DEFAULT_CRAWL_CONFIG, depth: 0, settlementDelay: 0 };
+
+      const start = Date.now();
+      await crawl(context, db, sessionId, 'https://example.com/', config);
+      const elapsed = Date.now() - start;
+
+      // Should complete very quickly with no delay
+      expect(elapsed).toBeLessThan(50);
+    });
+
+    it('settlement delay does not apply when navigation errors occur', async () => {
+      const context = createMockContext({
+        'https://example.com/': { error: new Error('net::ERR_CONNECTION_REFUSED') },
+      });
+
+      const config: CrawlConfig = { ...DEFAULT_CRAWL_CONFIG, depth: 0, settlementDelay: 500 };
+
+      const start = Date.now();
+      await crawl(context, db, sessionId, 'https://example.com/', config);
+      const elapsed = Date.now() - start;
+
+      // Should not wait 500ms since navigation threw an error
+      expect(elapsed).toBeLessThan(100);
+    });
   });
 });

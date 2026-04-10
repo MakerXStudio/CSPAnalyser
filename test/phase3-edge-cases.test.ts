@@ -60,9 +60,10 @@ describe('rule-builder edge cases', () => {
   });
 
   it('permissive mode wildcards IP-like hostname with dots', () => {
-    // IP addresses have 4 labels when split by dot
+    // IP addresses have 4 labels when split by dot — permissive uses generateWildcardDomain
+    // which strips the leftmost label, same as moderate for 3+ label hostnames
     const v = makeViolation({ blockedUri: 'http://192.168.1.1/api' });
-    expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe('*.192.168.1.1');
+    expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe('*.168.1.1');
   });
 
   it('hash source returns null for empty sample', () => {

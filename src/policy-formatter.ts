@@ -65,7 +65,7 @@ export function formatPolicy(
     }
 
     case 'cloudflare': {
-      const policy = directivesToString(directives).replace(/'/g, "\\'");
+      const policy = directivesToString(directives).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return `export default {
   async fetch(request, env, ctx) {
     const response = await fetch(request);

@@ -193,6 +193,29 @@ describe('optimizePolicy', () => {
     });
   });
 
+  it('deduplicates self and explicit matching origin when targetOrigin provided', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", 'https://example.com'] },
+      'https://example.com',
+    );
+    expect(result['script-src']).toEqual(["'self'"]);
+  });
+
+  it('keeps both self and non-matching origin', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", 'https://other.com'] },
+      'https://example.com',
+    );
+    expect(result['script-src']).toEqual(["'self'", 'https://other.com']);
+  });
+
+  it('does not dedup self when no targetOrigin provided', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", 'https://example.com'] },
+    );
+    expect(result['script-src']).toEqual(["'self'", 'https://example.com']);
+  });
+
   it('does not mutate the input', () => {
     const input = {
       'script-src': ["'self'", 'https://cdn.example.com'],

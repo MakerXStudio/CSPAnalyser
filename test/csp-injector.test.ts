@@ -79,6 +79,28 @@ describe('transformResponseHeaders', () => {
     expect(result['content-security-policy-report-only']).toBeDefined();
     expect(result['report-to']).toBeDefined();
   });
+
+  it('includes token in report-uri and report-to URLs when provided', () => {
+    const token = 'test-token-abc';
+    const result = transformResponseHeaders({}, TEST_PORT, token);
+
+    const csp = result['content-security-policy-report-only'];
+    expect(csp).toContain(`report-uri http://127.0.0.1:${TEST_PORT}/csp-report/${token}`);
+
+    const reportTo = JSON.parse(result['report-to']!);
+    expect(reportTo.endpoints[0].url).toBe(`http://127.0.0.1:${TEST_PORT}/reports/${token}`);
+  });
+
+  it('omits token from URLs when not provided', () => {
+    const result = transformResponseHeaders({}, TEST_PORT);
+
+    const csp = result['content-security-policy-report-only'];
+    expect(csp).toContain(`report-uri http://127.0.0.1:${TEST_PORT}/csp-report`);
+    expect(csp).not.toContain('/csp-report/');
+
+    const reportTo = JSON.parse(result['report-to']!);
+    expect(reportTo.endpoints[0].url).toBe(`http://127.0.0.1:${TEST_PORT}/reports`);
+  });
 });
 
 // ── setupCspInjection ────────────────────────────────────────────────────
@@ -158,6 +180,24 @@ describe('setupCspInjection', () => {
     // Original CSP should be stripped
     const fulfillCall = vi.mocked(mockRoute.fulfill).mock.calls[0]![0];
     expect(fulfillCall.headers!['content-security-policy']).toBeUndefined();
+  });
+
+  it('passes token through to transformed headers', async () => {
+    const { page, routes } = createMockPage();
+    const mockRoute = createMockRoute({ 'Content-Type': 'text/html' });
+    const token = 'session-token-xyz';
+
+    await setupCspInjection(page, TEST_PORT, token);
+
+    const handler = routes[0]!.handler;
+    await handler(mockRoute);
+
+    const fulfillCall = vi.mocked(mockRoute.fulfill).mock.calls[0]![0];
+    const csp = fulfillCall.headers!['content-security-policy-report-only'];
+    expect(csp).toContain(`/csp-report/${token}`);
+
+    const reportTo = JSON.parse(fulfillCall.headers!['report-to']!);
+    expect(reportTo.endpoints[0].url).toContain(`/reports/${token}`);
   });
 
   it('handles route handler errors gracefully by continuing', async () => {

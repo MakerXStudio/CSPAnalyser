@@ -20,20 +20,21 @@ export interface PlaywrightPage {
   route(
     url: string | RegExp,
     handler: (route: PlaywrightRoute) => Promise<void> | void,
-  ): Promise<void>;
+  ): Promise<unknown>;
   unroute(
     url: string | RegExp,
     handler?: (route: PlaywrightRoute) => Promise<void> | void,
-  ): Promise<void>;
+  ): Promise<unknown>;
 }
 
 export interface PlaywrightRoute {
   fetch(): Promise<PlaywrightResponse>;
-  fulfill(options: {
+  fulfill(options?: {
     status?: number;
     headers?: Record<string, string>;
     body?: string | Buffer;
     response?: PlaywrightResponse;
+    [key: string]: unknown;
   }): Promise<void>;
   continue(): Promise<void>;
   request(): { url(): string };
@@ -54,6 +55,7 @@ export interface PlaywrightResponse {
 export function transformResponseHeaders(
   headers: Record<string, string>,
   reportServerPort: number,
+  reportToken?: string,
 ): Record<string, string> {
   const result: Record<string, string> = {};
 
@@ -64,8 +66,9 @@ export function transformResponseHeaders(
     }
   }
 
-  const reportUri = `http://127.0.0.1:${reportServerPort}/csp-report`;
-  const reportsEndpoint = `http://127.0.0.1:${reportServerPort}/reports`;
+  const tokenSuffix = reportToken ? `/${reportToken}` : '';
+  const reportUri = `http://127.0.0.1:${reportServerPort}/csp-report${tokenSuffix}`;
+  const reportsEndpoint = `http://127.0.0.1:${reportServerPort}/reports${tokenSuffix}`;
 
   // Add deny-all CSP as report-only
   result['content-security-policy-report-only'] = buildDenyAllCSP(reportUri, REPORT_GROUP);
@@ -85,12 +88,13 @@ export function transformResponseHeaders(
 export async function setupCspInjection(
   page: PlaywrightPage,
   reportServerPort: number,
+  reportToken?: string,
 ): Promise<() => Promise<void>> {
   const handler = async (route: PlaywrightRoute): Promise<void> => {
     try {
       const response = await route.fetch();
       const originalHeaders = response.headers();
-      const newHeaders = transformResponseHeaders(originalHeaders, reportServerPort);
+      const newHeaders = transformResponseHeaders(originalHeaders, reportServerPort, reportToken);
 
       await route.fulfill({
         response,

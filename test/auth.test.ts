@@ -8,6 +8,7 @@ import {
   extractHostname,
   mapCookies,
   validateStorageStatePath,
+  validateCookieParam,
   type PlaywrightBrowser,
   type PlaywrightBrowserContext,
   type PlaywrightBrowserPage,
@@ -113,6 +114,42 @@ describe('mapCookies', () => {
 
   it('handles empty cookie array', () => {
     expect(mapCookies([], 'example.com')).toEqual([]);
+  });
+});
+
+// ── validateCookieParam ─────────────────────────────────────────────────
+
+describe('validateCookieParam', () => {
+  it('accepts valid cookie name and value', () => {
+    expect(() => validateCookieParam({ name: 'session_id', value: 'abc123' })).not.toThrow();
+  });
+
+  it('accepts cookie values with typical characters', () => {
+    expect(() => validateCookieParam({ name: 'token', value: 'eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiMSJ9.abc' })).not.toThrow();
+  });
+
+  it('rejects empty cookie name', () => {
+    expect(() => validateCookieParam({ name: '', value: 'ok' })).toThrow('Invalid cookie name');
+  });
+
+  it('rejects cookie name with semicolons', () => {
+    expect(() => validateCookieParam({ name: 'bad;name', value: 'ok' })).toThrow('Invalid cookie name');
+  });
+
+  it('rejects cookie name with spaces', () => {
+    expect(() => validateCookieParam({ name: 'bad name', value: 'ok' })).toThrow('Invalid cookie name');
+  });
+
+  it('rejects cookie name with control characters', () => {
+    expect(() => validateCookieParam({ name: 'bad\x00name', value: 'ok' })).toThrow('Invalid cookie name');
+  });
+
+  it('rejects cookie value with semicolons', () => {
+    expect(() => validateCookieParam({ name: 'ok', value: 'bad;value' })).toThrow('Invalid cookie value');
+  });
+
+  it('rejects cookie value with control characters', () => {
+    expect(() => validateCookieParam({ name: 'ok', value: 'bad\x01value' })).toThrow('Invalid cookie value');
   });
 });
 
@@ -279,7 +316,7 @@ describe('createAuthenticatedContext', () => {
     ).rejects.toThrow('.json extension');
   });
 
-  it('handles manual login flow', async () => {
+  it('handles manual login flow with headed mode', async () => {
     const storageStateObj: StorageStateObject = { cookies: [{ name: 'auth', value: 'ok' }] };
     const ctx = createMockContext({
       storageState: vi.fn<PlaywrightBrowserContext['storageState']>().mockResolvedValue(storageStateObj),
@@ -288,6 +325,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, {
       manualLogin: true,
+      headless: false,
     });
 
     // Should have opened a new page
@@ -295,6 +333,32 @@ describe('createAuthenticatedContext', () => {
     // Should have created a context from the exported storage state object
     expect(browser.newContext).toHaveBeenCalledWith({ storageState: storageStateObj });
     expect(result.storageState).toBe(storageStateObj);
+  });
+
+  it('throws when manual login requested without explicit headed mode', async () => {
+    const browser = createMockBrowser();
+
+    await expect(
+      createAuthenticatedContext(browser, targetUrl, { manualLogin: true }),
+    ).rejects.toThrow('headed mode');
+  });
+
+  it('throws when manual login requested with headless: true', async () => {
+    const browser = createMockBrowser();
+
+    await expect(
+      createAuthenticatedContext(browser, targetUrl, { manualLogin: true, headless: true }),
+    ).rejects.toThrow('headed mode');
+  });
+
+  it('rejects cookies with invalid names', async () => {
+    const browser = createMockBrowser();
+
+    await expect(
+      createAuthenticatedContext(browser, targetUrl, {
+        cookies: [{ name: 'bad;name', value: 'ok' }],
+      }),
+    ).rejects.toThrow('Invalid cookie name');
   });
 });
 

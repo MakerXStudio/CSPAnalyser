@@ -1,4 +1,47 @@
 /**
+ * Private/link-local IPv4 ranges that may indicate SSRF attempts.
+ */
+const PRIVATE_IP_PATTERNS = [
+  /^127\./, // loopback — allowed for local dev, but checked separately
+  /^10\./, // RFC 1918
+  /^172\.(1[6-9]|2\d|3[01])\./, // RFC 1918
+  /^192\.168\./, // RFC 1918
+  /^169\.254\./, // link-local
+  /^0\./, // "this" network
+];
+
+/**
+ * Validates that a target URL is safe for crawling:
+ * - Must be a valid URL
+ * - Must use http: or https: scheme
+ * - Optionally rejects private/link-local IPs (enabled by default, can allow localhost)
+ *
+ * Throws a descriptive error for invalid URLs.
+ */
+export function validateTargetUrl(url: string, options?: { allowPrivateIps?: boolean }): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid target URL: "${url}" is not a valid URL`);
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid target URL scheme: "${parsed.protocol}" — only http: and https: are allowed`);
+  }
+
+  if (!options?.allowPrivateIps && !isLocalhost(parsed.hostname)) {
+    for (const pattern of PRIVATE_IP_PATTERNS) {
+      if (pattern.test(parsed.hostname)) {
+        throw new Error(`Invalid target URL: private/internal IP addresses are not allowed ("${parsed.hostname}"). Use --allow-private-ips to override.`);
+      }
+    }
+  }
+
+  return url;
+}
+
+/**
  * Extracts the origin (protocol + hostname + port) from a URL string.
  */
 export function extractOrigin(url: string): string {

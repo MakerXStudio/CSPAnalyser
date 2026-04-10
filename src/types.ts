@@ -5,7 +5,8 @@ export type SessionStatus =
   | 'authenticating'
   | 'crawling'
   | 'analyzing'
-  | 'complete';
+  | 'complete'
+  | 'failed';
 
 export type SessionMode = 'local' | 'mitm';
 
@@ -29,6 +30,8 @@ export interface CrawlConfig {
   depth: number;
   maxPages: number;
   waitStrategy: WaitStrategy;
+  /** Milliseconds to wait after page load before closing, allowing late violations to fire (default: 500) */
+  settlementDelay: number;
 }
 
 export interface SessionConfig {
@@ -147,35 +150,6 @@ export interface PolicyRow {
   format: ExportFormat;
   is_report_only: number; // SQLite boolean (0 or 1)
   created_at: string;
-}
-
-// ── Repository interfaces ──────────────────────────────────────────────────
-
-export interface SessionRepository {
-  create(config: SessionConfig): Session;
-  getById(id: string): Session | null;
-  updateStatus(id: string, status: SessionStatus): void;
-  updatePorts(id: string, reportServerPort: number, proxyPort: number | null): void;
-}
-
-export interface PageRepository {
-  create(sessionId: string, url: string, statusCode: number | null): Page;
-  getBySessionId(sessionId: string): Page[];
-  getByUrl(sessionId: string, url: string): Page | undefined;
-}
-
-export interface ViolationRepository {
-  create(violation: Omit<Violation, 'id' | 'createdAt'>): Violation;
-  getBySessionId(sessionId: string): Violation[];
-  getByDirective(sessionId: string, directive: string): Violation[];
-  getGroupedByDirective(sessionId: string): Record<string, Violation[]>;
-  isDuplicate(sessionId: string, documentUri: string, blockedUri: string, effectiveDirective: string): boolean;
-}
-
-export interface PolicyRepository {
-  create(policy: Omit<Policy, 'id' | 'createdAt'>): Policy;
-  getBySessionId(sessionId: string): Policy[];
-  getLatest(sessionId: string): Policy | undefined;
 }
 
 // ── CSP directive type ─────────────────────────────────────────────────────

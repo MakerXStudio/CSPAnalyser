@@ -148,6 +148,14 @@ describe('formatPolicy — cloudflare', () => {
     const result = formatPolicy({ 'default-src': ["'self'"] }, 'cloudflare', true);
     expect(result).toContain('Content-Security-Policy-Report-Only');
   });
+
+  it('escapes backslashes in source expressions for the JS string', () => {
+    // A source expression containing a backslash should be double-escaped in JS
+    const result = formatPolicy({ 'default-src': ['https://example.com\\path'] }, 'cloudflare');
+    expect(result).toContain('\\\\path');
+    // Backslash should be escaped before single-quote escaping
+    expect(result).not.toMatch(/[^\\]\\p/);
+  });
 });
 
 // ── formatPolicy: json ──────────────────────────────────────────────────

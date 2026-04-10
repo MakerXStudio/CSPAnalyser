@@ -18,6 +18,8 @@ const CSP_HEADERS_TO_STRIP = [
 export interface MitmProxyOptions {
   /** Report server port for CSP violation reporting */
   reportServerPort: number;
+  /** Per-session token for authenticating report submissions */
+  reportToken?: string;
   /** Certificate paths from ensureCACertificate() */
   certPaths: CertPaths;
 }
@@ -43,6 +45,7 @@ export interface MitmProxyInstance {
 export function transformProxyResponseHeaders(
   headers: IncomingHttpHeaders,
   reportServerPort: number,
+  reportToken?: string,
 ): IncomingHttpHeaders {
   const result: IncomingHttpHeaders = {};
 
@@ -52,8 +55,9 @@ export function transformProxyResponseHeaders(
     }
   }
 
-  const reportUri = `http://127.0.0.1:${reportServerPort}/csp-report`;
-  const reportsEndpoint = `http://127.0.0.1:${reportServerPort}/reports`;
+  const tokenSuffix = reportToken ? `/${reportToken}` : '';
+  const reportUri = `http://127.0.0.1:${reportServerPort}/csp-report${tokenSuffix}`;
+  const reportsEndpoint = `http://127.0.0.1:${reportServerPort}/reports${tokenSuffix}`;
 
   result['content-security-policy-report-only'] = buildDenyAllCSP(reportUri, REPORT_GROUP);
   result['report-to'] = buildReportToHeader(reportsEndpoint, REPORT_GROUP);
@@ -68,20 +72,26 @@ export function transformProxyResponseHeaders(
  * Listens on 127.0.0.1 with an OS-assigned port.
  */
 export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInstance> {
-  const { reportServerPort, certPaths } = options;
+  const { reportServerPort, reportToken, certPaths } = options;
 
   return new Promise((resolve, reject) => {
     const proxy = new Proxy();
+    let started = false;
 
     proxy.onError((ctx, err) => {
       const errorMsg = err instanceof Error ? err.message : String(err ?? 'unknown');
       logger.error('MITM proxy error', { error: errorMsg });
+      // If the proxy hasn't started yet, this is a fatal startup error
+      if (!started) {
+        started = true; // Prevent double-reject
+        reject(new Error(`MITM proxy startup failed: ${errorMsg}`));
+      }
     });
 
     proxy.onResponseHeaders((ctx, callback) => {
       const upstream = ctx.serverToProxyResponse;
       if (upstream) {
-        const transformed = transformProxyResponseHeaders(upstream.headers, reportServerPort);
+        const transformed = transformProxyResponseHeaders(upstream.headers, reportServerPort, reportToken);
         // Replace headers in-place — the proxy writes these to the client response
         for (const key of Object.keys(upstream.headers)) {
           delete upstream.headers[key];
@@ -100,6 +110,7 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
         sslCaDir: certPaths.sslCaDir,
       },
       () => {
+        started = true;
         const port = proxy.httpPort;
         logger.info('MITM proxy started', { port, sslCaDir: certPaths.sslCaDir });
 

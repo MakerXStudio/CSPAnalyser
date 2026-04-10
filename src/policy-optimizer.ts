@@ -1,4 +1,5 @@
 import { FETCH_DIRECTIVES } from './utils/csp-constants.js';
+import { extractOrigin } from './utils/url-utils.js';
 
 /**
  * Determines whether factoring common sources into default-src is beneficial.
@@ -51,9 +52,13 @@ export function shouldUseDefaultSrc(
 /**
  * Optimizes a directive map by factoring common sources into default-src,
  * deduplicating sources, and sorting output deterministically.
+ *
+ * @param targetOrigin — if provided, enables deduplication of 'self' vs explicit
+ *   matching origin (e.g. 'self' + 'https://example.com' → 'self')
  */
 export function optimizePolicy(
   directives: Record<string, string[]>,
+  targetOrigin?: string,
 ): Record<string, string[]> {
   let result: Record<string, string[]>;
 
@@ -70,7 +75,7 @@ export function optimizePolicy(
 
   // Deduplicate and sort sources within each directive
   for (const name of Object.keys(result)) {
-    result[name] = deduplicateSources([...new Set(result[name])]);
+    result[name] = deduplicateSources([...new Set(result[name])], targetOrigin);
     result[name].sort();
   }
 
@@ -90,11 +95,25 @@ export function optimizePolicy(
 }
 
 /**
- * If 'self' is present and an explicit origin matching self exists, keep only 'self'.
- * This is a simplistic dedup — in a real scenario the "self" origin would be resolved
- * against the document URL, but for policy generation purposes we just deduplicate
- * the literal sources.
+ * If 'self' is present and an explicit origin matching the target exists, keep only 'self'.
+ * When targetOrigin is provided, resolves 'self' to the actual origin and removes redundant
+ * explicit entries.
  */
-function deduplicateSources(sources: string[]): string[] {
-  return [...new Set(sources)];
+function deduplicateSources(sources: string[], targetOrigin?: string): string[] {
+  const unique = [...new Set(sources)];
+
+  if (!targetOrigin || !unique.includes("'self'")) {
+    return unique;
+  }
+
+  // Resolve what 'self' means: the origin of the target URL
+  let selfOrigin: string;
+  try {
+    selfOrigin = extractOrigin(targetOrigin);
+  } catch {
+    return unique;
+  }
+
+  // Remove explicit origins that match 'self'
+  return unique.filter((s) => s === "'self'" || s !== selfOrigin);
 }

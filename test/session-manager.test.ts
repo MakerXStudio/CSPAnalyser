@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { initializeDatabase } from '../src/db/schema.js';
 import { getSession, getViolations, insertViolation } from '../src/db/repository.js';
-import { runSession, type SessionDeps } from '../src/session-manager.js';
+import { runSession, runInteractiveSession, type SessionDeps } from '../src/session-manager.js';
 import type { SessionConfig, CrawlConfig } from '../src/types.js';
 import type { CrawlCallbacks, CrawlResult } from '../src/crawler.js';
 
@@ -48,6 +48,7 @@ function createTestDeps(overrides?: Partial<SessionDeps>): SessionDeps {
     launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
     startReportServer: vi.fn().mockResolvedValue({
       port: 9876,
+      token: 'test-token',
       close: vi.fn().mockResolvedValue(undefined),
     }),
     startMitmProxy: vi.fn().mockResolvedValue({
@@ -157,7 +158,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: '/tmp/state.json', cookies: undefined },
+      { storageStatePath: '/tmp/state.json', cookies: undefined, headless: true },
     );
   });
 
@@ -173,7 +174,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: undefined, cookies: [{ name: 'session', value: 'abc' }] },
+      { storageStatePath: undefined, cookies: [{ name: 'session', value: 'abc' }], headless: true },
     );
   });
 
@@ -204,7 +205,7 @@ describe('runSession', () => {
       db,
       expect.any(String), // sessionId
       'http://localhost:3000',
-      expect.objectContaining({ depth: 5, maxPages: 100, waitStrategy: 'load' }),
+      expect.objectContaining({ depth: 5, maxPages: 100, waitStrategy: 'load', settlementDelay: 500 }),
       expect.any(Object), // callbacks
     );
   });
@@ -220,7 +221,7 @@ describe('runSession', () => {
       db,
       expect.any(String),
       'http://localhost:3000',
-      { depth: 2, maxPages: 50, waitStrategy: 'load' },
+      { depth: 2, maxPages: 50, waitStrategy: 'load', settlementDelay: 500 },
       expect.any(Object),
     );
   });
@@ -339,7 +340,7 @@ describe('runSession', () => {
 
     const deps = createTestDeps({
       launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
-      startReportServer: vi.fn().mockResolvedValue({ port: 9876, close: reportClose }),
+      startReportServer: vi.fn().mockResolvedValue({ port: 9876, token: 'test-token', close: reportClose }),
       startMitmProxy: vi.fn().mockResolvedValue({ port: 8080, caCertPath: '/tmp/ca.pem', close: proxyClose }),
       createAuthenticatedContext: vi.fn().mockResolvedValue({ context: mockBrowser._mockContext }),
     });
@@ -359,7 +360,7 @@ describe('runSession', () => {
 
     const deps = createTestDeps({
       launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
-      startReportServer: vi.fn().mockResolvedValue({ port: 9876, close: reportClose }),
+      startReportServer: vi.fn().mockResolvedValue({ port: 9876, token: 'test-token', close: reportClose }),
       createAuthenticatedContext: vi.fn().mockResolvedValue({ context: mockBrowser._mockContext }),
       crawl: vi.fn().mockRejectedValue(new Error('Crawl failed')),
     });
@@ -369,6 +370,20 @@ describe('runSession', () => {
     expect(mockBrowser._mockContext.close).toHaveBeenCalled();
     expect(reportClose).toHaveBeenCalled();
     expect(mockBrowser.close).toHaveBeenCalled();
+  });
+
+  it('sets session status to failed on error', async () => {
+    const config: SessionConfig = { targetUrl: 'http://localhost:3000' };
+    const deps = createTestDeps({
+      crawl: vi.fn().mockRejectedValue(new Error('Crawl failed')),
+    });
+
+    await expect(runSession(db, config, {}, deps)).rejects.toThrow('Crawl failed');
+
+    // Find the session created by runSession
+    const sessions = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC LIMIT 1').all() as Array<{ id: string; status: string }>;
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].status).toBe('failed');
   });
 
   it('cleans up on browser launch failure', async () => {

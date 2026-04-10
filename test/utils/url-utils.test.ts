@@ -6,6 +6,7 @@ import {
   shouldUseMitmMode,
   generateWildcardDomain,
   normalizeBlockedUri,
+  validateTargetUrl,
 } from '../../src/utils/url-utils.js';
 
 describe('extractOrigin', () => {
@@ -213,5 +214,55 @@ describe('normalizeBlockedUri', () => {
   it('normalizes filesystem URIs', () => {
     expect(normalizeBlockedUri('filesystem')).toBe('filesystem:');
     expect(normalizeBlockedUri('filesystem:https://example.com/path')).toBe('filesystem:');
+  });
+});
+
+describe('validateTargetUrl', () => {
+  it('accepts http URLs', () => {
+    expect(validateTargetUrl('http://example.com')).toBe('http://example.com');
+  });
+
+  it('accepts https URLs', () => {
+    expect(validateTargetUrl('https://example.com/path')).toBe('https://example.com/path');
+  });
+
+  it('accepts localhost URLs', () => {
+    expect(validateTargetUrl('http://localhost:3000')).toBe('http://localhost:3000');
+  });
+
+  it('rejects file: scheme', () => {
+    expect(() => validateTargetUrl('file:///etc/passwd')).toThrow('only http: and https:');
+  });
+
+  it('rejects javascript: scheme', () => {
+    expect(() => validateTargetUrl('javascript:alert(1)')).toThrow('only http: and https:');
+  });
+
+  it('rejects ftp: scheme', () => {
+    expect(() => validateTargetUrl('ftp://files.example.com')).toThrow('only http: and https:');
+  });
+
+  it('rejects invalid URLs', () => {
+    expect(() => validateTargetUrl('not-a-url')).toThrow('not a valid URL');
+  });
+
+  it('rejects private RFC 1918 IPs by default', () => {
+    expect(() => validateTargetUrl('http://10.0.0.1')).toThrow('private/internal');
+    expect(() => validateTargetUrl('http://192.168.1.1')).toThrow('private/internal');
+    expect(() => validateTargetUrl('http://172.16.0.1')).toThrow('private/internal');
+  });
+
+  it('rejects link-local IPs by default', () => {
+    expect(() => validateTargetUrl('http://169.254.169.254')).toThrow('private/internal');
+  });
+
+  it('allows private IPs when allowPrivateIps is true', () => {
+    expect(validateTargetUrl('http://10.0.0.1', { allowPrivateIps: true })).toBe('http://10.0.0.1');
+    expect(validateTargetUrl('http://192.168.1.1', { allowPrivateIps: true })).toBe('http://192.168.1.1');
+  });
+
+  it('allows localhost even without allowPrivateIps', () => {
+    expect(validateTargetUrl('http://localhost:3000')).toBe('http://localhost:3000');
+    expect(validateTargetUrl('http://127.0.0.1:8080')).toBe('http://127.0.0.1:8080');
   });
 });

@@ -260,16 +260,46 @@ describe('startMitmProxy', () => {
     expect(mockClose).toHaveBeenCalled();
   });
 
-  it('onError handler does not throw', async () => {
+  it('onError handler does not throw after startup', async () => {
     await startMitmProxy(defaultOptions);
 
     const errorHandler = mockOnError.mock.calls[0][0];
 
-    // Should not throw for Error objects
+    // Should not throw for Error objects (post-startup errors are logged only)
     expect(() => errorHandler({}, new Error('test error'))).not.toThrow();
     // Should not throw for non-Error values
     expect(() => errorHandler({}, 'string error')).not.toThrow();
     // Should not throw for null/undefined
     expect(() => errorHandler({}, null)).not.toThrow();
+  });
+
+  it('rejects the promise if onError fires before listen callback', async () => {
+    // Simulate: listen never calls its callback, but onError fires first
+    mockListen.mockImplementation(() => {
+      // Don't call the callback — proxy failed to start
+    });
+
+    const promise = startMitmProxy(defaultOptions);
+
+    // Fire the error handler before listen completes
+    const errorHandler = mockOnError.mock.calls[0][0];
+    errorHandler({}, new Error('EADDRINUSE: address already in use'));
+
+    await expect(promise).rejects.toThrow('MITM proxy startup failed: EADDRINUSE: address already in use');
+  });
+
+  it('does not double-reject if onError fires multiple times before startup', async () => {
+    mockListen.mockImplementation(() => {
+      // Never calls callback
+    });
+
+    const promise = startMitmProxy(defaultOptions);
+
+    const errorHandler = mockOnError.mock.calls[0][0];
+    errorHandler({}, new Error('first error'));
+    // Second error should not cause issues
+    errorHandler({}, new Error('second error'));
+
+    await expect(promise).rejects.toThrow('first error');
   });
 });

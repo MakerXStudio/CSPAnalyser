@@ -5,8 +5,9 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLogger } from './utils/logger.js';
-import { createDatabase } from './db/repository.js';
-import { runSession } from './session-manager.js';
+import { validateTargetUrl } from './utils/url-utils.js';
+import { createDatabase, getSession } from './db/repository.js';
+import { runSession, runInteractiveSession } from './session-manager.js';
 import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy } from './policy-formatter.js';
@@ -134,6 +135,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   };
 
   if (command === 'crawl' || command === 'interactive') {
+    validateTargetUrl(positionalArg);
     parsed.url = positionalArg;
   } else {
     parsed.sessionId = positionalArg;
@@ -178,12 +180,13 @@ function generateAndFormat(
   db: ReturnType<typeof createDatabase>,
   sessionId: string,
   args: ParsedArgs,
+  targetUrl?: string,
 ): string {
   const directives = generatePolicy(db, sessionId, {
     strictness: args.strictness,
     includeHashes: true,
   });
-  const optimized = optimizePolicy(directives);
+  const optimized = optimizePolicy(directives, targetUrl);
   return formatPolicy(optimized, args.format, args.reportOnly);
 }
 
@@ -208,7 +211,7 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
       `Crawled ${result.pagesVisited} pages, found ${result.violationsFound} violations\n`,
     );
 
-    const output = generateAndFormat(db, result.session.id, args);
+    const output = generateAndFormat(db, result.session.id, args, result.session.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -221,20 +224,18 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
     const config: SessionConfig = {
       targetUrl: args.url!,
       mode: args.mode,
-      crawlConfig: { depth: 0, maxPages: 1 },
       storageStatePath: args.storageState,
     };
 
-    const result = await runSession(db, config, {
-      headless: false,
+    const result = await runInteractiveSession(db, config, {
       onProgress: (msg) => process.stderr.write(`${msg}\n`),
     });
 
     process.stderr.write(
-      `Session complete. Found ${result.violationsFound} violations\n`,
+      `Session complete. Visited ${result.pagesVisited} pages, found ${result.violationsFound} violations\n`,
     );
 
-    const output = generateAndFormat(db, result.session.id, args);
+    const output = generateAndFormat(db, result.session.id, args, result.session.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -244,7 +245,8 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
 async function runGenerateCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const output = generateAndFormat(db, args.sessionId!, args);
+    const session = getSession(db, args.sessionId!);
+    const output = generateAndFormat(db, args.sessionId!, args, session?.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -254,7 +256,8 @@ async function runGenerateCommand(args: ParsedArgs): Promise<void> {
 async function runExportCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const output = generateAndFormat(db, args.sessionId!, args);
+    const session = getSession(db, args.sessionId!);
+    const output = generateAndFormat(db, args.sessionId!, args, session?.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();

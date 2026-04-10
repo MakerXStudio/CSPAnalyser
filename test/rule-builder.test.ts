@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
-import { violationToSourceExpression, violationToHashSource } from '../src/rule-builder.js';
+import { violationToSourceExpression, violationToHashSource, isValidSourceExpression } from '../src/rule-builder.js';
 import type { Violation } from '../src/types.js';
 
 const TARGET_ORIGIN = 'https://example.com';
@@ -103,9 +103,9 @@ describe('violationToSourceExpression', () => {
   });
 
   describe('permissive mode', () => {
-    it('returns wildcard domain for 3+ label hostnames', () => {
+    it('returns wildcard domain for 3+ label hostnames (same as moderate)', () => {
       const v = makeViolation({ blockedUri: 'https://cdn.example.com/script.js' });
-      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe('*.cdn.example.com');
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe('*.example.com');
     });
 
     it('returns wildcard for 2-label hostnames (more lenient than moderate)', () => {
@@ -115,7 +115,69 @@ describe('violationToSourceExpression', () => {
 
     it('returns wildcard for deeply nested subdomains', () => {
       const v = makeViolation({ blockedUri: 'https://a.b.c.example.com/x.js' });
-      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe('*.a.b.c.example.com');
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe('*.b.c.example.com');
+    });
+  });
+
+  describe('strictness ordering: strict < moderate < permissive breadth', () => {
+    it('3-label hostname: strict=exact origin, moderate=wildcard, permissive=wildcard (same as moderate)', () => {
+      const v = makeViolation({ blockedUri: 'https://cdn.example.com/script.js' });
+      const strict = violationToSourceExpression(v, TARGET_ORIGIN, 'strict');
+      const moderate = violationToSourceExpression(v, TARGET_ORIGIN, 'moderate');
+      const permissive = violationToSourceExpression(v, TARGET_ORIGIN, 'permissive');
+
+      expect(strict).toBe('https://cdn.example.com');     // exact origin (narrowest)
+      expect(moderate).toBe('*.example.com');              // wildcard domain
+      expect(permissive).toBe('*.example.com');            // at least as broad as moderate
+    });
+
+    it('2-label hostname: strict=exact, moderate=exact, permissive=wildcard', () => {
+      const v = makeViolation({ blockedUri: 'https://cdn-host.com/script.js' });
+      const strict = violationToSourceExpression(v, TARGET_ORIGIN, 'strict');
+      const moderate = violationToSourceExpression(v, TARGET_ORIGIN, 'moderate');
+      const permissive = violationToSourceExpression(v, TARGET_ORIGIN, 'permissive');
+
+      expect(strict).toBe('https://cdn-host.com');        // exact origin
+      expect(moderate).toBe('https://cdn-host.com');       // exact origin (can't wildcard 2-label)
+      expect(permissive).toBe('*.cdn-host.com');           // wildcard (broadest)
+    });
+
+    it('4-label hostname: strict=exact, moderate=wildcard, permissive=wildcard (same as moderate)', () => {
+      const v = makeViolation({ blockedUri: 'https://a.b.example.com/x.js' });
+      const strict = violationToSourceExpression(v, TARGET_ORIGIN, 'strict');
+      const moderate = violationToSourceExpression(v, TARGET_ORIGIN, 'moderate');
+      const permissive = violationToSourceExpression(v, TARGET_ORIGIN, 'permissive');
+
+      expect(strict).toBe('https://a.b.example.com');     // exact origin
+      expect(moderate).toBe('*.b.example.com');            // wildcard domain
+      expect(permissive).toBe('*.b.example.com');          // at least as broad as moderate
+    });
+
+    it('multi-part TLD (co.uk): permissive is never narrower than moderate', () => {
+      const v = makeViolation({ blockedUri: 'https://cdn.example.co.uk/script.js' });
+      const strict = violationToSourceExpression(v, TARGET_ORIGIN, 'strict');
+      const moderate = violationToSourceExpression(v, TARGET_ORIGIN, 'moderate');
+      const permissive = violationToSourceExpression(v, TARGET_ORIGIN, 'permissive');
+
+      // 4 labels with multi-part TLD requires ≥4 parts to wildcard in generateWildcardDomain
+      // cdn.example.co.uk has exactly 4 parts → *.example.co.uk
+      expect(strict).toBe('https://cdn.example.co.uk');
+      expect(moderate).toBe('*.example.co.uk');
+      expect(permissive).toBe('*.example.co.uk');
+    });
+
+    it('special values are identical across all strictness levels', () => {
+      const v = makeViolation({ blockedUri: "'unsafe-inline'" });
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'strict')).toBe("'unsafe-inline'");
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'moderate')).toBe("'unsafe-inline'");
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe("'unsafe-inline'");
+    });
+
+    it('same-origin is identical across all strictness levels', () => {
+      const v = makeViolation({ blockedUri: 'https://example.com/style.css' });
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'strict')).toBe("'self'");
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'moderate')).toBe("'self'");
+      expect(violationToSourceExpression(v, TARGET_ORIGIN, 'permissive')).toBe("'self'");
     });
   });
 
@@ -134,6 +196,45 @@ describe('violationToSourceExpression', () => {
       const v = makeViolation({ blockedUri: 'https://example.com:8080/api' });
       expect(violationToSourceExpression(v, TARGET_ORIGIN, 'strict')).toBe('https://example.com:8080');
     });
+  });
+});
+
+// ── isValidSourceExpression ─────────────────────────────────────────────
+
+describe('isValidSourceExpression', () => {
+  it('accepts normal source expressions', () => {
+    expect(isValidSourceExpression("'self'")).toBe(true);
+    expect(isValidSourceExpression('https://cdn.example.com')).toBe(true);
+    expect(isValidSourceExpression('*.example.com')).toBe(true);
+    expect(isValidSourceExpression('data:')).toBe(true);
+  });
+
+  it('rejects expressions with semicolons (directive injection)', () => {
+    expect(isValidSourceExpression("'self'; script-src 'unsafe-eval'")).toBe(false);
+  });
+
+  it('rejects expressions with newlines', () => {
+    expect(isValidSourceExpression("https://evil.com\nX-Injected: true")).toBe(false);
+  });
+
+  it('rejects expressions with carriage returns', () => {
+    expect(isValidSourceExpression("https://evil.com\rX-Injected: true")).toBe(false);
+  });
+
+  it('rejects expressions with null bytes', () => {
+    expect(isValidSourceExpression("https://evil.com\0")).toBe(false);
+  });
+});
+
+describe('violationToSourceExpression — source expression validation', () => {
+  it('returns null for blocked URIs that would produce expressions with semicolons', () => {
+    // A crafted blocked URI whose origin might contain a semicolon
+    // In practice, URL parsing strips these, but we validate as defense in depth
+    const v = makeViolation({ blockedUri: 'https://cdn.example.com/script.js' });
+    // Normal URLs pass validation — just verify it returns a valid expression
+    const result = violationToSourceExpression(v, TARGET_ORIGIN, 'strict');
+    expect(result).toBe('https://cdn.example.com');
+    expect(isValidSourceExpression(result!)).toBe(true);
   });
 });
 

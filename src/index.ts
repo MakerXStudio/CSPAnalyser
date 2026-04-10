@@ -13,10 +13,6 @@ export type {
   Page,
   Violation,
   Policy,
-  SessionRepository,
-  PageRepository,
-  ViolationRepository,
-  PolicyRepository,
   CspDirective,
 } from './types.js';
 
@@ -29,6 +25,7 @@ export {
   getSession,
   listSessions,
   insertPage,
+  updatePageStatusCode,
   getPages,
   insertViolation,
   getViolations,
@@ -142,8 +139,8 @@ export {
 export type { AuthOptions } from './auth.js';
 
 // ── Session Manager (Phase 5) ─────────────────────────────────────────
-export { runSession } from './session-manager.js';
-export type { SessionResult, RunSessionOptions } from './session-manager.js';
+export { runSession, runInteractiveSession } from './session-manager.js';
+export type { SessionResult, InteractiveSessionResult, RunSessionOptions, InteractiveSessionOptions } from './session-manager.js';
 
 // ── MCP Server (Phase 5) ──────────────────────────────────────────────
 export { createMcpServer } from './mcp-server.js';

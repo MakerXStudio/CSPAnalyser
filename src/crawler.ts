@@ -2,7 +2,7 @@ import type { BrowserContext, Page } from 'playwright';
 import type Database from 'better-sqlite3';
 import type { CrawlConfig } from './types.js';
 import { isSameOrigin } from './utils/url-utils.js';
-import { insertPage } from './db/repository.js';
+import { insertPage, updatePageStatusCode } from './db/repository.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -13,7 +13,7 @@ export interface CrawlResult {
 }
 
 export interface CrawlCallbacks {
-  onPageCreated?: (page: Page, url: string) => Promise<void>;
+  onPageCreated?: (page: Page, url: string, pageId: string) => Promise<void>;
   onPageLoaded?: (page: Page, url: string, pageId: string) => Promise<void>;
 }
 
@@ -75,14 +75,22 @@ export async function crawl(
     let page: Page | null = null;
     try {
       page = await context.newPage();
-      if (callbacks?.onPageCreated) {
-        await callbacks.onPageCreated(page, url);
+
+      // Insert page record before navigation so violations can reference it
+      const pageRecord = insertPage(db, sessionId, url, null);
+
+      if (pageRecord && callbacks?.onPageCreated) {
+        await callbacks.onPageCreated(page, url, pageRecord.id);
       }
+
       const response = await page.goto(url, { waitUntil: config.waitStrategy });
       const statusCode = response?.status() ?? null;
-
-      const pageRecord = insertPage(db, sessionId, url, statusCode);
       pagesVisited++;
+
+      // Update the page record with the actual status code
+      if (pageRecord) {
+        updatePageStatusCode(db, pageRecord.id, statusCode);
+      }
 
       logger.info('Crawled page', { url, statusCode, depth });
 
@@ -105,6 +113,11 @@ export async function crawl(
           visited.add(normalized);
           queue.push([normalized, depth + 1]);
         }
+      }
+
+      // Wait for late-arriving violations (lazy-loaded resources, deferred scripts, async fetches)
+      if (config.settlementDelay > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, config.settlementDelay));
       }
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : String(err);

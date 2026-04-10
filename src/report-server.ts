@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { parseCspReport, parseReportingApiReport } from './report-parser.js';
 import { insertViolation } from './db/repository.js';
@@ -8,17 +9,30 @@ const logger = createLogger();
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
+export interface ReportServerResult {
+  port: number;
+  token: string;
+  close: () => Promise<void>;
+}
+
 /**
  * Starts a local HTTP server that receives CSP violation reports.
+ * Each server generates a per-session auth token; only requests to
+ * the token-prefixed paths are accepted, preventing other local
+ * processes from injecting fake reports.
  *
- * - POST /csp-report — application/csp-report format
- * - POST /reports   — application/reports+json (Reporting API)
- * - GET  /health    — health check
+ * - POST /csp-report/{token} — application/csp-report format
+ * - POST /reports/{token}    — application/reports+json (Reporting API)
+ * - GET  /health             — health check (no token required)
  */
 export async function startReportServer(
   db: Database.Database,
   sessionId: string,
-): Promise<{ port: number; close: () => Promise<void> }> {
+): Promise<ReportServerResult> {
+  const token = randomUUID();
+  const cspReportPath = `/csp-report/${token}`;
+  const reportsPath = `/reports/${token}`;
+
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -26,13 +40,13 @@ export async function startReportServer(
       return;
     }
 
-    if (req.url === '/csp-report' || req.url === '/reports') {
+    if (req.url === cspReportPath || req.url === reportsPath) {
       if (req.method !== 'POST') {
         res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST' });
         res.end(JSON.stringify({ error: 'method not allowed' }));
         return;
       }
-      handleReport(req, res, db, sessionId);
+      handleReport(req, res, db, sessionId, req.url === cspReportPath);
       return;
     }
 
@@ -53,6 +67,7 @@ export async function startReportServer(
 
       resolve({
         port,
+        token,
         close: () =>
           new Promise<void>((resolveClose, rejectClose) => {
             server.close((err) => {
@@ -70,10 +85,10 @@ function handleReport(
   res: http.ServerResponse,
   db: Database.Database,
   sessionId: string,
+  isCspReport: boolean,
 ): void {
   const contentType = req.headers['content-type'] ?? '';
-  const isCspReport = req.url === '/csp-report';
-  const isReportsApi = req.url === '/reports';
+  const isReportsApi = !isCspReport;
 
   // Validate content type
   if (isCspReport && !contentType.includes('application/csp-report') && !contentType.includes('application/json')) {

@@ -77,6 +77,16 @@ function toPolicy(row: PolicyRow): Policy {
   };
 }
 
+// ── SQL helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Escapes SQL LIKE metacharacters (%, _, \) so they are matched literally.
+ * Used with the ESCAPE '\' clause.
+ */
+function escapeLikePattern(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 // ── Database factory ──────────────────────────────────────────────────────
 
 export function createDatabase(dbPath: string): Database.Database {
@@ -180,6 +190,14 @@ export function insertPage(
   return toPage(row);
 }
 
+export function updatePageStatusCode(
+  db: Database.Database,
+  pageId: string,
+  statusCode: number | null,
+): void {
+  db.prepare('UPDATE pages SET status_code = ? WHERE id = ?').run(statusCode, Number(pageId));
+}
+
 export function getPages(db: Database.Database, sessionId: string): Page[] {
   const rows = db
     .prepare('SELECT * FROM pages WHERE session_id = ? ORDER BY crawled_at')
@@ -262,8 +280,9 @@ export function getViolations(
     params.push(filters.pageUrl);
   }
   if (filters?.origin) {
-    conditions.push('v.blocked_uri LIKE ?');
-    params.push(`${filters.origin}%`);
+    conditions.push("v.blocked_uri LIKE ? ESCAPE '\\'");
+    const escapedOrigin = escapeLikePattern(filters.origin);
+    params.push(`${escapedOrigin}%`);
   }
 
   const needsJoin = filters?.pageUrl != null;

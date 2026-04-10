@@ -50,6 +50,8 @@ export interface AuthOptions {
   storageStatePath?: string;
   cookies?: CookieParam[];
   manualLogin?: boolean;
+  /** Whether the browser is running in headless mode. Used to prevent manual login in headless mode. */
+  headless?: boolean;
 }
 
 /**
@@ -68,6 +70,29 @@ export function validateStorageStatePath(storageStatePath: string): string {
   }
 
   return resolved;
+}
+
+// ── Cookie validation (RFC 6265) ─────────────────────────────────────────
+
+/**
+ * Validates a cookie name per RFC 6265 §4.1.1.
+ * Cookie names must be valid HTTP tokens: no CTLs, spaces, tabs, or separators.
+ */
+const INVALID_COOKIE_NAME = /[\x00-\x1f\x7f\s"(),/:;<=>?@[\\\]{}]/;
+
+/**
+ * Validates a cookie value per RFC 6265 §4.1.1.
+ * Values must not contain CTLs, semicolons, spaces, double quotes, commas, or backslashes.
+ */
+const INVALID_COOKIE_VALUE = /[\x00-\x1f\x7f;"\\ ,]/;
+
+export function validateCookieParam(cookie: CookieParam): void {
+  if (!cookie.name || INVALID_COOKIE_NAME.test(cookie.name)) {
+    throw new Error(`Invalid cookie name: "${cookie.name}" — must be a valid HTTP token (RFC 6265)`);
+  }
+  if (INVALID_COOKIE_VALUE.test(cookie.value)) {
+    throw new Error(`Invalid cookie value for "${cookie.name}" — contains disallowed characters (RFC 6265)`);
+  }
 }
 
 // ── Public API ───────────────────────────────────────────────────────────
@@ -100,6 +125,9 @@ export async function createAuthenticatedContext(
 
   if (auth.cookies) {
     logger.info('Creating context with injected cookies', { count: auth.cookies.length });
+    for (const cookie of auth.cookies) {
+      validateCookieParam(cookie);
+    }
     const context = await browser.newContext();
     const hostname = extractHostname(targetUrl);
     const playwrightCookies = mapCookies(auth.cookies, hostname);
@@ -108,6 +136,9 @@ export async function createAuthenticatedContext(
   }
 
   // manualLogin
+  if (auth.headless !== false) {
+    throw new Error('Manual login requires headed mode (headless: false). The browser must be visible for user interaction.');
+  }
   logger.info('Manual login requested — waiting for user interaction');
   const storageState = await performManualLogin(browser, targetUrl);
   const context = await browser.newContext({ storageState });
