@@ -18,7 +18,7 @@ import { crawl, type CrawlCallbacks } from './crawler.js';
 import { shouldUseMitmMode, extractOrigin } from './utils/url-utils.js';
 import { createAuthenticatedContext, type AuthOptions } from './auth.js';
 import { startMitmProxy, type MitmProxyInstance, type MitmProxyOptions } from './mitm-proxy.js';
-import { ensureCACertificate, secureCertFiles } from './cert-manager.js';
+import { ensureCACertificate, secureCertFiles, computeCaSpkiHash } from './cert-manager.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -121,12 +121,9 @@ export async function runSession(
   let context: BrowserContext | null = null;
 
   try {
-    // 2. Launch browser (trust MITM proxy's self-signed CA in MITM mode)
-    progress('Launching browser...');
-    const launchArgs = mode === 'mitm' ? ['--ignore-certificate-errors'] : undefined;
-    browser = await _launchBrowser({ headless, args: launchArgs });
+    const targetOrigin = extractOrigin(config.targetUrl);
 
-    // 3. Start report server
+    // 2. Start report server
     progress('Starting report server...');
     reportServer = await _startReportServer(db, sessionId, {
       violationLimit: config.violationLimit,
@@ -136,18 +133,26 @@ export async function runSession(
     updateSession(db, sessionId, { reportServerPort });
     logger.info('Report server started', { port: reportServerPort });
 
-    // 4. Start MITM proxy if needed
-    const targetOrigin = extractOrigin(config.targetUrl);
+    // 3. Start MITM proxy if needed (before browser so we can pin its CA cert)
     let proxyPort: number | null = null;
+    let caSpkiHash: string | null = null;
     if (mode === 'mitm') {
       progress('Starting MITM proxy...');
       const certPaths = await ensureCACertificate(dataDir);
       mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths, targetOrigin });
       secureCertFiles(certPaths);
+      caSpkiHash = computeCaSpkiHash(certPaths);
       proxyPort = mitmProxy.port;
       updateSession(db, sessionId, { proxyPort });
       logger.info('MITM proxy started', { port: proxyPort });
     }
+
+    // 4. Launch browser (pin only the MITM CA cert, all other TLS validation intact)
+    progress('Launching browser...');
+    const launchArgs = caSpkiHash
+      ? [`--ignore-certificate-errors-spki-list=${caSpkiHash}`]
+      : undefined;
+    browser = await _launchBrowser({ headless, args: launchArgs });
 
     // 5. Create authenticated context
     progress('Setting up browser context...');
@@ -328,12 +333,9 @@ export async function runInteractiveSession(
   let context: BrowserContext | null = null;
 
   try {
-    // 2. Launch headed browser (trust MITM proxy's self-signed CA in MITM mode)
-    progress('Launching browser...');
-    const launchArgs = mode === 'mitm' ? ['--ignore-certificate-errors'] : undefined;
-    browser = await _launchBrowser({ headless: false, args: launchArgs });
+    const targetOrigin = extractOrigin(config.targetUrl);
 
-    // 3. Start report server
+    // 2. Start report server
     progress('Starting report server...');
     reportServer = await _startReportServer(db, sessionId, {
       violationLimit: config.violationLimit,
@@ -342,15 +344,23 @@ export async function runInteractiveSession(
     const reportToken = reportServer.token;
     updateSession(db, sessionId, { reportServerPort });
 
-    // 4. Start MITM proxy if needed
-    const targetOrigin = extractOrigin(config.targetUrl);
+    // 3. Start MITM proxy if needed (before browser so we can pin its CA cert)
+    let caSpkiHash: string | null = null;
     if (mode === 'mitm') {
       progress('Starting MITM proxy...');
       const certPaths = await ensureCACertificate(dataDir);
       mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths, targetOrigin });
       secureCertFiles(certPaths);
+      caSpkiHash = computeCaSpkiHash(certPaths);
       updateSession(db, sessionId, { proxyPort: mitmProxy.port });
     }
+
+    // 4. Launch headed browser (pin only the MITM CA cert, all other TLS validation intact)
+    progress('Launching browser...');
+    const launchArgs = caSpkiHash
+      ? [`--ignore-certificate-errors-spki-list=${caSpkiHash}`]
+      : undefined;
+    browser = await _launchBrowser({ headless: false, args: launchArgs });
 
     // 5. Create authenticated context
     progress('Setting up browser context...');

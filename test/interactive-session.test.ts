@@ -460,8 +460,8 @@ describe('runInteractiveSession', () => {
       runInteractiveSession(db, { targetUrl: 'http://localhost:3000' }, {}, deps),
     ).rejects.toThrow('Browser not found');
 
-    // Report server should not have been started
-    expect(deps.startReportServer).not.toHaveBeenCalled();
+    // Report server was started before browser, so it should be cleaned up
+    expect(deps.startReportServer).toHaveBeenCalled();
   });
 
   it('sets session status to failed on error', async () => {

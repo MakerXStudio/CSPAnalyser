@@ -1,4 +1,7 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
+import { X509Certificate } from 'node:crypto';
 import { ensureDataDirectory, setSecureFilePermissions } from './utils/file-utils.js';
 import { createLogger } from './utils/logger.js';
 
@@ -55,6 +58,28 @@ export async function ensureCACertificate(dataDir: string): Promise<CertPaths> {
   logger.info('CA certificate directory ready', { sslCaDir: certPaths.sslCaDir });
 
   return certPaths;
+}
+
+/**
+ * Computes the SPKI (Subject Public Key Info) hash of the CA certificate.
+ * This hash is used with Chromium's --ignore-certificate-errors-spki-list
+ * flag to trust only the MITM proxy's CA, leaving all other TLS validation
+ * intact.
+ *
+ * Returns the base64-encoded SHA-256 hash, or null if the cert doesn't exist.
+ */
+export function computeCaSpkiHash(certPaths: CertPaths): string | null {
+  if (!fs.existsSync(certPaths.caCertPath)) {
+    return null;
+  }
+
+  const pem = fs.readFileSync(certPaths.caCertPath, 'utf-8');
+  const cert = new X509Certificate(pem);
+  const spkiDer = cert.publicKey.export({ type: 'spki', format: 'der' });
+  const hash = createHash('sha256').update(spkiDer).digest('base64');
+
+  logger.info('Computed CA SPKI hash for certificate pinning');
+  return hash;
 }
 
 /**

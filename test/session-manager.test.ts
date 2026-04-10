@@ -403,14 +403,15 @@ describe('runSession', () => {
 
   it('cleans up on browser launch failure', async () => {
     const config: SessionConfig = { targetUrl: 'http://localhost:3000' };
+    const reportClose = vi.fn().mockResolvedValue(undefined);
     const deps = createTestDeps({
       launchBrowser: vi.fn().mockRejectedValue(new Error('Browser not found')),
     });
 
     await expect(runSession(db, config, {}, deps)).rejects.toThrow('Browser not found');
 
-    // Report server and proxy should not have been started
-    expect(deps.startReportServer).not.toHaveBeenCalled();
+    // Report server was started before browser, so it should be cleaned up
+    expect(deps.startReportServer).toHaveBeenCalled();
   });
 
   it('updates session status through the lifecycle', async () => {
