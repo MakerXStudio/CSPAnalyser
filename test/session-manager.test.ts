@@ -93,7 +93,7 @@ describe('runSession', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('auto-detects MITM mode for remote HTTPS URLs', async () => {
+  it('uses local mode for remote HTTPS URLs by default', async () => {
     const config: SessionConfig = {
       targetUrl: 'https://example.com',
     };
@@ -101,13 +101,14 @@ describe('runSession', () => {
 
     const result = await runSession(db, config, {}, deps);
 
-    expect(result.session.mode).toBe('mitm');
-    expect(deps.startMitmProxy).toHaveBeenCalled();
+    expect(result.session.mode).toBe('local');
+    expect(deps.startMitmProxy).not.toHaveBeenCalled();
   });
 
   it('passes proxy server to auth context in MITM mode', async () => {
     const config: SessionConfig = {
       targetUrl: 'https://example.com',
+      mode: 'mitm',
     };
     const deps = createTestDeps();
 
@@ -280,7 +281,7 @@ describe('runSession', () => {
   });
 
   it('skips CSP injection in MITM mode (proxy handles it)', async () => {
-    const config: SessionConfig = { targetUrl: 'https://example.com' };
+    const config: SessionConfig = { targetUrl: 'https://example.com', mode: 'mitm' };
     const deps = createTestDeps();
 
     deps.crawl = vi.fn().mockImplementation(
@@ -348,7 +349,7 @@ describe('runSession', () => {
   });
 
   it('cleans up on success', async () => {
-    const config: SessionConfig = { targetUrl: 'https://example.com' };
+    const config: SessionConfig = { targetUrl: 'https://example.com', mode: 'mitm' };
     const mockBrowser = createMockBrowser();
     const reportClose = vi.fn().mockResolvedValue(undefined);
     const proxyClose = vi.fn();

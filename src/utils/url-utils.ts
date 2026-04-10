@@ -75,23 +75,16 @@ export function isSameOrigin(url1: string, url2: string): boolean {
 /**
  * Auto-detection logic for whether MITM proxy mode is needed.
  *
- * - localhost/127.0.0.1/[::1] → false (local mode)
- * - http: → false (local mode)
- * - https: with remote hostname → true (MITM mode)
+ * Always returns false — local mode (Playwright page.route()) works reliably
+ * for all targets including remote HTTPS. The MITM proxy adds complexity
+ * (TLS cert generation, proxy trust, Chrome background service noise) that
+ * is unnecessary with modern Playwright's route.fetch()/route.fulfill().
+ *
+ * Users can still force MITM mode with --mode mitm or mode: 'mitm' for
+ * the rare edge case where page.route() doesn't intercept CSP headers.
  */
-export function shouldUseMitmMode(targetUrl: string): boolean {
-  const parsed = new URL(targetUrl);
-
-  if (isLocalhost(parsed.hostname)) {
-    return false;
-  }
-
-  if (parsed.protocol === 'http:') {
-    return false;
-  }
-
-  // https: with a remote hostname → MITM mode
-  return true;
+export function shouldUseMitmMode(_targetUrl: string): boolean {
+  return false;
 }
 
 /**

@@ -111,8 +111,8 @@ describe('shouldUseMitmMode', () => {
     expect(shouldUseMitmMode('https://[::1]:3000/')).toBe(false);
   });
 
-  it('returns true for remote https', () => {
-    expect(shouldUseMitmMode('https://example.com/')).toBe(true);
+  it('returns false for remote https (local mode is default)', () => {
+    expect(shouldUseMitmMode('https://example.com/')).toBe(false);
   });
 
   it('returns false for http localhost', () => {

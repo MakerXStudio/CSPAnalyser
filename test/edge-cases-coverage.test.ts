@@ -145,8 +145,8 @@ describe('URL handling edge cases', () => {
     expect(shouldUseMitmMode('https://localhost:3000')).toBe(false);
   });
 
-  it('shouldUseMitmMode returns true for https remote', () => {
-    expect(shouldUseMitmMode('https://example.com')).toBe(true);
+  it('shouldUseMitmMode returns false for https remote (local mode is default)', () => {
+    expect(shouldUseMitmMode('https://example.com')).toBe(false);
   });
 
   it('shouldUseMitmMode returns false for https [::1]', () => {

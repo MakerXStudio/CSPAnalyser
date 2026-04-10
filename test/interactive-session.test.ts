@@ -331,7 +331,7 @@ describe('runInteractiveSession', () => {
 
     await runInteractiveSession(
       db,
-      { targetUrl: 'https://example.com' }, // MITM auto-detected
+      { targetUrl: 'https://example.com', mode: 'mitm' },
       {},
       deps,
     );
@@ -345,7 +345,7 @@ describe('runInteractiveSession', () => {
 
     await runInteractiveSession(
       db,
-      { targetUrl: 'https://example.com' },
+      { targetUrl: 'https://example.com', mode: 'mitm' },
       {},
       deps,
     );
@@ -547,7 +547,7 @@ describe('runInteractiveSession', () => {
     stderrWrite.mockRestore();
   });
 
-  it('auto-detects MITM mode for remote HTTPS URLs', async () => {
+  it('uses local mode for remote HTTPS URLs by default', async () => {
     const deps = createAutoDisconnectDeps();
 
     const result = await runInteractiveSession(
@@ -557,8 +557,8 @@ describe('runInteractiveSession', () => {
       deps,
     );
 
-    expect(result.session.mode).toBe('mitm');
-    expect(deps.startMitmProxy).toHaveBeenCalled();
+    expect(result.session.mode).toBe('local');
+    expect(deps.startMitmProxy).not.toHaveBeenCalled();
   });
 
   it('tracks page navigations via the load event handler', async () => {
