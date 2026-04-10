@@ -23,6 +23,7 @@ export interface PlaywrightBrowser {
   newContext(options?: {
     storageState?: string | StorageStateObject;
     proxy?: { server: string };
+    ignoreHTTPSErrors?: boolean;
   }): Promise<PlaywrightBrowserContext>;
   newPage(): Promise<PlaywrightBrowserPage>;
 }
@@ -126,7 +127,9 @@ export async function createAuthenticatedContext(
   targetUrl: string,
   auth?: AuthOptions,
 ): Promise<{ context: PlaywrightBrowserContext; storageState?: string | StorageStateObject }> {
-  const proxyOption = auth?.proxyServer ? { proxy: { server: auth.proxyServer } } : {};
+  const proxyOption = auth?.proxyServer
+    ? { proxy: { server: auth.proxyServer }, ignoreHTTPSErrors: true }
+    : {};
 
   if (!auth || (!auth.storageStatePath && !auth.cookies && !auth.manualLogin)) {
     logger.info('Creating unauthenticated browser context');

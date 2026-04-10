@@ -253,7 +253,7 @@ describe('createAuthenticatedContext', () => {
       proxyServer: 'http://127.0.0.1:8080',
     });
 
-    expect(browser.newContext).toHaveBeenCalledWith({ proxy: { server: 'http://127.0.0.1:8080' } });
+    expect(browser.newContext).toHaveBeenCalledWith({ proxy: { server: 'http://127.0.0.1:8080' }, ignoreHTTPSErrors: true });
     expect(result.context).toBe(ctx);
   });
 
@@ -271,6 +271,7 @@ describe('createAuthenticatedContext', () => {
     expect(browser.newContext).toHaveBeenCalledWith({
       storageState: statePath,
       proxy: { server: 'http://127.0.0.1:8080' },
+      ignoreHTTPSErrors: true,
     });
   });
 
@@ -283,7 +284,7 @@ describe('createAuthenticatedContext', () => {
       proxyServer: 'http://127.0.0.1:8080',
     });
 
-    expect(browser.newContext).toHaveBeenCalledWith({ proxy: { server: 'http://127.0.0.1:8080' } });
+    expect(browser.newContext).toHaveBeenCalledWith({ proxy: { server: 'http://127.0.0.1:8080' }, ignoreHTTPSErrors: true });
   });
 
   it('uses storageStatePath when provided', async () => {
