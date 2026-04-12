@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { initializeDatabase } from '../src/db/schema.js';
-import { getSession, getViolations, insertViolation, getPages } from '../src/db/repository.js';
+import { getSession, insertViolation, getPages } from '../src/db/repository.js';
 import { runInteractiveSession, type SessionDeps } from '../src/session-manager.js';
-import type { SessionConfig } from '../src/types.js';
 import type { CrawlResult } from '../src/crawler.js';
-import type { EventEmitter } from 'node:events';
 
 // ── Mock factories ───────────────────────────────────────────────────────
 
@@ -316,7 +314,7 @@ describe('runInteractiveSession', () => {
     // Simulate a new page being opened
     const newPage = createMockPage();
     newPage.url = vi.fn().mockReturnValue('http://localhost:3000/about');
-    await pageHandler!(newPage);
+    await Promise.resolve(pageHandler?.(newPage));
 
     // Verify CSP injection and violation listener were set up on the new page
     expect(deps.setupCspInjection).toHaveBeenCalledTimes(2); // initial + new page
@@ -538,7 +536,7 @@ describe('runInteractiveSession', () => {
     newPage.url = vi.fn().mockReturnValue('http://localhost:3000/error-page');
 
     // Should not throw — error is caught and logged
-    await pageHandler!(newPage);
+    await Promise.resolve(pageHandler?.(newPage));
 
     disconnectHandler!();
     const result = await promise;
