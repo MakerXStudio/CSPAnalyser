@@ -82,7 +82,7 @@ csp-analyser crawl https://example.com --format json
 csp-analyser crawl https://example.com --strictness strict
 ```
 
-Generates a tighter policy -- prefers hashes over host-based allowlisting where possible.
+Generates a tighter policy. Prefers hashes over host-based allowlisting where possible.
 
 ### Report-only mode
 

@@ -129,9 +129,9 @@ Compare the current analysis against a previous session to detect policy changes
 
 The `diff` command shows:
 
-- **Added directives** -- new source expressions that were not in the baseline
-- **Removed directives** -- source expressions that are no longer needed
-- **Changed directives** -- directives where the source list has changed
+- **Added directives**: new source expressions that were not in the baseline
+- **Removed directives**: source expressions that are no longer needed
+- **Changed directives**: directives where the source list has changed
 
 This is useful for pull request reviews: if a PR introduces a new third-party script, the diff will show the new `script-src` entry.
 
@@ -176,7 +176,7 @@ On Ubuntu runners, system dependencies are installed automatically. For other en
 
 ### Headless mode
 
-CI environments are headless by default. The `crawl` command runs in headless mode. Do not use the `interactive` command in CI -- it requires a visible browser.
+CI environments are headless by default. The `crawl` command runs in headless mode. Do not use the `interactive` command in CI. It requires a visible browser.
 
 ### Network access
 

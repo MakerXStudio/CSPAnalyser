@@ -5,7 +5,7 @@ The `csp-analyser` CLI generates production-ready Content Security Policy header
 ## Help text
 
 ```
-csp-analyser — Generate Content Security Policy headers by crawling websites
+csp-analyser - Generate Content Security Policy headers by crawling websites
 
 Usage:
   csp-analyser setup                     Install Playwright browser + dependencies
@@ -57,8 +57,8 @@ Options:
 
 The CLI separates machine-readable output from human-readable progress:
 
-- **stdout** -- the generated policy, score, diff, or export output. This is the data you want to capture.
-- **stderr** -- progress messages, crawl status, summary tables, and errors. This is informational and can be safely discarded.
+- **stdout**: the generated policy, score, diff, or export output. This is the data you want to capture.
+- **stderr**: progress messages, crawl status, summary tables, and errors. This is informational and can be safely discarded.
 
 This makes piping and redirection work naturally:
 

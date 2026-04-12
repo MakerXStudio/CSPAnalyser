@@ -32,7 +32,7 @@ This downloads Chromium (~400MB on first install) and verifies it can launch.
 **Error:**
 
 ```
-Browser installed but cannot launch — missing system dependencies.
+Browser installed but cannot launch. Missing system dependencies.
 
 Missing libraries: libnss3.so, libasound2.so, libatk-bridge-2.0.so
 ```

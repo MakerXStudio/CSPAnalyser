@@ -3,7 +3,7 @@ title: "ADR: CSP Injection Strategy"
 description: Dual-mode CSP injection with auto-detection
 ---
 
-# ADR: CSP Injection Strategy -- Dual Mode
+# ADR: CSP Injection Strategy: Dual Mode
 
 ## Status
 
@@ -15,8 +15,8 @@ CSP Analyser must inject a deny-all `Content-Security-Policy-Report-Only` header
 
 Two distinct scenarios exist:
 
-1. **Local development servers** (localhost, 127.0.0.1, HTTP) -- the tool has full control over the browsing environment and can intercept responses directly in the browser
-2. **Remote production/staging sites** (HTTPS with existing CSP headers) -- the site already sends CSP headers that would conflict with or override the deny-all policy; these must be stripped before the browser sees them
+1. **Local development servers** (localhost, 127.0.0.1, HTTP): the tool has full control over the browsing environment and can intercept responses directly in the browser
+2. **Remote production/staging sites** (HTTPS with existing CSP headers): the site already sends CSP headers that would conflict with or override the deny-all policy; these must be stripped before the browser sees them
 
 The injection strategy must handle both scenarios transparently, ideally without requiring the user to configure which mode to use.
 
@@ -68,7 +68,7 @@ This was chosen because:
 
 1. **90% of usage is local development** where `page.route()` is simpler, faster, and requires zero extra infrastructure
 2. **MITM mode is only needed for the specific case** of remote HTTPS sites with existing CSP headers
-3. **Auto-detection eliminates configuration** -- the user provides a URL and the tool does the right thing
+3. **Auto-detection eliminates configuration**. The user provides a URL and the tool does the right thing.
 4. Both modes produce identical violation data (same CSP header, same report-uri, same SQLite storage), so the downstream pipeline is mode-agnostic
 
 ## Consequences

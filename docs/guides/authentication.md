@@ -30,7 +30,7 @@ csp-analyser interactive https://app.example.com --save-storage-state auth.json
 # Step 2: Use the saved session for a deep headless crawl
 csp-analyser crawl https://app.example.com --storage-state auth.json --depth 3 --max-pages 50
 ```
-This is the recommended workflow for authenticated sites — log in once interactively, then run repeatable headless crawls with the saved state.
+This is the recommended workflow for authenticated sites. Log in once interactively, then run repeatable headless crawls with the saved state.
 :::
 
 You can also generate a storage state file with Playwright directly:
@@ -57,14 +57,14 @@ csp-analyser crawl https://app.example.com --storage-state auth.json
 
 :::
 
-The file must have a `.json` extension and must exist on disk. Symlinks are resolved to prevent path traversal -- the real target must also end in `.json`.
+The file must have a `.json` extension and must exist on disk. Symlinks are resolved to prevent path traversal. The real target must also end in `.json`.
 
 ## Cookie Injection
 
 Available through the MCP tools when you already have session cookies (e.g., extracted from browser DevTools or a login API response). Cookies are injected into a fresh browser context before navigation.
 
 ```json
-// MCP start_session tool — cookies parameter
+// MCP start_session tool - cookies parameter
 {
   "targetUrl": "https://app.example.com",
   "cookies": [

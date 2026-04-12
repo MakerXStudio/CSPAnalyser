@@ -38,10 +38,10 @@ Each page you visit is recorded. The summary table shows the total pages visited
 
 Interactive mode is the right choice when:
 
-- **Single-page applications (SPAs)** -- automated crawling only follows `<a>` links, so SPA routes triggered by JavaScript navigation are missed. Use interactive mode to click through the app.
-- **Complex authentication flows** -- if your site uses multi-factor auth, CAPTCHAs, or OAuth redirects that cannot be captured in a storage state file.
-- **Dynamic content** -- pages that require user interaction (scrolling, clicking tabs, expanding accordions) to load all resources.
-- **Testing specific workflows** -- you want a policy that covers a specific user journey rather than the entire site.
+- **Single-page applications (SPAs)**: automated crawling only follows `<a>` links, so SPA routes triggered by JavaScript navigation are missed. Use interactive mode to click through the app.
+- **Complex authentication flows**: if your site uses multi-factor auth, CAPTCHAs, or OAuth redirects that cannot be captured in a storage state file.
+- **Dynamic content**: pages that require user interaction (scrolling, clicking tabs, expanding accordions) to load all resources.
+- **Testing specific workflows**: you want a policy that covers a specific user journey rather than the entire site.
 
 ## Examples
 

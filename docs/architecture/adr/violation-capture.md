@@ -3,7 +3,7 @@ title: "ADR: Violation Capture Mechanism"
 description: Triple capture via DOM events, report-uri, and Reporting API
 ---
 
-# ADR: Violation Capture Mechanism -- Triple Capture
+# ADR: Violation Capture Mechanism: Triple Capture
 
 ## Status
 
@@ -15,9 +15,9 @@ When a browser encounters a `Content-Security-Policy-Report-Only` header that bl
 
 CSP violations can be observed through three browser mechanisms:
 
-1. **DOM `securitypolicyviolation` event** -- fired on the document when a violation occurs, accessible via JavaScript event listeners
-2. **`report-uri` directive** -- the CSP header includes a URL; the browser POSTs a JSON violation report to it
-3. **Reporting API v1 (`report-to` directive)** -- the modern replacement for `report-uri`; uses a separate `Report-To` header
+1. **DOM `securitypolicyviolation` event**: fired on the document when a violation occurs, accessible via JavaScript event listeners
+2. **`report-uri` directive**: the CSP header includes a URL; the browser POSTs a JSON violation report to it
+3. **Reporting API v1 (`report-to` directive)**: the modern replacement for `report-uri`; uses a separate `Report-To` header
 
 Each mechanism has different timing, data richness, and browser support characteristics. Missing even a single violation means the generated CSP policy will block a legitimate resource in production.
 

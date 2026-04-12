@@ -88,12 +88,12 @@ created → authenticating → crawling → analyzing → complete
                                                      └→ failed (on error)
 ```
 
-1. **created** -- Session record inserted into SQLite with configuration
-2. **authenticating** -- Browser context created with storage state, cookies, or manual login
-3. **crawling** -- Pages discovered and visited; CSP violations captured in real time
-4. **analyzing** -- Crawl complete; violation data is available for policy generation
-5. **complete** -- Session finished successfully
-6. **failed** -- An error occurred during any stage
+1. **created**: Session record inserted into SQLite with configuration
+2. **authenticating**: Browser context created with storage state, cookies, or manual login
+3. **crawling**: Pages discovered and visited; CSP violations captured in real time
+4. **analyzing**: Crawl complete; violation data is available for policy generation
+5. **complete**: Session finished successfully
+6. **failed**: An error occurred during any stage
 
 ## Module responsibilities
 
@@ -136,7 +136,7 @@ created → authenticating → crawling → analyzing → complete
 | Policy Generator | `policy-generator.ts` | Aggregates source expressions across all violations into a directive map |
 | Policy Optimizer | `policy-optimizer.ts` | Collapses directives into `default-src` where possible to minimize policy size |
 | Policy Formatter | `policy-formatter.ts` | Formats directive map into deployment-ready output (7 formats) |
-| Policy Scorer | `policy-scorer.ts` | Scores policy against best practices (0--100 scale) |
+| Policy Scorer | `policy-scorer.ts` | Scores policy against best practices (0-100 scale) |
 | Policy Diff | `policy-diff.ts` | Compares two sessions and produces a structured diff |
 
 ### Data layer

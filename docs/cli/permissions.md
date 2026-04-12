@@ -35,9 +35,9 @@ Permissions-Policy for session abc123
 
 ## When to use
 
-- **Audit third-party permissions** -- see which browser features (camera, geolocation, payment, etc.) the site enables and for which origins
-- **Complement your CSP** -- Permissions-Policy controls browser features while CSP controls resource loading; together they form a complete security header strategy
-- **Detect legacy headers** -- identify sites still using the deprecated `Feature-Policy` header so you can recommend migrating to `Permissions-Policy`
+- **Audit third-party permissions**: see which browser features (camera, geolocation, payment, etc.) the site enables and for which origins
+- **Complement your CSP**: Permissions-Policy controls browser features while CSP controls resource loading; together they form a complete security header strategy
+- **Detect legacy headers**: identify sites still using the deprecated `Feature-Policy` header so you can recommend migrating to `Permissions-Policy`
 
 ## Examples
 

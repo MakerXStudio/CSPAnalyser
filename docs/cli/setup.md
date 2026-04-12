@@ -14,8 +14,8 @@ This command takes no options or arguments.
 
 The setup command runs two steps:
 
-1. **Install browser binary** -- downloads Playwright's bundled Chromium using `npx playwright install chromium`. This does not require root/sudo.
-2. **Verify launch** -- attempts to launch the browser headlessly and immediately close it, confirming that all required system libraries are present.
+1. **Install browser binary**: downloads Playwright's bundled Chromium using `npx playwright install chromium`. This does not require root/sudo.
+2. **Verify launch**: attempts to launch the browser headlessly and immediately close it, confirming that all required system libraries are present.
 
 If step 2 fails, the CLI detects your platform and prints targeted instructions for installing the missing system dependencies.
 

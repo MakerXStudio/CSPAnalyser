@@ -5,17 +5,17 @@ description: Understand how your CSP policy is scored against best practices
 
 # Policy Scoring
 
-CSP Analyser scores your generated policy on a 0--100 scale against established CSP best practices. The score starts at 100 and is adjusted by deductions (for dangerous patterns) and bonuses (for security best practices).
+CSP Analyser scores your generated policy on a 0-100 scale against established CSP best practices. The score starts at 100 and is adjusted by deductions (for dangerous patterns) and bonuses (for security best practices).
 
 ## Grade boundaries
 
 | Grade | Score range | Meaning |
 |:-----:|:----------:|---------|
-| **A** | 90--100 | Excellent -- follows best practices with no critical issues |
-| **B** | 75--89 | Good -- minor improvements possible |
-| **C** | 55--74 | Fair -- some significant security gaps |
-| **D** | 35--54 | Poor -- multiple security issues need attention |
-| **F** | 0--34 | Failing -- critical security problems |
+| **A** | 90-100 | Excellent. Follows best practices with no critical issues. |
+| **B** | 75-89 | Good. Minor improvements possible. |
+| **C** | 55-74 | Fair. Some significant security gaps. |
+| **D** | 35-54 | Poor. Multiple security issues need attention. |
+| **F** | 0-34 | Failing. Critical security problems. |
 
 ## Scoring rubric
 
@@ -67,10 +67,10 @@ Strengths:
 
 Findings are sorted by severity (most impactful first). The icons indicate severity:
 
-- `!!` -- critical
-- `!` -- warning
-- `?` -- info
-- `+` -- positive
+- `!!` = critical
+- `!` = warning
+- `?` = info
+- `+` = positive
 
 ## Common findings and how to fix them
 
@@ -82,7 +82,7 @@ Your site or a dependency uses `eval()`, `new Function()`, or similar dynamic co
 
 **How to fix:**
 1. Identify the source using the violation details (`sourceFile`, `lineNumber`)
-2. Refactor the code to avoid `eval()` -- most uses can be replaced with JSON parsing, template literals, or static function references
+2. Refactor the code to avoid `eval()`. Most uses can be replaced with JSON parsing, template literals, or static function references.
 3. If a third-party library requires it and cannot be replaced, isolate it in a sandboxed iframe with its own restrictive policy
 
 ### `'unsafe-inline'` allows inline script execution
@@ -93,7 +93,7 @@ Inline `<script>` tags or inline event handlers (`onclick`, `onload`) are in use
 
 **How to fix:**
 1. Move inline scripts to external `.js` files
-2. Use nonces or hashes instead of `'unsafe-inline'` -- CSP Analyser can generate SHA-256 hashes for short inline scripts when samples are available
+2. Use nonces or hashes instead of `'unsafe-inline'`. CSP Analyser can generate SHA-256 hashes for short inline scripts when samples are available.
 3. Remove inline event handlers and use `addEventListener()` instead
 
 ### Missing `object-src`

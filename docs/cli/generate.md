@@ -18,7 +18,7 @@ csp-analyser generate <session-id> [options]
 
 ## When to use
 
-After running `crawl` or `interactive`, the session ID is printed in the summary. Use `generate` to produce a new policy from the same violation data with different settings -- no need to re-crawl.
+After running `crawl` or `interactive`, the session ID is printed in the summary. Use `generate` to produce a new policy from the same violation data with different settings. No need to re-crawl.
 
 Common reasons to regenerate:
 

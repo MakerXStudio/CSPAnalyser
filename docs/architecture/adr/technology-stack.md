@@ -75,8 +75,8 @@ Use **Playwright + better-sqlite3 + http-mitm-proxy + @modelcontextprotocol/sdk 
 
 This stack was chosen because:
 
-1. **Playwright's `storageState()`** provides the cleanest auth handoff pattern -- an agent authenticates in a headed browser, exports state to JSON, and the tool loads it headlessly. No alternative offers this as a single API call.
-2. **Synchronous SQLite writes** eliminate the class of bugs where rapid violation events are lost to async write queues. During a typical page load, 20--50 violations fire within 100ms; better-sqlite3 handles this without batching or queue management.
+1. **Playwright's `storageState()`** provides the cleanest auth handoff pattern. An agent authenticates in a headed browser, exports state to JSON, and the tool loads it headlessly. No alternative offers this as a single API call.
+2. **Synchronous SQLite writes** eliminate the class of bugs where rapid violation events are lost to async write queues. During a typical page load, 20-50 violations fire within 100ms; better-sqlite3 handles this without batching or queue management.
 3. **MCP is the emerging standard** for AI agent tool integration. A single MCP server implementation makes the tool usable by Claude Code, Codex, Gemini, and Copilot without per-agent adapters.
 4. **Dual-mode CSP injection** is uniquely enabled by Playwright's `page.route()` (eliminating the proxy for local development) combined with http-mitm-proxy (for remote HTTPS sites).
 

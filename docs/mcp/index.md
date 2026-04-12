@@ -11,7 +11,7 @@ CSP Analyser exposes its full functionality as a [Model Context Protocol](https:
 
 The Model Context Protocol is a standard for AI coding agents to discover and invoke tools provided by external servers. Instead of each agent needing a custom integration, MCP provides a single interface that all compliant agents understand.
 
-CSP Analyser's MCP server communicates over **stdio** transport -- the agent starts the server as a child process and sends/receives JSON messages over stdin/stdout.
+CSP Analyser's MCP server communicates over **stdio** transport. The agent starts the server as a child process and sends/receives JSON messages over stdin/stdout.
 
 ## Supported agents
 
@@ -31,8 +31,8 @@ Through the MCP tools, an AI agent can:
 - **Crawl a website** and capture all CSP violations in a single tool call
 - **Analyse a single page** for quick checks
 - **Generate an optimised policy** from captured violations
-- **Export in any format** -- nginx, Apache, Cloudflare, HTML meta, raw header, or JSON
-- **Score the policy** against best practices (A--F grading)
+- **Export in any format**: nginx, Apache, Cloudflare, HTML meta, raw header, or JSON
+- **Score the policy** against best practices (A-F grading)
 - **Compare two sessions** to detect policy regressions
 - **Query violations** filtered by directive, page, or origin
 - **Inspect session details** including pages visited and violation summaries

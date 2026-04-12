@@ -16,17 +16,17 @@ csp-analyser score <session-id> [options]
 
 ## Scoring system
 
-The score starts at **100 points** and applies deductions for dangerous patterns and bonuses for security best practices. The final score is clamped to the 0--100 range.
+The score starts at **100 points** and applies deductions for dangerous patterns and bonuses for security best practices. The final score is clamped to the 0-100 range.
 
 ### Grades
 
 | Grade | Score range |
 |---|---|
-| **A** | 90--100 |
-| **B** | 75--89 |
-| **C** | 55--74 |
-| **D** | 35--54 |
-| **F** | 0--34 |
+| **A** | 90-100 |
+| **B** | 75-89 |
+| **C** | 55-74 |
+| **D** | 35-54 |
+| **F** | 0-34 |
 
 ## What it checks
 
@@ -71,7 +71,7 @@ CSP Score: 75/100 (Grade: B)
 
 Issues:
   [!] 'unsafe-inline' allows inline script execution (XSS risk) (-20 pts)
-  [?] Missing base-uri — consider adding base-uri 'self' to prevent base tag injection (-5 pts)
+  [?] Missing base-uri - consider adding base-uri 'self' to prevent base tag injection (-5 pts)
 
 Strengths:
   [+] Uses nonces or hashes for script integrity (+10 pts)
@@ -79,10 +79,10 @@ Strengths:
 ```
 
 Finding icons:
-- `!!` -- critical issue
-- `!` -- warning
-- `?` -- informational suggestion
-- `+` -- positive signal
+- `!!` = critical issue
+- `!` = warning
+- `?` = informational suggestion
+- `+` = positive signal
 
 ## Examples
 

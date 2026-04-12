@@ -20,14 +20,14 @@ The diff command generates optimized policies for both sessions using the specif
 
 ### Policy Changes
 
-- **New directives** -- directives present in session B but not in session A
-- **Removed directives** -- directives present in session A but not in session B
-- **Changed directives** -- directives present in both sessions but with different source expressions, showing added (`+`) and removed (`-`) sources
+- **New directives**: directives present in session B but not in session A
+- **Removed directives**: directives present in session A but not in session B
+- **Changed directives**: directives present in both sessions but with different source expressions, showing added (`+`) and removed (`-`) sources
 
 ### Violation Changes
 
-- **New violations** -- directive/blocked-URI pairs that appear in session B but not in session A, with occurrence count
-- **Resolved violations** -- directive/blocked-URI pairs that appeared in session A but are gone in session B
+- **New violations**: directive/blocked-URI pairs that appear in session B but not in session A, with occurrence count
+- **Resolved violations**: directive/blocked-URI pairs that appeared in session A but are gone in session B
 
 ## Example output
 
