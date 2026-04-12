@@ -237,7 +237,10 @@ export async function runSession(
 
     // 10. Build result
     const violations = getViolations(db, sessionId);
-    const finalSession = getSession(db, sessionId)!;
+    const finalSession = getSession(db, sessionId);
+    if (!finalSession) {
+      throw new Error(`Session ${sessionId} not found after completion`);
+    }
 
     return {
       session: finalSession,
@@ -427,8 +430,10 @@ export async function runInteractiveSession(
     await initialPage.goto(config.targetUrl, { waitUntil: 'load' });
 
     // 9. Wait for browser to disconnect (user closes browser)
+    // Local const needed for TypeScript closure narrowing (browser is non-null here)
+    const launchedBrowser = browser;
     await new Promise<void>((resolve) => {
-      browser!.on('disconnected', () => resolve());
+      launchedBrowser.on('disconnected', () => resolve());
     });
 
     // 10. Export storage state if requested (before context closes)
@@ -453,7 +458,10 @@ export async function runInteractiveSession(
     updateSession(db, sessionId, { status: 'complete' });
     const violations = getViolations(db, sessionId);
     const pages = getPages(db, sessionId);
-    const finalSession = getSession(db, sessionId)!;
+    const finalSession = getSession(db, sessionId);
+    if (!finalSession) {
+      throw new Error(`Session ${sessionId} not found after completion`);
+    }
 
     progress(
       `Session complete. Visited ${pages.length} pages, found ${violations.length} violations`,

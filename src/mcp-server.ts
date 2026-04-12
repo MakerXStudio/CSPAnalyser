@@ -60,41 +60,43 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── start_session ───────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'start_session',
-    'Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations',
     {
-      targetUrl: z.string().url().describe('The URL to analyse'),
-      mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
-      depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
-      maxPages: z
-        .number()
-        .int()
-        .min(1)
-        .max(1000)
-        .optional()
-        .describe('Maximum pages to crawl (default: 10)'),
-      settlementDelay: z
-        .number()
-        .int()
-        .min(0)
-        .max(10000)
-        .optional()
-        .describe('Milliseconds to wait after page load for late violations (default: 500)'),
-      storageStatePath: z
-        .string()
-        .optional()
-        .describe('Path to Playwright storageState JSON for authenticated sessions'),
-      strictness: z
-        .enum(['strict', 'moderate', 'permissive'])
-        .optional()
-        .describe('Policy strictness level (default: moderate)'),
-      violationLimit: z
-        .number()
-        .int()
-        .min(0)
-        .optional()
-        .describe('Maximum violations to accept per session (default: 10000, 0 for unlimited)'),
+      description: 'Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations',
+      inputSchema: {
+        targetUrl: z.url().describe('The URL to analyse'),
+        mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
+        depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
+        maxPages: z
+          .number()
+          .int()
+          .min(1)
+          .max(1000)
+          .optional()
+          .describe('Maximum pages to crawl (default: 10)'),
+        settlementDelay: z
+          .number()
+          .int()
+          .min(0)
+          .max(10000)
+          .optional()
+          .describe('Milliseconds to wait after page load for late violations (default: 500)'),
+        storageStatePath: z
+          .string()
+          .optional()
+          .describe('Path to Playwright storageState JSON for authenticated sessions'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe('Policy strictness level (default: moderate)'),
+        violationLimit: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Maximum violations to accept per session (default: 10000, 0 for unlimited)'),
+      },
     },
     async (args) => {
       try {
@@ -132,20 +134,22 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── crawl_url ───────────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'crawl_url',
-    'Analyse a single page for CSP violations (convenience wrapper: depth=0, maxPages=1)',
     {
-      url: z.string().url().describe('The URL to analyse'),
-      mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
-      storageStatePath: z
-        .string()
-        .optional()
-        .describe('Path to Playwright storageState JSON for authenticated sessions'),
-      strictness: z
-        .enum(['strict', 'moderate', 'permissive'])
-        .optional()
-        .describe('Policy strictness level (default: moderate)'),
+      description: 'Analyse a single page for CSP violations (convenience wrapper: depth=0, maxPages=1)',
+      inputSchema: {
+        url: z.url().describe('The URL to analyse'),
+        mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
+        storageStatePath: z
+          .string()
+          .optional()
+          .describe('Path to Playwright storageState JSON for authenticated sessions'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe('Policy strictness level (default: moderate)'),
+      },
     },
     async (args) => {
       try {
@@ -180,14 +184,16 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── get_violations ──────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'get_violations',
-    'Get CSP violations captured during a session, optionally filtered by directive, page URL, or origin',
     {
-      sessionId: z.string().uuid().describe('The session ID'),
-      directive: z.string().optional().describe('Filter by CSP directive (e.g. script-src)'),
-      pageUrl: z.string().optional().describe('Filter by page URL'),
-      origin: z.string().optional().describe('Filter by blocked resource origin'),
+      description: 'Get CSP violations captured during a session, optionally filtered by directive, page URL, or origin',
+      inputSchema: {
+        sessionId: z.uuid().describe('The session ID'),
+        directive: z.string().optional().describe('Filter by CSP directive (e.g. script-src)'),
+        pageUrl: z.string().optional().describe('Filter by page URL'),
+        origin: z.string().optional().describe('Filter by blocked resource origin'),
+      },
     },
     async (args) => {
       try {
@@ -226,19 +232,21 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── generate_policy ─────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'generate_policy',
-    'Generate an optimised CSP policy from violations captured in a session',
     {
-      sessionId: z.string().uuid().describe('The session ID'),
-      strictness: z
-        .enum(['strict', 'moderate', 'permissive'])
-        .optional()
-        .describe('Policy strictness (default: moderate)'),
-      includeHashes: z
-        .boolean()
-        .optional()
-        .describe('Include SHA-256 hashes for inline scripts/styles (default: false)'),
+      description: 'Generate an optimised CSP policy from violations captured in a session',
+      inputSchema: {
+        sessionId: z.uuid().describe('The session ID'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe('Policy strictness (default: moderate)'),
+        includeHashes: z
+          .boolean()
+          .optional()
+          .describe('Include SHA-256 hashes for inline scripts/styles (default: false)'),
+      },
     },
     async (args) => {
       try {
@@ -270,22 +278,24 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── export_policy ───────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'export_policy',
-    'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, json)',
     {
-      sessionId: z.string().uuid().describe('The session ID'),
-      format: z
-        .enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'cloudflare-pages', 'json'])
-        .describe('Output format'),
-      strictness: z
-        .enum(['strict', 'moderate', 'permissive'])
-        .optional()
-        .describe('Policy strictness (default: moderate)'),
-      isReportOnly: z
-        .boolean()
-        .optional()
-        .describe('Use Content-Security-Policy-Report-Only header (default: false)'),
+      description: 'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, json)',
+      inputSchema: {
+        sessionId: z.uuid().describe('The session ID'),
+        format: z
+          .enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'cloudflare-pages', 'json'])
+          .describe('Output format'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe('Policy strictness (default: moderate)'),
+        isReportOnly: z
+          .boolean()
+          .optional()
+          .describe('Use Content-Security-Policy-Report-Only header (default: false)'),
+      },
     },
     async (args) => {
       try {
@@ -317,15 +327,17 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── score_policy ────────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'score_policy',
-    'Score a CSP policy against best practices (0-100 with grade A-F)',
     {
-      sessionId: z.string().uuid().describe('The session ID'),
-      strictness: z
-        .enum(['strict', 'moderate', 'permissive'])
-        .optional()
-        .describe('Policy strictness (default: moderate)'),
+      description: 'Score a CSP policy against best practices (0-100 with grade A-F)',
+      inputSchema: {
+        sessionId: z.uuid().describe('The session ID'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe('Policy strictness (default: moderate)'),
+      },
     },
     async (args) => {
       try {
@@ -356,16 +368,18 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── compare_sessions ────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'compare_sessions',
-    'Compare two CSP analysis sessions and show policy/violation differences',
     {
-      sessionIdA: z.string().uuid().describe('First session ID (baseline)'),
-      sessionIdB: z.string().uuid().describe('Second session ID (comparison)'),
-      strictness: z
-        .enum(['strict', 'moderate', 'permissive'])
-        .optional()
-        .describe('Policy strictness (default: moderate)'),
+      description: 'Compare two CSP analysis sessions and show policy/violation differences',
+      inputSchema: {
+        sessionIdA: z.uuid().describe('First session ID (baseline)'),
+        sessionIdB: z.uuid().describe('Second session ID (comparison)'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe('Policy strictness (default: moderate)'),
+      },
     },
     async (args) => {
       try {
@@ -389,11 +403,13 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── get_session ─────────────────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'get_session',
-    'Get details and violation summary for a CSP analysis session',
     {
-      sessionId: z.string().uuid().describe('The session ID'),
+      description: 'Get details and violation summary for a CSP analysis session',
+      inputSchema: {
+        sessionId: z.uuid().describe('The session ID'),
+      },
     },
     async (args) => {
       try {
@@ -427,7 +443,7 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── list_sessions ───────────────────────────────────────────────────
 
-  server.tool('list_sessions', 'List all CSP analysis sessions', {}, async () => {
+  server.registerTool('list_sessions', { description: 'List all CSP analysis sessions' }, async () => {
     try {
       const sessions = listSessions(db);
 
@@ -449,15 +465,17 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── get_permissions_policy ──────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     'get_permissions_policy',
-    'Get Permissions-Policy and Feature-Policy headers captured during a session, optionally filtered by directive',
     {
-      sessionId: z.string().uuid().describe('The session ID'),
-      directive: z
-        .string()
-        .optional()
-        .describe('Filter by directive name (e.g. camera, geolocation)'),
+      description: 'Get Permissions-Policy and Feature-Policy headers captured during a session, optionally filtered by directive',
+      inputSchema: {
+        sessionId: z.uuid().describe('The session ID'),
+        directive: z
+          .string()
+          .optional()
+          .describe('Filter by directive name (e.g. camera, geolocation)'),
+      },
     },
     async (args) => {
       try {

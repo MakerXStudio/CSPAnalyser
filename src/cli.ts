@@ -317,10 +317,13 @@ function generateAndFormat(
 // ── Command execution ───────────────────────────────────────────────────
 
 async function runCrawlCommand(args: ParsedArgs): Promise<void> {
+  if (!args.url) {
+    throw new Error('URL is required for the crawl command');
+  }
   const db = initDb();
   try {
     const config: SessionConfig = {
-      targetUrl: args.url!,
+      targetUrl: args.url,
       mode: args.mode,
       crawlConfig: { depth: args.depth, maxPages: args.maxPages },
       storageStatePath: args.storageState,
@@ -382,10 +385,13 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
+  if (!args.url) {
+    throw new Error('URL is required for the interactive command');
+  }
   const db = initDb();
   try {
     const config: SessionConfig = {
-      targetUrl: args.url!,
+      targetUrl: args.url,
       mode: args.mode,
       storageStatePath: args.storageState,
       violationLimit: args.violationLimit,
@@ -443,10 +449,13 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runGenerateCommand(args: ParsedArgs): Promise<void> {
+  if (!args.sessionId) {
+    throw new Error('Session ID is required for the generate command');
+  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId!);
-    const output = generateAndFormat(db, args.sessionId!, args, session?.targetUrl);
+    const session = getSession(db, args.sessionId);
+    const output = generateAndFormat(db, args.sessionId, args, session?.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -454,10 +463,13 @@ async function runGenerateCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runExportCommand(args: ParsedArgs): Promise<void> {
+  if (!args.sessionId) {
+    throw new Error('Session ID is required for the export command');
+  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId!);
-    const output = generateAndFormat(db, args.sessionId!, args, session?.targetUrl);
+    const session = getSession(db, args.sessionId);
+    const output = generateAndFormat(db, args.sessionId, args, session?.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -465,9 +477,15 @@ async function runExportCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runDiffCommand(args: ParsedArgs): Promise<void> {
+  if (!args.sessionId) {
+    throw new Error('Session ID is required for the diff command');
+  }
+  if (!args.sessionIdB) {
+    throw new Error('Second session ID (--session-id-b) is required for the diff command');
+  }
   const db = initDb();
   try {
-    const comparison = compareSessions(db, args.sessionId!, args.sessionIdB!, args.strictness);
+    const comparison = compareSessions(db, args.sessionId, args.sessionIdB, args.strictness);
     process.stdout.write(formatDiff(comparison) + '\n');
   } finally {
     db.close();
@@ -475,10 +493,13 @@ async function runDiffCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runScoreCommand(args: ParsedArgs): Promise<void> {
+  if (!args.sessionId) {
+    throw new Error('Session ID is required for the score command');
+  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId!);
-    const directives = generatePolicy(db, args.sessionId!, {
+    const session = getSession(db, args.sessionId);
+    const directives = generatePolicy(db, args.sessionId, {
       strictness: args.strictness,
       includeHashes: false,
     });
@@ -491,16 +512,19 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
+  if (!args.sessionId) {
+    throw new Error('Session ID is required for the permissions command');
+  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId!);
+    const session = getSession(db, args.sessionId);
     if (!session) {
       process.stderr.write(`${red('Error:')} Session not found: ${args.sessionId}\n`);
       process.exitCode = 1;
       return;
     }
 
-    const policies = getPermissionsPolicies(db, args.sessionId!);
+    const policies = getPermissionsPolicies(db, args.sessionId);
     if (policies.length === 0) {
       process.stderr.write('No Permissions-Policy headers captured for this session.\n');
       return;

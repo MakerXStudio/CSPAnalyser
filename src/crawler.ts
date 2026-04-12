@@ -70,7 +70,9 @@ export async function crawl(
   let pagesVisited = 0;
 
   while (queue.length > 0 && pagesVisited < config.maxPages) {
-    const [url, depth] = queue.shift()!;
+    const entry = queue.shift();
+    if (!entry) break;
+    const [url, depth] = entry;
 
     let page: Page | null = null;
     try {

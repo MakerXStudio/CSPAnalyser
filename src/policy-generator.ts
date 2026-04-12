@@ -41,19 +41,23 @@ export function generatePolicyFromViolations(
     const source = violationToSourceExpression(violation, targetOrigin, options.strictness);
 
     if (source !== null) {
-      if (!directiveMap.has(directive)) {
-        directiveMap.set(directive, new Set());
+      const existing = directiveMap.get(directive);
+      if (existing) {
+        existing.add(source);
+      } else {
+        directiveMap.set(directive, new Set([source]));
       }
-      directiveMap.get(directive)!.add(source);
     }
 
     if (options.includeHashes) {
       const hash = violationToHashSource(violation);
       if (hash !== null) {
-        if (!directiveMap.has(directive)) {
-          directiveMap.set(directive, new Set());
+        const existing = directiveMap.get(directive);
+        if (existing) {
+          existing.add(hash);
+        } else {
+          directiveMap.set(directive, new Set([hash]));
         }
-        directiveMap.get(directive)!.add(hash);
       }
     }
   }
