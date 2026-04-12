@@ -28,6 +28,7 @@ description: Complete reference of all CLI flags and commands
 | `--format <fmt>` | `header` \| `meta` \| `nginx` \| `apache` \| `cloudflare` \| `cloudflare-pages` \| `json` | `header` | `crawl`, `generate`, `export` | Output format for the generated policy. See [export formats](/guides/export-formats). |
 | `--mode <mode>` | `local` \| `mitm` | auto-detect | `crawl`, `interactive` | CSP injection mode. `local` uses Playwright route interception, `mitm` uses HTTPS intercepting proxy. Auto-detected based on target URL. |
 | `--storage-state <path>` | string (file path) | -- | `crawl`, `interactive` | Path to a Playwright storage state JSON file for authenticated sessions. Must have `.json` extension. |
+| `--save-storage-state <path>` | string (file path) | -- | `interactive` | Export browser cookies and storage state to a JSON file when the session ends. See [authentication guide](/guides/authentication). |
 | `--violation-limit <n>` | integer (0+) | `10000` | `crawl`, `interactive` | Maximum violations to accept per session. `0` for unlimited. |
 | `--report-only` | boolean | `false` | `crawl`, `generate`, `export` | Generate `Content-Security-Policy-Report-Only` instead of `Content-Security-Policy` |
 | `--no-color` | boolean | `false` | all | Disable coloured terminal output. Also respects the `NO_COLOR` environment variable. |

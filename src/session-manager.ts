@@ -45,6 +45,8 @@ export interface InteractiveSessionResult {
   session: Session;
   pagesVisited: number;
   violationsFound: number;
+  /** Path where browser storage state was saved, if requested */
+  storageStatePath?: string;
 }
 
 export interface RunSessionOptions {
@@ -56,6 +58,8 @@ export interface RunSessionOptions {
 export interface InteractiveSessionOptions {
   onProgress?: (msg: string) => void;
   dataDir?: string;
+  /** If set, export browser storage state (cookies, localStorage) to this path on session end */
+  saveStorageStatePath?: string;
 }
 
 /**
@@ -425,7 +429,28 @@ export async function runInteractiveSession(
       browser!.on('disconnected', () => resolve());
     });
 
-    // 10. Build result
+    // 10. Export storage state if requested (before context closes)
+    let savedStorageStatePath: string | undefined;
+    if (options?.saveStorageStatePath && context) {
+      try {
+        const { writeFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { mkdirSync } = await import('node:fs');
+        const outPath = resolve(options.saveStorageStatePath);
+        mkdirSync(dirname(outPath), { recursive: true });
+        const state = await context.storageState();
+        writeFileSync(outPath, JSON.stringify(state, null, 2), { mode: 0o600 });
+        savedStorageStatePath = outPath;
+        progress(`Storage state saved to ${outPath}`);
+        logger.info('Storage state exported', { path: outPath });
+      } catch (err) {
+        logger.error('Failed to export storage state', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // 11. Build result
     updateSession(db, sessionId, { status: 'complete' });
     const violations = getViolations(db, sessionId);
     const pages = getPages(db, sessionId);
@@ -439,6 +464,7 @@ export async function runInteractiveSession(
       session: finalSession,
       pagesVisited: pages.length,
       violationsFound: violations.length,
+      storageStatePath: savedStorageStatePath,
     };
   } catch (err) {
     logger.error('Interactive session failed', {

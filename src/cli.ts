@@ -65,6 +65,7 @@ export interface ParsedArgs {
   format: ExportFormat;
   mode?: 'local' | 'mitm';
   storageState?: string;
+  saveStorageState?: string;
   reportOnly: boolean;
   violationLimit?: number;
 }
@@ -104,6 +105,7 @@ Options:
   --format <fmt>         header | meta | nginx | apache | cloudflare | cloudflare-pages | json (default: header)
   --mode <mode>          local | mitm (default: auto-detect)
   --storage-state <path> Playwright storage state file for auth
+  --save-storage-state <path>  Export session cookies/state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
   --report-only          Generate report-only policy
   --no-color             Disable colored output (also respects NO_COLOR env)
@@ -145,6 +147,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       format: { type: 'string' },
       mode: { type: 'string' },
       'storage-state': { type: 'string' },
+      'save-storage-state': { type: 'string' },
       'violation-limit': { type: 'string' },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
@@ -254,6 +257,11 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const storageState = values['storage-state'] as string | undefined;
   if (storageState !== undefined) {
     parsed.storageState = storageState;
+  }
+
+  const saveStorageState = values['save-storage-state'] as string | undefined;
+  if (saveStorageState !== undefined) {
+    parsed.saveStorageState = saveStorageState;
   }
 
   const violationLimitStr = values['violation-limit'] as string | undefined;
@@ -381,6 +389,7 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
     const startTime = Date.now();
 
     const result = await runInteractiveSession(db, config, {
+      saveStorageStatePath: args.saveStorageState,
       onProgress: (msg) => {
         if (msg.startsWith('Visited: ')) {
           const url = msg.slice('Visited: '.length);

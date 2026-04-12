@@ -13,14 +13,29 @@ The recommended approach for repeatable, automated analysis. A storage state fil
 
 ### Generating a storage state file
 
-Use the `interactive` command to log in manually and save the session:
+Use the `interactive` command with `--save-storage-state` to log in manually and export the session:
 
 ```bash
-# 1. Open a headed browser, log in, then close the tab
-csp-analyser interactive https://app.example.com
+# Open a headed browser, log in, browse around, then close the browser
+csp-analyser interactive https://app.example.com --save-storage-state auth.json
+```
 
-# 2. The storage state is saved inside .csp-analyser/
-#    Or export it explicitly with Playwright:
+When you close the browser, the session's cookies, localStorage, and sessionStorage are saved to `auth.json` with secure file permissions (0600). You can then reuse this file for headless crawls.
+
+::: tip Workflow: interactive login → headless crawl
+```bash
+# Step 1: Log in interactively and save the session
+csp-analyser interactive https://app.example.com --save-storage-state auth.json
+
+# Step 2: Use the saved session for a deep headless crawl
+csp-analyser crawl https://app.example.com --storage-state auth.json --depth 3 --max-pages 50
+```
+This is the recommended workflow for authenticated sites — log in once interactively, then run repeatable headless crawls with the saved state.
+:::
+
+You can also generate a storage state file with Playwright directly:
+
+```bash
 npx playwright codegen --save-storage=auth.json https://app.example.com
 ```
 

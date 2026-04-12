@@ -16,6 +16,7 @@ csp-analyser interactive <url> [options]
 | `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, or `json`. |
 | `--mode <mode>` | auto-detect | Interception mode: `local` or `mitm`. |
 | `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for pre-authenticated sessions. |
+| `--save-storage-state <path>` | -- | Export cookies and storage state to a JSON file when the browser closes. |
 | `--violation-limit <n>` | `10000` | Maximum violations to capture. Set to `0` for unlimited. |
 | `--report-only` | `false` | Generate a report-only header. |
 
@@ -65,6 +66,18 @@ Starts the session already logged in.
 ```bash
 csp-analyser interactive https://example.com --strictness strict --format json
 ```
+
+### Export session state for later headless crawls
+
+```bash
+# Log in interactively and save the authenticated session
+csp-analyser interactive https://app.example.com --save-storage-state auth.json
+
+# Reuse the session for a deep headless crawl later
+csp-analyser crawl https://app.example.com --storage-state auth.json --depth 3
+```
+
+The storage state file captures cookies, localStorage, and sessionStorage. It's saved with `0600` permissions. See the [Authentication guide](/guides/authentication) for more details.
 
 ### Save the result
 
