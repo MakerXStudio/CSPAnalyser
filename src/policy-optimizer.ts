@@ -82,16 +82,16 @@ export function optimizePolicy(
   // Add security defaults for critical directives that have no violations.
   // A missing directive means nothing was blocked — but it also means
   // nothing is restricted. These defaults lock down common attack vectors.
-  if (!result['default-src']) {
+  if (!('default-src' in result)) {
     result['default-src'] = ["'self'"];
   }
-  if (!result['object-src']) {
+  if (!('object-src' in result)) {
     result['object-src'] = ["'none'"];
   }
-  if (!result['base-uri']) {
+  if (!('base-uri' in result)) {
     result['base-uri'] = ["'self'"];
   }
-  if (!result['form-action']) {
+  if (!('form-action' in result)) {
     result['form-action'] = ["'self'"];
   }
 

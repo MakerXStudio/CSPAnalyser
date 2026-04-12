@@ -1,3 +1,5 @@
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { resolve as resolvePath, dirname } from 'node:path';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import type Database from 'better-sqlite3';
 import type { Session, SessionConfig, CrawlConfig, SessionMode } from './types.js';
@@ -431,12 +433,9 @@ export async function runInteractiveSession(
 
     // 10. Export storage state if requested (before context closes)
     let savedStorageStatePath: string | undefined;
-    if (options?.saveStorageStatePath && context) {
+    if (options?.saveStorageStatePath) {
       try {
-        const { writeFileSync } = await import('node:fs');
-        const { resolve, dirname } = await import('node:path');
-        const { mkdirSync } = await import('node:fs');
-        const outPath = resolve(options.saveStorageStatePath);
+        const outPath = resolvePath(options.saveStorageStatePath);
         mkdirSync(dirname(outPath), { recursive: true });
         const state = await context.storageState();
         writeFileSync(outPath, JSON.stringify(state, null, 2), { mode: 0o600 });

@@ -574,7 +574,6 @@ function detectPlatform(): { os: string; distro: string } {
 
   // Detect Linux distro
   try {
-    const { readFileSync } = require('node:fs');
     const osRelease = readFileSync('/etc/os-release', 'utf-8');
     const idMatch = osRelease.match(/^ID=(.+)$/m);
     const id = idMatch ? idMatch[1].replace(/"/g, '').toLowerCase() : '';
@@ -733,7 +732,7 @@ async function ensureBrowserInstalled(): Promise<void> {
     }
 
     process.exitCode = 1;
-    throw new Error('Browser not available');
+    throw new Error('Browser not available', { cause: err });
   }
 }
 

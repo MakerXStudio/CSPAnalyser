@@ -112,7 +112,7 @@ export function startMitmProxy(options: MitmProxyOptions): Promise<MitmProxyInst
       const upstream = ctx.serverToProxyResponse;
       if (upstream) {
         // Skip CSP injection for non-target origins (e.g., auth redirects)
-        if (targetOrigin && ctx.clientToProxyRequest) {
+        if (targetOrigin) {
           const host = ctx.clientToProxyRequest.headers.host;
           if (host) {
             try {
