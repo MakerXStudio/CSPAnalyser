@@ -9,14 +9,15 @@ import type { Violation } from '../src/types.js';
 // ── Helper to create minimal violation objects ─────────────────────────
 
 function makeViolation(overrides: Partial<Violation> & { effectiveDirective: string; blockedUri: string }): Violation {
+  const { effectiveDirective, blockedUri, ...rest } = overrides;
   return {
     id: 'v-1',
     sessionId: 's-1',
     pageId: null,
     documentUri: 'https://example.com',
-    blockedUri: '',
-    violatedDirective: overrides.effectiveDirective,
-    effectiveDirective: '',
+    blockedUri,
+    violatedDirective: effectiveDirective,
+    effectiveDirective,
     sourceFile: null,
     lineNumber: null,
     columnNumber: null,
@@ -25,7 +26,7 @@ function makeViolation(overrides: Partial<Violation> & { effectiveDirective: str
     capturedVia: 'dom_event',
     rawReport: '{}',
     createdAt: '2026-01-01T00:00:00Z',
-    ...overrides,
+    ...rest,
   };
 }
 
