@@ -210,8 +210,9 @@ describe('setupCspInjection', () => {
     );
 
     // Original CSP should be stripped
-    const fulfillCall = vi.mocked(mockRoute.fulfill).mock.calls[0]![0];
-    expect(fulfillCall.headers!['content-security-policy']).toBeUndefined();
+    const fulfillCall = vi.mocked(mockRoute.fulfill).mock.calls[0]?.[0];
+    expect(fulfillCall).toBeDefined();
+    expect(fulfillCall?.headers?.['content-security-policy']).toBeUndefined();
   });
 
   it('passes token through to transformed headers', async () => {
@@ -224,11 +225,12 @@ describe('setupCspInjection', () => {
     const handler = routes[0]!.handler;
     await handler(mockRoute);
 
-    const fulfillCall = vi.mocked(mockRoute.fulfill).mock.calls[0]![0];
-    const csp = fulfillCall.headers!['content-security-policy-report-only'];
+    const fulfillCall = vi.mocked(mockRoute.fulfill).mock.calls[0]?.[0];
+    expect(fulfillCall).toBeDefined();
+    const csp = fulfillCall?.headers?.['content-security-policy-report-only'];
     expect(csp).toContain(`/csp-report/${token}`);
 
-    const reportTo = JSON.parse(fulfillCall.headers!['report-to']!);
+    const reportTo = JSON.parse(fulfillCall?.headers?.['report-to'] ?? '');
     expect(reportTo.endpoints[0].url).toContain(`/reports/${token}`);
   });
 
