@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { startReportServer } from '../src/report-server.js';
 import { createDatabase } from '../src/db/repository.js';
 import { getViolations } from '../src/db/repository.js';

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { initializeDatabase } from '../src/db/schema.js';
-import { getSession, getViolations, insertViolation } from '../src/db/repository.js';
-import { runSession, runInteractiveSession, type SessionDeps } from '../src/session-manager.js';
-import type { SessionConfig, CrawlConfig } from '../src/types.js';
+import { getSession, insertViolation } from '../src/db/repository.js';
+import { runSession, type SessionDeps } from '../src/session-manager.js';
+import type { SessionConfig } from '../src/types.js';
 import type { CrawlCallbacks, CrawlResult } from '../src/crawler.js';
 
 // ── Mock factories ───────────────────────────────────────────────────────
@@ -404,7 +404,6 @@ describe('runSession', () => {
 
   it('cleans up on browser launch failure', async () => {
     const config: SessionConfig = { targetUrl: 'http://localhost:3000' };
-    const reportClose = vi.fn().mockResolvedValue(undefined);
     const deps = createTestDeps({
       launchBrowser: vi.fn().mockRejectedValue(new Error('Browser not found')),
     });
