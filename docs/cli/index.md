@@ -15,6 +15,7 @@ Usage:
   csp-analyser export <session-id>       Export policy in a format
   csp-analyser diff <id-a> <id-b>        Compare two sessions
   csp-analyser score <session-id>        Score policy against best practices
+  csp-analyser sessions                  List all analysis sessions
   csp-analyser permissions <session-id>  Show Permissions-Policy headers
 
 Options:
@@ -25,6 +26,7 @@ Options:
                          | cloudflare-pages | json (default: header)
   --mode <mode>          local | mitm (default: auto-detect)
   --storage-state <path> Playwright storage state file for auth
+  --save-storage-state <path>  Export session state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
   --report-only          Generate report-only policy
   --no-color             Disable colored output (also respects NO_COLOR env)
@@ -43,6 +45,7 @@ Options:
 | [`export`](./export) | `<session-id>` | Export a policy in a specific format |
 | [`diff`](./diff) | `<id-a> <id-b>` | Compare policies and violations between two sessions |
 | [`score`](./score) | `<session-id>` | Score a policy against security best practices |
+| [`sessions`](./sessions) | -- | List all analysis sessions with ID, status, timestamp, and violation count |
 | [`permissions`](./permissions) | `<session-id>` | Show Permissions-Policy headers captured during crawling |
 
 ## Global options
