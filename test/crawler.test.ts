@@ -19,16 +19,6 @@ const DEFAULT_CRAWL_CONFIG: CrawlConfig = {
 
 // ── Mock helpers ──────────────────────────────────────────────────────────
 
-function createMockPage(url: string, links: string[] = [], status = 200): Page {
-  const page = {
-    goto: vi.fn().mockResolvedValue({ status: () => status }),
-    $$eval: vi.fn().mockResolvedValue(links),
-    close: vi.fn().mockResolvedValue(undefined),
-    url: vi.fn().mockReturnValue(url),
-  } as unknown as Page;
-  return page;
-}
-
 function createMockContext(pagesByUrl: Record<string, { links?: string[]; status?: number; error?: Error }>): BrowserContext {
   const context = {
     newPage: vi.fn().mockImplementation(() => {
