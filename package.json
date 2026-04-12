@@ -40,7 +40,10 @@
     "format:check": "prettier --check 'src/**/*.ts'",
     "prepublishOnly": "npm run typecheck && npm run test && npm run build",
     "start": "node dist/mcp-server.js",
-    "cli": "node dist/cli.js"
+    "cli": "node dist/cli.js",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
@@ -60,6 +63,7 @@
     "prettier": "^3.8.2",
     "typescript": "latest",
     "typescript-eslint": "^8.58.1",
+    "vitepress": "^1.6.4",
     "vitest": "latest"
   }
 }

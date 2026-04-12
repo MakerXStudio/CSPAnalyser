@@ -1,0 +1,114 @@
+import { defineConfig } from 'vitepress'
+
+export default defineConfig({
+  title: 'CSP Analyser',
+  description:
+    'Generate production-ready Content Security Policy headers by crawling websites',
+
+  ignoreDeadLinks: true,
+
+  head: [
+    ['meta', { name: 'theme-color', content: '#5b7ee5' }],
+    ['meta', { name: 'og:type', content: 'website' }],
+    ['meta', { name: 'og:title', content: 'CSP Analyser' }],
+    [
+      'meta',
+      {
+        name: 'og:description',
+        content:
+          'Generate production-ready Content Security Policy headers by crawling websites',
+      },
+    ],
+  ],
+
+  themeConfig: {
+    nav: [
+      { text: 'Getting Started', link: '/getting-started/' },
+      { text: 'CLI Reference', link: '/cli/' },
+      { text: 'MCP Server', link: '/mcp/' },
+      { text: 'Guides', link: '/guides/' },
+    ],
+
+    sidebar: {
+      '/getting-started/': [
+        {
+          text: 'Getting Started',
+          items: [
+            { text: 'Installation & Setup', link: '/getting-started/' },
+            { text: 'Quick Start', link: '/getting-started/quick-start' },
+          ],
+        },
+      ],
+      '/cli/': [
+        {
+          text: 'CLI Reference',
+          items: [
+            { text: 'Overview', link: '/cli/' },
+            { text: 'crawl', link: '/cli/crawl' },
+            { text: 'interactive', link: '/cli/interactive' },
+            { text: 'generate', link: '/cli/generate' },
+            { text: 'export', link: '/cli/export' },
+            { text: 'diff', link: '/cli/diff' },
+            { text: 'score', link: '/cli/score' },
+            { text: 'permissions', link: '/cli/permissions' },
+            { text: 'setup', link: '/cli/setup' },
+          ],
+        },
+      ],
+      '/guides/': [
+        {
+          text: 'Guides',
+          items: [
+            { text: 'Overview', link: '/guides/' },
+          ],
+        },
+      ],
+      '/mcp/': [
+        {
+          text: 'MCP Server',
+          items: [
+            { text: 'Overview', link: '/mcp/' },
+          ],
+        },
+      ],
+      '/architecture/': [
+        {
+          text: 'Architecture',
+          items: [
+            { text: 'Overview', link: '/architecture/' },
+          ],
+        },
+      ],
+      '/reference/': [
+        {
+          text: 'Reference',
+          items: [
+            { text: 'Overview', link: '/reference/' },
+          ],
+        },
+      ],
+    },
+
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/MakerX/csp-analyser' },
+    ],
+
+    editLink: {
+      pattern:
+        'https://github.com/MakerX/csp-analyser/edit/main/docs/:path',
+      text: 'Edit this page on GitHub',
+    },
+
+    search: {
+      provider: 'local',
+      options: {
+        detailedView: true,
+      },
+    },
+
+    footer: {
+      message: 'Released under the MIT License.',
+      copyright: 'Copyright MakerX',
+    },
+  },
+})

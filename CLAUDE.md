@@ -73,5 +73,6 @@ After completing each phase of work:
 
 ## Documentation
 
-- `docs/prd.md` — Product requirements document
-- `docs/adr/` — Architecture decision records (CSP injection strategy, tech stack, violation capture)
+- `internal-docs/prd.md` — Product requirements document (internal, not published)
+- `internal-docs/adr/` — Architecture decision records (internal, not published)
+- `docs/` — VitePress documentation site (published)
