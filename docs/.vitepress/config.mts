@@ -51,6 +51,7 @@ export default defineConfig({
             { text: 'diff', link: '/cli/diff' },
             { text: 'score', link: '/cli/score' },
             { text: 'permissions', link: '/cli/permissions' },
+            { text: 'sessions', link: '/cli/sessions' },
             { text: 'setup', link: '/cli/setup' },
           ],
         },

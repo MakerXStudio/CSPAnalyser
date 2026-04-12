@@ -9,6 +9,8 @@ import { validateTargetUrl } from './utils/url-utils.js';
 import {
   createDatabase,
   getSession,
+  listSessions,
+  getViolations,
   getViolationSummary,
   getPermissionsPolicies,
 } from './db/repository.js';
@@ -50,6 +52,7 @@ export type Command =
   | 'diff'
   | 'score'
   | 'permissions'
+  | 'sessions'
   | 'setup'
   | 'help'
   | 'version';
@@ -96,6 +99,7 @@ Usage:
   csp-analyser export <session-id>       Export policy in a format
   csp-analyser diff <id-a> <id-b>        Compare two sessions
   csp-analyser score <session-id>        Score policy against best practices
+  csp-analyser sessions                  List all analysis sessions
   csp-analyser permissions <session-id>  Show Permissions-Policy headers
 
 Options:
@@ -172,16 +176,17 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'diff',
       'score',
       'permissions',
+      'sessions',
       'setup',
     ].includes(command)
   ) {
     throw new Error(`Unknown command: ${command ?? '(none)'}. Run with --help for usage.`);
   }
 
-  // setup takes no positional args
-  if (command === 'setup') {
+  // setup and sessions take no positional args
+  if (command === 'setup' || command === 'sessions') {
     return {
-      command: 'setup',
+      command: command as Command,
       depth: 1,
       maxPages: 10,
       strictness: 'moderate',
@@ -529,6 +534,32 @@ async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function runSessionsCommand(): Promise<void> {
+  const db = initDb();
+  try {
+    const sessions = listSessions(db);
+    if (sessions.length === 0) {
+      process.stderr.write('No sessions found.\n');
+      return;
+    }
+
+    const lines: string[] = [];
+    for (const s of sessions) {
+      const date = new Date(s.createdAt).toLocaleString();
+      const violations = getViolations(db, s.id);
+      const statusColor =
+        s.status === 'complete' ? cyan : s.status === 'failed' ? red : (v: string) => v;
+      lines.push(
+        `${s.id}  ${statusColor(s.status.padEnd(10))}  ${date.padEnd(24)}  ${String(violations.length).padStart(5)} violations  ${s.targetUrl}`,
+      );
+    }
+
+    process.stdout.write(lines.join('\n') + '\n');
+  } finally {
+    db.close();
+  }
+}
+
 // ── Setup & browser check ──────────────────────────────────────────────
 
 /**
@@ -747,6 +778,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       return runDiffCommand(args);
     case 'score':
       return runScoreCommand(args);
+    case 'sessions':
+      return runSessionsCommand();
     case 'permissions':
       return runPermissionsCommand(args);
   }
