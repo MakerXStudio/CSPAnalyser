@@ -79,17 +79,6 @@ export default defineConfig({
           ],
         },
       ],
-      '/architecture/': [
-        {
-          text: 'Architecture',
-          items: [
-            { text: 'How It Works', link: '/architecture/' },
-            { text: 'Technology Stack', link: '/architecture/adr/technology-stack' },
-            { text: 'CSP Injection Strategy', link: '/architecture/adr/csp-injection' },
-            { text: 'Violation Capture', link: '/architecture/adr/violation-capture' },
-          ],
-        },
-      ],
       '/reference/': [
         {
           text: 'Reference',
