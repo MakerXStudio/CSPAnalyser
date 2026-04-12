@@ -31,16 +31,13 @@ import {
 } from '../src/db/repository.js';
 import { startReportServer } from '../src/report-server.js';
 import {
-  transformResponseHeaders,
   setupCspInjection,
   type PlaywrightPage,
   type PlaywrightRoute,
-  type PlaywrightResponse,
 } from '../src/csp-injector.js';
 import {
   extractOrigin,
   isSameOrigin,
-  isLocalhost,
   shouldUseMitmMode,
   generateWildcardDomain,
   normalizeBlockedUri,
@@ -49,8 +46,7 @@ import { parseCspReport, parseReportingApiReport, parseDomViolation } from '../s
 import { generatePolicyFromViolations } from '../src/policy-generator.js';
 import { optimizePolicy } from '../src/policy-optimizer.js';
 import { formatPolicy, directivesToString } from '../src/policy-formatter.js';
-import type { Violation, SessionConfig } from '../src/types.js';
-import type { PolicyGeneratorOptions } from '../src/policy-generator.js';
+import type { Violation } from '../src/types.js';
 import type { SessionDeps } from '../src/session-manager.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -348,7 +344,8 @@ describe('report-parser with special characters', () => {
       sample: '<script>alert("XSS & injection")</script>',
     };
     const result = parseDomViolation(event, 'sess-1', 'page-1');
-    expect(result.sample).toBe('<script>alert("XSS & injection")</script>');
+    expect(result).not.toBeNull();
+    expect(result?.sample).toBe('<script>alert("XSS & injection")</script>');
   });
 });
 
