@@ -60,6 +60,11 @@ export default defineConfig({
           text: 'Guides',
           items: [
             { text: 'Overview', link: '/guides/' },
+            { text: 'Authentication', link: '/guides/authentication' },
+            { text: 'Export Formats', link: '/guides/export-formats' },
+            { text: 'Strictness Levels', link: '/guides/strictness' },
+            { text: 'Understanding Scores', link: '/guides/scoring' },
+            { text: 'CI/CD Integration', link: '/guides/ci-integration' },
           ],
         },
       ],
@@ -68,6 +73,8 @@ export default defineConfig({
           text: 'MCP Server',
           items: [
             { text: 'Overview', link: '/mcp/' },
+            { text: 'Configuration', link: '/mcp/configuration' },
+            { text: 'Tools Reference', link: '/mcp/tools' },
           ],
         },
       ],
@@ -75,7 +82,10 @@ export default defineConfig({
         {
           text: 'Architecture',
           items: [
-            { text: 'Overview', link: '/architecture/' },
+            { text: 'How It Works', link: '/architecture/' },
+            { text: 'Technology Stack', link: '/architecture/adr/technology-stack' },
+            { text: 'CSP Injection Strategy', link: '/architecture/adr/csp-injection' },
+            { text: 'Violation Capture', link: '/architecture/adr/violation-capture' },
           ],
         },
       ],
@@ -84,6 +94,9 @@ export default defineConfig({
           text: 'Reference',
           items: [
             { text: 'Overview', link: '/reference/' },
+            { text: 'All CLI Options', link: '/reference/options' },
+            { text: 'CSP Directives', link: '/reference/csp-directives' },
+            { text: 'Troubleshooting', link: '/reference/troubleshooting' },
           ],
         },
       ],
