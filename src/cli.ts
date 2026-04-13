@@ -83,6 +83,8 @@ const VALID_FORMATS: ReadonlySet<string> = new Set([
   'apache',
   'cloudflare',
   'cloudflare-pages',
+  'azure-frontdoor',
+  'helmet',
   'json',
 ]);
 // ── Help text ───────────────────────────────────────────────────────────
@@ -104,7 +106,8 @@ Options:
   --depth <n>            Crawl depth (default: 1, crawl only)
   --max-pages <n>        Max pages to visit (default: 10, crawl only)
   --strictness <level>   strict | moderate | permissive (default: moderate)
-  --format <fmt>         header | meta | nginx | apache | cloudflare | cloudflare-pages | json (default: header)
+  --format <fmt>         header | meta | nginx | apache | cloudflare | cloudflare-pages
+                         | azure-frontdoor | helmet | json (default: header)
   --storage-state <path> Playwright storage state file for auth
   --save-storage-state <path>  Export session cookies/state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
@@ -223,7 +226,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const format = (values.format as string | undefined) ?? 'header';
   if (!VALID_FORMATS.has(format)) {
     throw new Error(
-      `Invalid format: "${format}". Must be header, meta, nginx, apache, cloudflare, cloudflare-pages, or json.`,
+      `Invalid format: "${format}". Must be header, meta, nginx, apache, cloudflare, cloudflare-pages, azure-frontdoor, helmet, or json.`,
     );
   }
 

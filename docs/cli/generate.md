@@ -13,7 +13,7 @@ csp-analyser generate <session-id> [options]
 | Option | Default | Description |
 |---|---|---|
 | `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
-| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, or `json`. |
+| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
 | `--report-only` | `false` | Generate a report-only header. |
 
 ## When to use

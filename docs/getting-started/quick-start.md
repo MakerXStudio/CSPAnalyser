@@ -73,7 +73,7 @@ csp-analyser crawl https://example.com --format json
 
 :::
 
-All seven formats: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `json`.
+All nine formats: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, `json`.
 
 ## Step 4: Score the policy
 

@@ -23,7 +23,7 @@ Options:
   --max-pages <n>        Max pages to visit (default: 10, crawl only)
   --strictness <level>   strict | moderate | permissive (default: moderate)
   --format <fmt>         header | meta | nginx | apache | cloudflare
-                         | cloudflare-pages | json (default: header)
+                         | cloudflare-pages | azure-frontdoor | helmet | json (default: header)
   --storage-state <path> Playwright storage state file for auth
   --save-storage-state <path>  Export session state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)

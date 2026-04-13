@@ -218,3 +218,63 @@ describe('formatPolicy — json', () => {
     expect(parsed.policyString).toBe('');
   });
 });
+
+// ── Azure Front Door (Bicep) ──────────────────────────────────────────
+
+describe('azure-frontdoor format', () => {
+  it('generates Bicep resource with CSP header action', () => {
+    const result = formatPolicy(
+      { 'default-src': ["'self'"], 'script-src': ["'self'", 'https://cdn.example.com'] },
+      'azure-frontdoor',
+    );
+    expect(result).toContain("name: 'setCspHeader'");
+    expect(result).toContain("headerAction: 'Overwrite'");
+    expect(result).toContain("headerName: 'Content-Security-Policy'");
+    expect(result).toContain("default-src ''self''; script-src ''self'' https://cdn.example.com");
+    expect(result).toContain('Microsoft.Cdn/profiles/ruleSets/rules@2024-09-01');
+  });
+
+  it('uses report-only header name when requested', () => {
+    const result = formatPolicy({ 'default-src': ["'self'"] }, 'azure-frontdoor', true);
+    expect(result).toContain("headerName: 'Content-Security-Policy-Report-Only'");
+  });
+
+  it('escapes single quotes in policy values', () => {
+    const result = formatPolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, 'azure-frontdoor');
+    expect(result).toContain("''self'' ''unsafe-inline''");
+  });
+});
+
+// ── Helmet ────────────────────────────────────────────────────────────
+
+describe('helmet format', () => {
+  it('generates Helmet contentSecurityPolicy config', () => {
+    const result = formatPolicy(
+      { 'default-src': ["'self'"], 'script-src': ["'self'", 'https://cdn.example.com'] },
+      'helmet',
+    );
+    expect(result).toContain('helmet.contentSecurityPolicy');
+    expect(result).toContain('defaultSrc: ["\'self\'"],');
+    expect(result).toContain('scriptSrc: ["\'self\'", "https://cdn.example.com"],');
+  });
+
+  it('converts kebab-case directives to camelCase', () => {
+    const result = formatPolicy(
+      { 'script-src-elem': ["'self'"], 'base-uri': ["'self'"], 'form-action': ["'self'"] },
+      'helmet',
+    );
+    expect(result).toContain('scriptSrcElem:');
+    expect(result).toContain('baseUri:');
+    expect(result).toContain('formAction:');
+  });
+
+  it('adds reportOnly when requested', () => {
+    const result = formatPolicy({ 'default-src': ["'self'"] }, 'helmet', true);
+    expect(result).toContain('reportOnly: true,');
+  });
+
+  it('omits reportOnly when not requested', () => {
+    const result = formatPolicy({ 'default-src': ["'self'"] }, 'helmet', false);
+    expect(result).not.toContain('reportOnly');
+  });
+});

@@ -113,7 +113,7 @@ Export a CSP policy in a deployment-ready format.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|:--------:|---------|-------------|
 | `sessionId` | `string` (UUID) | Yes | -- | The session ID |
-| `format` | `"header" \| "meta" \| "nginx" \| "apache" \| "cloudflare" \| "cloudflare-pages" \| "json"` | Yes | -- | Output format |
+| `format` | `"header" \| "meta" \| "nginx" \| "apache" \| "cloudflare" \| "cloudflare-pages" \| "azure-frontdoor" \| "helmet" \| "json"` | Yes | -- | Output format |
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
 | `isReportOnly` | `boolean` | No | `false` | Use `Content-Security-Policy-Report-Only` header |
 

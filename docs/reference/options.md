@@ -25,7 +25,7 @@ description: Complete reference of all CLI flags and commands
 | `--depth <n>` | integer (0+) | `1` | `crawl` | Crawl depth. `0` = single page, `1` = target + linked pages, etc. |
 | `--max-pages <n>` | integer (1+) | `10` | `crawl` | Maximum number of pages to visit during crawl |
 | `--strictness <level>` | `strict` \| `moderate` \| `permissive` | `moderate` | `crawl`, `generate`, `export`, `diff`, `score` | Controls how specific source expressions are. See [strictness levels](/guides/strictness). |
-| `--format <fmt>` | `header` \| `meta` \| `nginx` \| `apache` \| `cloudflare` \| `cloudflare-pages` \| `json` | `header` | `crawl`, `generate`, `export` | Output format for the generated policy. See [export formats](/guides/export-formats). |
+| `--format <fmt>` | `header` \| `meta` \| `nginx` \| `apache` \| `cloudflare` \| `cloudflare-pages` \| `azure-frontdoor` \| `helmet` \| `json` | `header` | `crawl`, `generate`, `export` | Output format for the generated policy. See [export formats](/guides/export-formats). |
 | `--storage-state <path>` | string (file path) | -- | `crawl`, `interactive` | Path to a Playwright storage state JSON file for authenticated sessions. Must have `.json` extension. |
 | `--save-storage-state <path>` | string (file path) | -- | `interactive` | Export browser cookies and storage state to a JSON file when the session ends. See [authentication guide](/guides/authentication). |
 | `--violation-limit <n>` | integer (0+) | `10000` | `crawl`, `interactive` | Maximum violations to accept per session. `0` for unlimited. |

@@ -15,7 +15,7 @@ csp-analyser crawl <url> [options]
 | `--depth <n>` | `1` | How many links deep to follow from the start URL. `0` means visit only the start URL. |
 | `--max-pages <n>` | `10` | Maximum number of pages to visit before stopping. Must be a positive integer. |
 | `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
-| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, or `json`. |
+| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
 | `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for authenticated crawling. |
 | `--violation-limit <n>` | `10000` | Maximum violations to capture per session. Set to `0` for unlimited. |
 | `--report-only` | `false` | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one. |

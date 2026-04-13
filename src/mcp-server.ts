@@ -276,11 +276,11 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool(
     'export_policy',
     {
-      description: 'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, json)',
+      description: 'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, azure-frontdoor, helmet, json)',
       inputSchema: {
         sessionId: z.uuid().describe('The session ID'),
         format: z
-          .enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'cloudflare-pages', 'json'])
+          .enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'cloudflare-pages', 'azure-frontdoor', 'helmet', 'json'])
           .describe('Output format'),
         strictness: z
           .enum(['strict', 'moderate', 'permissive'])

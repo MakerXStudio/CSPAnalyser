@@ -13,7 +13,7 @@ csp-analyser interactive <url> [options]
 | Option | Default | Description |
 |---|---|---|
 | `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
-| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, or `json`. |
+| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
 | `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for pre-authenticated sessions. |
 | `--save-storage-state <path>` | -- | Export cookies and storage state to a JSON file when the browser closes. |
 | `--violation-limit <n>` | `10000` | Maximum violations to capture. Set to `0` for unlimited. |

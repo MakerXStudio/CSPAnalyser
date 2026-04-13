@@ -21,6 +21,8 @@ export type ExportFormat =
   | 'apache'
   | 'cloudflare'
   | 'cloudflare-pages'
+  | 'azure-frontdoor'
+  | 'helmet'
   | 'json';
 
 // ── Config types ───────────────────────────────────────────────────────────
