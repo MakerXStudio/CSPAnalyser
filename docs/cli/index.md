@@ -9,6 +9,7 @@ csp-analyser - Generate Content Security Policy headers by crawling websites
 
 Usage:
   csp-analyser setup                     Install Playwright browser + dependencies
+  csp-analyser start                     Run the MCP server over stdio (for AI agents)
   csp-analyser crawl <url>               Headless auto-crawl
   csp-analyser interactive <url>         Headed manual browsing
   csp-analyser generate [session-id]     Regenerate policy (defaults to latest session)
@@ -44,6 +45,7 @@ Options:
 | Command | Argument | Description |
 |---|---|---|
 | [`setup`](./setup) | -- | Install the Playwright browser and verify it launches |
+| [`start`](./start) | -- | Run the MCP server over stdio (for AI coding agents) |
 | [`crawl`](./crawl) | `<url>` | Headlessly crawl a site and generate a CSP policy |
 | [`interactive`](./interactive) | `<url>` | Open a headed browser for manual navigation |
 | [`generate`](./generate) | `[session-id]` | Regenerate a policy from an existing session |

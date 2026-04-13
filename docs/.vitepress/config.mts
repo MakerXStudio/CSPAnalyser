@@ -59,6 +59,7 @@ export default defineConfig({
             { text: 'permissions', link: '/cli/permissions' },
             { text: 'sessions', link: '/cli/sessions' },
             { text: 'setup', link: '/cli/setup' },
+            { text: 'start', link: '/cli/start' },
             { text: 'hash-static', link: '/cli/hash-static' },
           ],
         },
