@@ -149,6 +149,10 @@ vite.config.ts.timestamp-*
 # CSP Analyser data
 .csp-analyser/
 
+# Storage state files (contain session cookies/tokens — never commit)
+auth.json
+*.storage-state.json
+
 # Test temp directories
 .tmp-auth-ctx-test-*
 

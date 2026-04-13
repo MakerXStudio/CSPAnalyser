@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { validateDbPath, ensureDataDirectory, setSecureFilePermissions, detectProjectName } from '../../src/utils/file-utils.js';
+import {
+  validateDbPath,
+  ensureDataDirectory,
+  setSecureFilePermissions,
+  detectProjectName,
+  resolveProjectName,
+} from '../../src/utils/file-utils.js';
 
 describe('validateDbPath', () => {
   it('allows :memory: paths', () => {
@@ -128,24 +134,28 @@ describe('detectProjectName', () => {
     expect(detectProjectName(nested)).toBe('root-app');
   });
 
-  it('returns null when no package.json exists', () => {
-    // tmpDir has no package.json and we stop at filesystem root
-    expect(detectProjectName(tmpDir)).toBeNull();
+  it('falls back to directory basename when no package.json exists', () => {
+    // tmpDir has no package.json — falls back to basename of the directory
+    const basename = path.basename(tmpDir);
+    expect(detectProjectName(tmpDir)).toBe(basename);
   });
 
-  it('returns null when package.json has no name field', () => {
+  it('falls back to directory basename when package.json has no name field', () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ version: '1.0.0' }));
-    expect(detectProjectName(tmpDir)).toBeNull();
+    const basename = path.basename(tmpDir);
+    expect(detectProjectName(tmpDir)).toBe(basename);
   });
 
-  it('returns null when package.json has empty name', () => {
+  it('falls back to directory basename when package.json has empty name', () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: '' }));
-    expect(detectProjectName(tmpDir)).toBeNull();
+    const basename = path.basename(tmpDir);
+    expect(detectProjectName(tmpDir)).toBe(basename);
   });
 
-  it('returns null when package.json is invalid JSON', () => {
+  it('falls back to directory basename when package.json is invalid JSON', () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), 'not json');
-    expect(detectProjectName(tmpDir)).toBeNull();
+    const basename = path.basename(tmpDir);
+    expect(detectProjectName(tmpDir)).toBe(basename);
   });
 
   it('finds nearest package.json (child over parent)', () => {
@@ -154,5 +164,52 @@ describe('detectProjectName', () => {
     fs.mkdirSync(child, { recursive: true });
     fs.writeFileSync(path.join(child, 'package.json'), JSON.stringify({ name: 'child' }));
     expect(detectProjectName(child)).toBe('child');
+  });
+});
+
+describe('resolveProjectName', () => {
+  const originalEnv = process.env['CSP_ANALYSER_PROJECT'];
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env['CSP_ANALYSER_PROJECT'] = originalEnv;
+    } else {
+      delete process.env['CSP_ANALYSER_PROJECT'];
+    }
+  });
+
+  it('returns explicit project when provided', () => {
+    expect(resolveProjectName('my-explicit-project')).toBe('my-explicit-project');
+  });
+
+  it('returns env var when no explicit project', () => {
+    process.env['CSP_ANALYSER_PROJECT'] = 'env-project';
+    expect(resolveProjectName()).toBe('env-project');
+  });
+
+  it('explicit project takes precedence over env var', () => {
+    process.env['CSP_ANALYSER_PROJECT'] = 'env-project';
+    expect(resolveProjectName('explicit')).toBe('explicit');
+  });
+
+  it('falls back to detectProjectName when no explicit or env var', () => {
+    delete process.env['CSP_ANALYSER_PROJECT'];
+    // Running from the repo directory, detectProjectName returns the package.json name
+    const result = resolveProjectName();
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('ignores empty string explicit project', () => {
+    process.env['CSP_ANALYSER_PROJECT'] = 'env-project';
+    expect(resolveProjectName('')).toBe('env-project');
+  });
+
+  it('ignores empty string env var', () => {
+    process.env['CSP_ANALYSER_PROJECT'] = '';
+    const result = resolveProjectName();
+    // Falls through to detectProjectName
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
   });
 });

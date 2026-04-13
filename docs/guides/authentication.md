@@ -20,9 +20,10 @@ Use the `interactive` command with `--save-storage-state` to log in manually and
 csp-analyser interactive https://app.example.com --save-storage-state auth.json
 ```
 
-When you close the browser, the session's cookies, localStorage, and sessionStorage are saved to `auth.json` with secure file permissions (0600). You can then reuse this file for headless crawls.
+When you close the browser, the session's cookies, localStorage, and sessionStorage are saved to `auth.json` with secure file permissions (0600). Permissions are enforced even when overwriting an existing file, and symlink targets are rejected. You can then reuse this file for headless crawls.
 
 ::: tip Workflow: interactive login → headless crawl
+
 ```bash
 # Step 1: Log in interactively and save the session
 csp-analyser interactive https://app.example.com --save-storage-state auth.json
@@ -30,6 +31,7 @@ csp-analyser interactive https://app.example.com --save-storage-state auth.json
 # Step 2: Use the saved session for a deep headless crawl
 csp-analyser crawl https://app.example.com --storage-state auth.json --depth 3 --max-pages 50
 ```
+
 This is the recommended workflow for authenticated sites. Log in once interactively, then run repeatable headless crawls with the saved state.
 :::
 
@@ -104,11 +106,11 @@ Manual login requires headed mode. It cannot be used in headless environments (C
 
 ## Choosing an auth pattern
 
-| Pattern | Best for | Repeatable | CI-friendly |
-|---------|----------|:----------:|:-----------:|
-| Storage state | Automated crawls, CI pipelines | Yes | Yes |
-| Cookie injection | MCP agent workflows | Yes | Yes |
-| Manual login | Complex auth flows, initial exploration | No | No |
+| Pattern          | Best for                                | Repeatable | CI-friendly |
+| ---------------- | --------------------------------------- | :--------: | :---------: |
+| Storage state    | Automated crawls, CI pipelines          |    Yes     |     Yes     |
+| Cookie injection | MCP agent workflows                     |    Yes     |     Yes     |
+| Manual login     | Complex auth flows, initial exploration |     No     |     No      |
 
 ## Security notes
 

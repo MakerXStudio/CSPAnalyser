@@ -119,9 +119,10 @@ export function setSecureFilePermissions(filePath: string): void {
 
 /**
  * Walks up from startDir looking for the nearest package.json with a `name` field.
- * Returns the name if found, or null if no package.json exists in any ancestor.
+ * If no package.json is found, falls back to path.basename(startDir), then to 'default'.
+ * Always returns a non-empty string — never returns null.
  */
-export function detectProjectName(startDir: string = process.cwd()): string | null {
+export function detectProjectName(startDir: string = process.cwd()): string {
   let dir = path.resolve(startDir);
   const root = path.parse(dir).root;
 
@@ -142,5 +143,25 @@ export function detectProjectName(startDir: string = process.cwd()): string | nu
     dir = parent;
   }
 
-  return null;
+  // Fallback: use directory basename, then 'default'
+  const basename = path.basename(path.resolve(startDir));
+  return basename.length > 0 ? basename : 'default';
+}
+
+/**
+ * Resolves the project name for the current invocation.
+ * Priority: explicit override → CSP_ANALYSER_PROJECT env var → auto-detection.
+ * Always returns a non-empty string.
+ */
+export function resolveProjectName(explicitProject?: string): string {
+  if (explicitProject && explicitProject.length > 0) {
+    return explicitProject;
+  }
+
+  const envProject = process.env['CSP_ANALYSER_PROJECT'];
+  if (envProject && envProject.length > 0) {
+    return envProject;
+  }
+
+  return detectProjectName();
 }

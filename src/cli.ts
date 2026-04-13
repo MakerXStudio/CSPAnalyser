@@ -11,6 +11,7 @@ import {
   getSession,
   getLatestSession,
   listSessions,
+  listSessionsByProject,
   getViolations,
   getViolationSummary,
   getPermissionsPolicies,
@@ -28,7 +29,7 @@ import {
   formatSummaryTable,
 } from './utils/terminal.js';
 
-import { getDataDir, detectProjectName } from './utils/file-utils.js';
+import { getDataDir, resolveProjectName } from './utils/file-utils.js';
 import { compareSessions, formatDiff } from './policy-diff.js';
 import { scoreCspPolicy, formatScore } from './policy-scorer.js';
 import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
@@ -87,6 +88,10 @@ export interface ParsedArgs {
   extraStyleElem?: string[];
   extraStyleAttr?: string[];
   extraScriptAttr?: string[];
+  /** Explicit project name override (--project flag) */
+  project?: string;
+  /** Show sessions from all projects (--all flag, sessions command only) */
+  all: boolean;
 }
 
 // ── Valid values ─────────────────────────────────────────────────────────
@@ -135,6 +140,8 @@ Options:
   --hash                 Remove 'unsafe-inline' when hash sources are available
   --strip-unsafe-eval    Remove 'unsafe-eval' from the generated policy
   --report-only          Generate report-only policy
+  --project <name>       Override auto-detected project name
+  --all                  Show sessions from all projects (sessions command)
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help
   --version, -v          Show version
@@ -165,6 +172,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       hash: false,
       stripUnsafeEval: false,
       inject: false,
+      all: false,
     };
   }
   if (argv.includes('--version') || argv.includes('-v')) {
@@ -180,6 +188,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       hash: false,
       stripUnsafeEval: false,
       inject: false,
+      all: false,
     };
   }
 
@@ -199,6 +208,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'strip-unsafe-eval': { type: 'boolean', default: false },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
+      project: { type: 'string' },
+      all: { type: 'boolean', default: false },
       inject: { type: 'boolean', default: false },
       'extra-script-elem': { type: 'string', multiple: true },
       'extra-style-elem': { type: 'string', multiple: true },
@@ -234,7 +245,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     throw new Error(`Unknown command: ${command ?? '(none)'}. Run with --help for usage.`);
   }
 
-  // setup, sessions, and start take no positional args
+  // setup and start take no positional args; sessions may take --all
   if (command === 'setup' || command === 'sessions' || command === 'start') {
     return {
       command: command as Command,
@@ -248,6 +259,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       hash: false,
       stripUnsafeEval: false,
       inject: false,
+      all: (values.all as boolean | undefined) ?? false,
+      project: values.project as string | undefined,
     };
   }
 
@@ -306,10 +319,14 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     format: format as ExportFormat,
     reportOnly: (values['report-only'] as boolean | undefined) ?? false,
     strictDynamic: (values['strict-dynamic'] as boolean | undefined) ?? false,
-    nonce: ((values.nonce as boolean | undefined) ?? false) || ((values['strict-dynamic'] as boolean | undefined) ?? false),
+    nonce:
+      ((values.nonce as boolean | undefined) ?? false) ||
+      ((values['strict-dynamic'] as boolean | undefined) ?? false),
     hash: (values.hash as boolean | undefined) ?? false,
     stripUnsafeEval: (values['strip-unsafe-eval'] as boolean | undefined) ?? false,
     inject: (values.inject as boolean | undefined) ?? false,
+    all: (values.all as boolean | undefined) ?? false,
+    project: values.project as string | undefined,
   };
 
   if (command === 'hash-static') {
@@ -330,7 +347,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     if (eStyleAttr) parsed.extraStyleAttr = eStyleAttr;
     if (eScriptAttr) parsed.extraScriptAttr = eScriptAttr;
   } else if ((command === 'crawl' || command === 'interactive') && positionalArg) {
-    validateTargetUrl(positionalArg);
+    validateTargetUrl(positionalArg, { allowLocalNetwork: true });
     parsed.url = positionalArg;
   } else if (command === 'diff') {
     parsed.sessionId = positionalArg;
@@ -387,10 +404,11 @@ function initDb(): ReturnType<typeof createDatabase> {
 function resolveSessionId(
   db: ReturnType<typeof createDatabase>,
   explicitId: string | undefined,
+  explicitProject?: string,
 ): string {
   if (explicitId) return explicitId;
 
-  const project = detectProjectName();
+  const project = resolveProjectName(explicitProject);
   const latest = getLatestSession(db, project);
 
   if (latest) {
@@ -434,7 +452,7 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
   }
   const db = initDb();
   try {
-    const project = detectProjectName() ?? undefined;
+    const project = resolveProjectName(args.project);
     const config: SessionConfig = {
       targetUrl: args.url,
       crawlConfig: { depth: args.depth, maxPages: args.maxPages },
@@ -508,7 +526,7 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
   }
   const db = initDb();
   try {
-    const project = detectProjectName() ?? undefined;
+    const project = resolveProjectName(args.project);
     const config: SessionConfig = {
       targetUrl: args.url,
       storageStatePath: args.storageState,
@@ -575,7 +593,7 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
 async function runGenerateCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const sessionId = resolveSessionId(db, args.sessionId);
+    const sessionId = resolveSessionId(db, args.sessionId, args.project);
     const session = getSession(db, sessionId);
     const output = generateAndFormat(db, sessionId, args, session?.targetUrl);
     process.stdout.write(output + '\n');
@@ -587,7 +605,7 @@ async function runGenerateCommand(args: ParsedArgs): Promise<void> {
 async function runExportCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const sessionId = resolveSessionId(db, args.sessionId);
+    const sessionId = resolveSessionId(db, args.sessionId, args.project);
     const session = getSession(db, sessionId);
     const output = generateAndFormat(db, sessionId, args, session?.targetUrl);
     process.stdout.write(output + '\n');
@@ -597,9 +615,8 @@ async function runExportCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runHashStaticCommand(args: ParsedArgs): Promise<void> {
-  const { scanHtmlFiles, buildStaticPolicy, injectCspMeta } = await import(
-    './static-html-analyser.js'
-  );
+  const { scanHtmlFiles, buildStaticPolicy, injectCspMeta } =
+    await import('./static-html-analyser.js');
   const { directivesToString } = await import('./policy-formatter.js');
   const { readFileSync } = await import('node:fs');
   const { writeFileSync } = await import('node:fs');
@@ -653,7 +670,7 @@ async function runDiffCommand(args: ParsedArgs): Promise<void> {
 async function runScoreCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const sessionId = resolveSessionId(db, args.sessionId);
+    const sessionId = resolveSessionId(db, args.sessionId, args.project);
     const session = getSession(db, sessionId);
     const directives = generatePolicy(db, sessionId, {
       strictness: args.strictness,
@@ -675,7 +692,7 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
 async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const sessionId = resolveSessionId(db, args.sessionId);
+    const sessionId = resolveSessionId(db, args.sessionId, args.project);
     const session = getSession(db, sessionId);
     if (!session) {
       process.stderr.write(`${red('Error:')} Session not found: ${sessionId}\n`);
@@ -717,10 +734,13 @@ async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
-async function runSessionsCommand(): Promise<void> {
+async function runSessionsCommand(args: ParsedArgs): Promise<void> {
   const db = initDb();
   try {
-    const sessions = listSessions(db);
+    const sessions = args.all
+      ? listSessions(db)
+      : listSessionsByProject(db, resolveProjectName(args.project));
+
     if (sessions.length === 0) {
       process.stderr.write('No sessions found.\n');
       return;
@@ -889,8 +909,7 @@ async function ensureBrowserInstalled(): Promise<void> {
       message.includes('browserType.launch') ||
       message.includes('ENOENT');
     const isMissingDeps =
-      message.includes('shared libraries') ||
-      message.includes('cannot open shared object');
+      message.includes('shared libraries') || message.includes('cannot open shared object');
 
     if (isMissingBrowser) {
       process.stderr.write(
@@ -975,7 +994,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         await runScoreCommand(args);
         return;
       case 'sessions':
-        await runSessionsCommand();
+        await runSessionsCommand(args);
         return;
       case 'permissions':
         await runPermissionsCommand(args);
@@ -994,8 +1013,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 // Run when executed directly
 const __cli_url = new URL(import.meta.url).pathname;
 const isDirectExecution =
-  process.argv[1] &&
-  __cli_url === new URL(`file://${realpathSync(process.argv[1])}`).pathname;
+  process.argv[1] && __cli_url === new URL(`file://${realpathSync(process.argv[1])}`).pathname;
 
 if (isDirectExecution) {
   main().catch((err: unknown) => {

@@ -192,14 +192,24 @@ export function listSessions(db: Database.Database): Session[] {
 }
 
 /**
+ * Lists sessions scoped to a specific project.
+ * Returns sessions that match the given project name, plus sessions with no
+ * project set (created from a global CLI context) — those are always visible
+ * regardless of the caller's project context.
+ */
+export function listSessionsByProject(db: Database.Database, project: string): Session[] {
+  const rows = db
+    .prepare('SELECT * FROM sessions WHERE project = ? OR project IS NULL ORDER BY created_at DESC')
+    .all(project) as SessionRow[];
+  return rows.map(toSession);
+}
+
+/**
  * Returns the most recent completed session, optionally scoped to a project.
  * When project is provided, only sessions for that project are considered.
  * Falls back to the most recent completed session across all projects.
  */
-export function getLatestSession(
-  db: Database.Database,
-  project?: string | null,
-): Session | null {
+export function getLatestSession(db: Database.Database, project?: string | null): Session | null {
   if (project) {
     const row = db
       .prepare(
@@ -524,10 +534,7 @@ export function insertInlineHash(
   return toInlineHash(row);
 }
 
-export function getInlineHashes(
-  db: Database.Database,
-  sessionId: string,
-): InlineHash[] {
+export function getInlineHashes(db: Database.Database, sessionId: string): InlineHash[] {
   const rows = db
     .prepare('SELECT * FROM inline_hashes WHERE session_id = ? ORDER BY directive, hash')
     .all(sessionId) as InlineHashRow[];

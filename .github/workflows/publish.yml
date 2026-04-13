@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   ci:
-    uses: makerxstudio/shared-config/.github/workflows/node-ci.yml@main
+    uses: makerxstudio/shared-config/.github/workflows/node-ci.yml@bf6a061f099c9b66e7134a8ec1e4a37f4b0eaf02 # v2.0.1
     with:
       compile-script: npm run typecheck
       pre-test-script: npx playwright install --with-deps chromium
@@ -20,7 +20,7 @@ jobs:
 
   publish:
     needs: ci
-    uses: makerxstudio/shared-config/.github/workflows/node-trusted-publish.yml@main
+    uses: makerxstudio/shared-config/.github/workflows/node-trusted-publish.yml@bf6a061f099c9b66e7134a8ec1e4a37f4b0eaf02 # v2.0.1
     with:
-      package-path: "./package.json"
+      package-path: './package.json'
       access: public

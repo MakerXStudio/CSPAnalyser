@@ -1,8 +1,8 @@
 /**
  * Private/link-local IPv4 ranges that may indicate SSRF attempts.
  */
-const PRIVATE_IP_PATTERNS = [
-  /^127\./, // loopback — allowed for local dev, but checked separately
+const PRIVATE_IPV4_PATTERNS = [
+  /^127\./, // loopback
   /^10\./, // RFC 1918
   /^172\.(1[6-9]|2\d|3[01])\./, // RFC 1918
   /^192\.168\./, // RFC 1918
@@ -11,14 +11,51 @@ const PRIVATE_IP_PATTERNS = [
 ];
 
 /**
+ * Returns true if a hostname is a private/link-local IPv6 address.
+ * Covers loopback (::1), link-local (fe80::), unique local (fc00::/7),
+ * and the unspecified address (::).
+ */
+function isPrivateIPv6(hostname: string): boolean {
+  // Strip brackets from IPv6 literals like [::1]
+  const bare =
+    hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const lower = bare.toLowerCase();
+
+  if (lower === '::1' || lower === '::') return true;
+  if (lower.startsWith('fe80:')) return true; // link-local
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local (fc00::/7)
+
+  return false;
+}
+
+export interface ValidateTargetUrlOptions {
+  /**
+   * Allow all private/internal IP addresses (IPv4 RFC 1918, link-local, IPv6 ULA).
+   * When true, overrides all private IP checks.
+   */
+  allowPrivateIps?: boolean;
+  /**
+   * Allow localhost and local-network targets.
+   * When false (default), localhost, loopback IPs, and private IPs are all rejected.
+   * When true, localhost/loopback is allowed but other private IPs are still blocked
+   * unless allowPrivateIps is also set.
+   *
+   * CLI sets this to true (local dev tool); MCP server leaves it false (agent-driven).
+   */
+  allowLocalNetwork?: boolean;
+}
+
+/**
  * Validates that a target URL is safe for crawling:
  * - Must be a valid URL
  * - Must use http: or https: scheme
- * - Optionally rejects private/link-local IPs (enabled by default, can allow localhost)
+ * - By default, rejects localhost, private/link-local IPs (IPv4 and IPv6)
+ * - Use allowLocalNetwork to permit localhost (CLI mode)
+ * - Use allowPrivateIps to permit all private ranges
  *
  * Throws a descriptive error for invalid URLs.
  */
-export function validateTargetUrl(url: string, options?: { allowPrivateIps?: boolean }): string {
+export function validateTargetUrl(url: string, options?: ValidateTargetUrlOptions): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -32,14 +69,38 @@ export function validateTargetUrl(url: string, options?: { allowPrivateIps?: boo
     );
   }
 
-  if (!options?.allowPrivateIps && !isLocalhost(parsed.hostname)) {
-    for (const pattern of PRIVATE_IP_PATTERNS) {
-      if (pattern.test(parsed.hostname)) {
+  // When allowPrivateIps is set, skip all private/local checks
+  if (options?.allowPrivateIps) {
+    return url;
+  }
+
+  const hostname = parsed.hostname;
+  const isLocal = isLocalhost(hostname);
+
+  // Block localhost unless allowLocalNetwork is explicitly set
+  if (isLocal && !options?.allowLocalNetwork) {
+    throw new Error(
+      `Invalid target URL: localhost/loopback addresses are not allowed in MCP mode ("${hostname}"). ` +
+        'Use allowLocalNetwork to override.',
+    );
+  }
+
+  // Block private IPv4 ranges (unless it's localhost and allowLocalNetwork is set)
+  if (!isLocal) {
+    for (const pattern of PRIVATE_IPV4_PATTERNS) {
+      if (pattern.test(hostname)) {
         throw new Error(
-          `Invalid target URL: private/internal IP addresses are not allowed ("${parsed.hostname}"). Use --allow-private-ips to override.`,
+          `Invalid target URL: private/internal IP addresses are not allowed ("${hostname}"). Use --allow-private-ips to override.`,
         );
       }
     }
+  }
+
+  // Block private IPv6 ranges (unless it's localhost/loopback and allowLocalNetwork is set)
+  if (!isLocal && isPrivateIPv6(hostname)) {
+    throw new Error(
+      `Invalid target URL: private/internal IPv6 addresses are not allowed ("${hostname}"). Use --allow-private-ips to override.`,
+    );
   }
 
   return url;

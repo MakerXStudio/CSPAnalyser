@@ -199,8 +199,22 @@ describe('validateTargetUrl', () => {
     expect(validateTargetUrl('https://example.com/path')).toBe('https://example.com/path');
   });
 
-  it('accepts localhost URLs', () => {
-    expect(validateTargetUrl('http://localhost:3000')).toBe('http://localhost:3000');
+  it('rejects localhost by default (MCP mode)', () => {
+    expect(() => validateTargetUrl('http://localhost:3000')).toThrow('localhost/loopback');
+    expect(() => validateTargetUrl('http://127.0.0.1:8080')).toThrow('localhost/loopback');
+    expect(() => validateTargetUrl('http://[::1]:3000')).toThrow('localhost/loopback');
+  });
+
+  it('allows localhost when allowLocalNetwork is true (CLI mode)', () => {
+    expect(validateTargetUrl('http://localhost:3000', { allowLocalNetwork: true })).toBe(
+      'http://localhost:3000',
+    );
+    expect(validateTargetUrl('http://127.0.0.1:8080', { allowLocalNetwork: true })).toBe(
+      'http://127.0.0.1:8080',
+    );
+    expect(validateTargetUrl('http://[::1]:3000', { allowLocalNetwork: true })).toBe(
+      'http://[::1]:3000',
+    );
   });
 
   it('rejects file: scheme', () => {
@@ -229,13 +243,22 @@ describe('validateTargetUrl', () => {
     expect(() => validateTargetUrl('http://169.254.169.254')).toThrow('private/internal');
   });
 
-  it('allows private IPs when allowPrivateIps is true', () => {
-    expect(validateTargetUrl('http://10.0.0.1', { allowPrivateIps: true })).toBe('http://10.0.0.1');
-    expect(validateTargetUrl('http://192.168.1.1', { allowPrivateIps: true })).toBe('http://192.168.1.1');
+  it('rejects private IPv6 addresses by default', () => {
+    expect(() => validateTargetUrl('http://[fd00::1]')).toThrow('private/internal');
+    expect(() => validateTargetUrl('http://[fe80::1]')).toThrow('private/internal');
+    expect(() => validateTargetUrl('http://[fc00::1]')).toThrow('private/internal');
   });
 
-  it('allows localhost even without allowPrivateIps', () => {
-    expect(validateTargetUrl('http://localhost:3000')).toBe('http://localhost:3000');
-    expect(validateTargetUrl('http://127.0.0.1:8080')).toBe('http://127.0.0.1:8080');
+  it('allows private IPs when allowPrivateIps is true', () => {
+    expect(validateTargetUrl('http://10.0.0.1', { allowPrivateIps: true })).toBe('http://10.0.0.1');
+    expect(validateTargetUrl('http://192.168.1.1', { allowPrivateIps: true })).toBe(
+      'http://192.168.1.1',
+    );
+    expect(validateTargetUrl('http://[fd00::1]', { allowPrivateIps: true })).toBe(
+      'http://[fd00::1]',
+    );
+    expect(validateTargetUrl('http://localhost:3000', { allowPrivateIps: true })).toBe(
+      'http://localhost:3000',
+    );
   });
 });

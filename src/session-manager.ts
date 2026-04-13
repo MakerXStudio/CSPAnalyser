@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, chmodSync, lstatSync } from 'node:fs';
 import { resolve as resolvePath, dirname } from 'node:path';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import type Database from 'better-sqlite3';
@@ -186,9 +186,15 @@ export async function runSession(
 
     const callbacks: CrawlCallbacks = {
       onPageCreated: async (page: Page, _url: string, pageId: string) => {
-        await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
-          onPermissionsPolicy(captured, reqUrl, pageId);
-        }, targetOrigin);
+        await _setupCspInjection(
+          page,
+          reportServerPort,
+          reportToken,
+          (captured, reqUrl) => {
+            onPermissionsPolicy(captured, reqUrl, pageId);
+          },
+          targetOrigin,
+        );
         await _setupViolationListener(page, db, sessionId, pageId);
         await _setupInlineContentObserver(page, db, sessionId, pageId);
       },
@@ -339,23 +345,29 @@ export async function runInteractiveSession(
 
     // 5. Helper: set up CSP injection + violation capture on a page
     const setupPage = async (page: Page): Promise<void> => {
-      await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
-        const headers: Record<string, string> = {};
-        for (const c of captured) {
-          headers[c.headerName] = c.headerValue;
-        }
-        const parsed = parsePermissionsPolicyHeaders(headers);
-        for (const p of parsed) {
-          insertPermissionsPolicy(db, {
-            sessionId,
-            pageId: null,
-            directive: p.directive,
-            allowlist: p.allowlist,
-            headerType: p.headerType,
-            sourceUrl: reqUrl,
-          });
-        }
-      }, targetOrigin);
+      await _setupCspInjection(
+        page,
+        reportServerPort,
+        reportToken,
+        (captured, reqUrl) => {
+          const headers: Record<string, string> = {};
+          for (const c of captured) {
+            headers[c.headerName] = c.headerValue;
+          }
+          const parsed = parsePermissionsPolicyHeaders(headers);
+          for (const p of parsed) {
+            insertPermissionsPolicy(db, {
+              sessionId,
+              pageId: null,
+              directive: p.directive,
+              allowlist: p.allowlist,
+              headerType: p.headerType,
+              sourceUrl: reqUrl,
+            });
+          }
+        },
+        targetOrigin,
+      );
       await _setupViolationListener(page, db, sessionId, null);
       await _setupInlineContentObserver(page, db, sessionId, null);
 
@@ -416,9 +428,29 @@ export async function runInteractiveSession(
     if (options?.saveStorageStatePath) {
       try {
         const outPath = resolvePath(options.saveStorageStatePath);
+
+        // Reject symlink targets to prevent writing secrets to unexpected locations
+        try {
+          const stat = lstatSync(outPath);
+          if (stat.isSymbolicLink()) {
+            throw new Error(`Refusing to write storage state to symlink target: ${outPath}`);
+          }
+        } catch (err) {
+          // ENOENT is fine — file doesn't exist yet. Re-throw other errors.
+          if (
+            err instanceof Error &&
+            'code' in err &&
+            (err as NodeJS.ErrnoException).code !== 'ENOENT'
+          ) {
+            throw err;
+          }
+        }
+
         mkdirSync(dirname(outPath), { recursive: true });
         const state = await context.storageState();
         writeFileSync(outPath, JSON.stringify(state, null, 2), { mode: 0o600 });
+        // Ensure 0600 even when overwriting an existing file with permissive mode
+        chmodSync(outPath, 0o600);
         savedStorageStatePath = outPath;
         progress(`Storage state saved to ${outPath}`);
         logger.info('Storage state exported', { path: outPath });

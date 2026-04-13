@@ -7,6 +7,7 @@ import {
   createDatabase,
   getSession,
   listSessions,
+  listSessionsByProject,
   getViolations,
   getViolationSummary,
   getPages,
@@ -18,7 +19,7 @@ import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy, directivesToString } from './policy-formatter.js';
 import { createLogger } from './utils/logger.js';
 import { validateTargetUrl } from './utils/url-utils.js';
-import { getDataDir, detectProjectName } from './utils/file-utils.js';
+import { getDataDir, resolveProjectName } from './utils/file-utils.js';
 // Lazy import type for session-manager (dynamic import requires inline type annotation)
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 type SessionManagerModule = { runSession: (typeof import('./session-manager.js'))['runSession'] };
@@ -53,6 +54,30 @@ function toolError(message: string): {
 
 // ── Server factory ──────────────────────────────────────────────────────
 
+/**
+ * Retrieves a session by ID with project-scoping enforcement.
+ * Returns null if the session doesn't exist or belongs to a different project
+ * (unless allProjects is true).
+ * Sessions with no project set (legacy/global) are always accessible.
+ */
+function getProjectScopedSession(
+  db: Database.Database,
+  sessionId: string,
+  allProjects?: boolean,
+): ReturnType<typeof getSession> {
+  const session = getSession(db, sessionId);
+  if (!session) return null;
+
+  if (!allProjects) {
+    const currentProject = resolveProjectName();
+    if (session.project && session.project !== currentProject) {
+      return null;
+    }
+  }
+
+  return session;
+}
+
 export function createMcpServer(db: Database.Database): McpServer {
   const server = new McpServer({
     name: 'csp-analyser',
@@ -64,7 +89,8 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool(
     'start_session',
     {
-      description: 'Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations',
+      description:
+        'Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations',
       inputSchema: {
         targetUrl: z.url().describe('The URL to analyse'),
         depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
@@ -113,7 +139,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           },
           storageStatePath: args.storageStatePath,
           violationLimit: args.violationLimit,
-          project: detectProjectName() ?? undefined,
+          project: resolveProjectName(),
         });
 
         return toolResult({
@@ -136,7 +162,8 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool(
     'crawl_url',
     {
-      description: 'Analyse a single page for CSP violations (convenience wrapper: depth=0, maxPages=1)',
+      description:
+        'Analyse a single page for CSP violations (convenience wrapper: depth=0, maxPages=1)',
       inputSchema: {
         url: z.url().describe('The URL to analyse'),
         storageStatePath: z
@@ -161,7 +188,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             maxPages: 1,
           },
           storageStatePath: args.storageStatePath,
-          project: detectProjectName() ?? undefined,
+          project: resolveProjectName(),
         });
 
         return toolResult({
@@ -184,7 +211,8 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool(
     'get_violations',
     {
-      description: 'Get CSP violations captured during a session, optionally filtered by directive, page URL, or origin',
+      description:
+        'Get CSP violations captured during a session, optionally filtered by directive, page URL, or origin',
       inputSchema: {
         sessionId: z.uuid().describe('The session ID'),
         directive: z.string().optional().describe('Filter by CSP directive (e.g. script-src)'),
@@ -194,7 +222,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        const session = getSession(db, args.sessionId);
+        const session = getProjectScopedSession(db, args.sessionId);
         if (!session) {
           return toolError(`Session not found: ${args.sessionId}`);
         }
@@ -246,7 +274,9 @@ export function createMcpServer(db: Database.Database): McpServer {
         useHashes: z
           .boolean()
           .optional()
-          .describe("Remove 'unsafe-inline' from directives that have hash sources (implies includeHashes, default: false)"),
+          .describe(
+            "Remove 'unsafe-inline' from directives that have hash sources (implies includeHashes, default: false)",
+          ),
         stripUnsafeEval: z
           .boolean()
           .optional()
@@ -255,7 +285,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        const session = getSession(db, args.sessionId);
+        const session = getProjectScopedSession(db, args.sessionId);
         if (!session) {
           return toolError(`Session not found: ${args.sessionId}`);
         }
@@ -289,11 +319,22 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool(
     'export_policy',
     {
-      description: 'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, azure-frontdoor, helmet, json)',
+      description:
+        'Export a CSP policy in a deployment-ready format (header, meta, nginx, apache, cloudflare, cloudflare-pages, azure-frontdoor, helmet, json)',
       inputSchema: {
         sessionId: z.uuid().describe('The session ID'),
         format: z
-          .enum(['header', 'meta', 'nginx', 'apache', 'cloudflare', 'cloudflare-pages', 'azure-frontdoor', 'helmet', 'json'])
+          .enum([
+            'header',
+            'meta',
+            'nginx',
+            'apache',
+            'cloudflare',
+            'cloudflare-pages',
+            'azure-frontdoor',
+            'helmet',
+            'json',
+          ])
           .describe('Output format'),
         strictness: z
           .enum(['strict', 'moderate', 'permissive'])
@@ -306,7 +347,9 @@ export function createMcpServer(db: Database.Database): McpServer {
         useHashes: z
           .boolean()
           .optional()
-          .describe("Remove 'unsafe-inline' from directives that have hash sources (default: false)"),
+          .describe(
+            "Remove 'unsafe-inline' from directives that have hash sources (default: false)",
+          ),
         stripUnsafeEval: z
           .boolean()
           .optional()
@@ -315,7 +358,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        const session = getSession(db, args.sessionId);
+        const session = getProjectScopedSession(db, args.sessionId);
         if (!session) {
           return toolError(`Session not found: ${args.sessionId}`);
         }
@@ -359,7 +402,9 @@ export function createMcpServer(db: Database.Database): McpServer {
         useHashes: z
           .boolean()
           .optional()
-          .describe("Score the hash-optimized policy (removes 'unsafe-inline' where hashes exist, adds 'unsafe-hashes' where required) (default: false)"),
+          .describe(
+            "Score the hash-optimized policy (removes 'unsafe-inline' where hashes exist, adds 'unsafe-hashes' where required) (default: false)",
+          ),
         stripUnsafeEval: z
           .boolean()
           .optional()
@@ -368,7 +413,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        const session = getSession(db, args.sessionId);
+        const session = getProjectScopedSession(db, args.sessionId);
         if (!session) {
           return toolError(`Session not found: ${args.sessionId}`);
         }
@@ -436,14 +481,19 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool(
     'get_session',
     {
-      description: 'Get details and violation summary for a CSP analysis session',
+      description:
+        'Get details and violation summary for a CSP analysis session. By default, only sessions belonging to the current project are accessible.',
       inputSchema: {
         sessionId: z.uuid().describe('The session ID'),
+        allProjects: z
+          .boolean()
+          .optional()
+          .describe('Allow accessing sessions from any project (default: false)'),
       },
     },
     async (args) => {
       try {
-        const session = getSession(db, args.sessionId);
+        const session = getProjectScopedSession(db, args.sessionId, args.allProjects);
         if (!session) {
           return toolError(`Session not found: ${args.sessionId}`);
         }
@@ -458,6 +508,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             status: session.status,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
+            project: session.project,
           },
           pagesVisited: pages.length,
           pages: pages.map((p) => ({ url: p.url, statusCode: p.statusCode })),
@@ -472,31 +523,52 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ── list_sessions ───────────────────────────────────────────────────
 
-  server.registerTool('list_sessions', { description: 'List all CSP analysis sessions' }, async () => {
-    try {
-      const sessions = listSessions(db);
+  server.registerTool(
+    'list_sessions',
+    {
+      description:
+        'List CSP analysis sessions. By default, only sessions for the current project are returned.',
+      inputSchema: {
+        allProjects: z
+          .boolean()
+          .optional()
+          .describe('List sessions from all projects (default: false — only current project)'),
+      },
+    },
+    async (args) => {
+      try {
+        let sessions: ReturnType<typeof listSessions>;
 
-      return toolResult({
-        count: sessions.length,
-        sessions: sessions.map((s) => ({
-          id: s.id,
-          targetUrl: s.targetUrl,
-          status: s.status,
-          createdAt: s.createdAt,
-        })),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return toolError(`Failed to list sessions: ${message}`);
-    }
-  });
+        if (args.allProjects) {
+          sessions = listSessions(db);
+        } else {
+          sessions = listSessionsByProject(db, resolveProjectName());
+        }
+
+        return toolResult({
+          count: sessions.length,
+          sessions: sessions.map((s) => ({
+            id: s.id,
+            targetUrl: s.targetUrl,
+            status: s.status,
+            createdAt: s.createdAt,
+            project: s.project,
+          })),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return toolError(`Failed to list sessions: ${message}`);
+      }
+    },
+  );
 
   // ── get_permissions_policy ──────────────────────────────────────────
 
   server.registerTool(
     'get_permissions_policy',
     {
-      description: 'Get Permissions-Policy and Feature-Policy headers captured during a session, optionally filtered by directive',
+      description:
+        'Get Permissions-Policy and Feature-Policy headers captured during a session, optionally filtered by directive',
       inputSchema: {
         sessionId: z.uuid().describe('The session ID'),
         directive: z
@@ -507,7 +579,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        const session = getSession(db, args.sessionId);
+        const session = getProjectScopedSession(db, args.sessionId);
         if (!session) {
           return toolError(`Session not found: ${args.sessionId}`);
         }

@@ -32,10 +32,19 @@ vi.mock('../src/policy-formatter.js', () => ({
 const mockCompareSessions = vi.fn().mockReturnValue({
   sessionA: 'id-a',
   sessionB: 'id-b',
-  policyDiff: { addedDirectives: [], removedDirectives: [], changedDirectives: [], unchangedDirectives: [] },
+  policyDiff: {
+    addedDirectives: [],
+    removedDirectives: [],
+    changedDirectives: [],
+    unchangedDirectives: [],
+  },
   violationDiff: { newViolations: [], resolvedViolations: [], unchangedViolations: [] },
 });
-const mockFormatDiff = vi.fn().mockReturnValue('Session comparison: id-a → id-b\n\n=== Policy Changes ===\n  No policy changes.');
+const mockFormatDiff = vi
+  .fn()
+  .mockReturnValue(
+    'Session comparison: id-a → id-b\n\n=== Policy Changes ===\n  No policy changes.',
+  );
 vi.mock('../src/policy-diff.js', () => ({
   compareSessions: (...args: unknown[]) => mockCompareSessions(...args),
   formatDiff: (...args: unknown[]) => mockFormatDiff(...args),
@@ -54,6 +63,7 @@ vi.mock('../src/policy-scorer.js', () => ({
 
 const mockGetPermissionsPolicies = vi.fn().mockReturnValue([]);
 const mockListSessions = vi.fn().mockReturnValue([]);
+const mockListSessionsByProject = vi.fn().mockReturnValue([]);
 const mockGetViolations = vi.fn().mockReturnValue([]);
 const mockGetLatestSession = vi.fn().mockReturnValue(null);
 vi.mock('../src/db/repository.js', () => ({
@@ -64,14 +74,17 @@ vi.mock('../src/db/repository.js', () => ({
   getViolationSummary: (...args: unknown[]) => mockGetViolationSummary(...args),
   getPermissionsPolicies: (...args: unknown[]) => mockGetPermissionsPolicies(...args),
   listSessions: (...args: unknown[]) => mockListSessions(...args),
+  listSessionsByProject: (...args: unknown[]) => mockListSessionsByProject(...args),
 }));
 
-const mockDetectProjectName = vi.fn().mockReturnValue(null);
+const mockDetectProjectName = vi.fn().mockReturnValue('test-project');
+const mockResolveProjectName = vi.fn().mockReturnValue('test-project');
 vi.mock('../src/utils/file-utils.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/utils/file-utils.js')>();
   return {
     ...original,
     detectProjectName: (...args: unknown[]) => mockDetectProjectName(...args),
+    resolveProjectName: (...args: unknown[]) => mockResolveProjectName(...args),
   };
 });
 
@@ -81,7 +94,6 @@ const mockMcpServerMain = vi.fn().mockResolvedValue(undefined);
 vi.mock('../src/mcp-server.js', () => ({
   main: (...args: unknown[]) => mockMcpServerMain(...args),
 }));
-
 
 // ── parseCliArgs ────────────────────────────────────────────────────────
 
@@ -134,12 +146,18 @@ describe('parseCliArgs', () => {
 
     it('parses all crawl options', () => {
       const result = parseCliArgs([
-        'crawl', 'https://example.com',
-        '--depth', '3',
-        '--max-pages', '20',
-        '--strictness', 'strict',
-        '--format', 'nginx',
-        '--storage-state', '/tmp/state.json',
+        'crawl',
+        'https://example.com',
+        '--depth',
+        '3',
+        '--max-pages',
+        '20',
+        '--strictness',
+        'strict',
+        '--format',
+        'nginx',
+        '--storage-state',
+        '/tmp/state.json',
         '--report-only',
       ]);
       expect(result).toMatchObject({
@@ -166,9 +184,12 @@ describe('parseCliArgs', () => {
 
     it('accepts format and strictness', () => {
       const result = parseCliArgs([
-        'interactive', 'https://example.com',
-        '--strictness', 'permissive',
-        '--format', 'json',
+        'interactive',
+        'https://example.com',
+        '--strictness',
+        'permissive',
+        '--format',
+        'json',
       ]);
       expect(result.strictness).toBe('permissive');
       expect(result.format).toBe('json');
@@ -186,9 +207,12 @@ describe('parseCliArgs', () => {
 
     it('accepts strictness and format', () => {
       const result = parseCliArgs([
-        'generate', 'abc-123',
-        '--strictness', 'strict',
-        '--format', 'apache',
+        'generate',
+        'abc-123',
+        '--strictness',
+        'strict',
+        '--format',
+        'apache',
         '--report-only',
       ]);
       expect(result).toMatchObject({
@@ -457,11 +481,7 @@ describe('main', () => {
     await main(['export', 'abc-123', '--format', 'nginx']);
 
     expect(mockGeneratePolicy).toHaveBeenCalled();
-    expect(mockFormatPolicy).toHaveBeenCalledWith(
-      expect.anything(),
-      'nginx',
-      false,
-    );
+    expect(mockFormatPolicy).toHaveBeenCalledWith(expect.anything(), 'nginx', false);
     expect(stdoutWrite).toHaveBeenCalled();
   });
 
@@ -578,10 +598,14 @@ describe('main', () => {
     });
 
     await main([
-      'crawl', 'https://example.com',
-      '--depth', '3',
-      '--max-pages', '20',
-      '--storage-state', '/tmp/state.json',
+      'crawl',
+      'https://example.com',
+      '--depth',
+      '3',
+      '--max-pages',
+      '20',
+      '--storage-state',
+      '/tmp/state.json',
     ]);
 
     expect(mockRunSession).toHaveBeenCalledWith(
@@ -605,17 +629,18 @@ describe('sessions command', () => {
   });
 
   it('outputs session list with timestamps and violation counts', async () => {
-    mockListSessions.mockReturnValue([
+    mockListSessionsByProject.mockReturnValue([
       {
         id: 'abc-123',
         targetUrl: 'https://example.com',
         status: 'complete',
         mode: 'local',
         config: {},
+        project: 'test-project',
         reportServerPort: null,
         proxyPort: null,
-        createdAt: '2026-04-10T10:30:00Z',
-        updatedAt: '2026-04-10T10:31:00Z',
+        createdAt: '2026-04-09T10:00:00Z',
+        updatedAt: '2026-04-09T10:05:00Z',
       },
       {
         id: 'def-456',
@@ -637,7 +662,7 @@ describe('sessions command', () => {
     const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     await main(['sessions']);
 
-    expect(mockListSessions).toHaveBeenCalled();
+    expect(mockListSessionsByProject).toHaveBeenCalledWith(expect.anything(), 'test-project');
     const output = stdoutWrite.mock.calls.map((c) => c[0]).join('');
     expect(output).toContain('abc-123');
     expect(output).toContain('https://example.com');
@@ -650,7 +675,7 @@ describe('sessions command', () => {
   });
 
   it('shows message when no sessions exist', async () => {
-    mockListSessions.mockReturnValue([]);
+    mockListSessionsByProject.mockReturnValue([]);
 
     const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     await main(['sessions']);
@@ -660,13 +685,48 @@ describe('sessions command', () => {
 
     stderrWrite.mockRestore();
   });
+
+  it('shows all sessions when --all flag is passed', async () => {
+    mockListSessions.mockClear();
+    mockListSessionsByProject.mockClear();
+    mockListSessions.mockReturnValue([
+      {
+        id: 'all-1',
+        targetUrl: 'https://a.com',
+        status: 'complete',
+        mode: 'local',
+        config: {},
+        project: 'project-a',
+        reportServerPort: null,
+        proxyPort: null,
+        createdAt: '2026-04-09T10:00:00Z',
+        updatedAt: '2026-04-09T10:05:00Z',
+      },
+    ]);
+    mockGetViolations.mockReturnValue([]);
+
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await main(['sessions', '--all']);
+
+    expect(mockListSessions).toHaveBeenCalled();
+    expect(mockListSessionsByProject).not.toHaveBeenCalled();
+    const output = stdoutWrite.mock.calls.map((c) => c[0]).join('');
+    expect(output).toContain('all-1');
+
+    stdoutWrite.mockRestore();
+  });
 });
 
 // ── save-storage-state flag ──────────────────────────────────────────────
 
 describe('save-storage-state flag', () => {
   it('parses --save-storage-state flag', () => {
-    const result = parseCliArgs(['interactive', 'https://example.com', '--save-storage-state', 'auth.json']);
+    const result = parseCliArgs([
+      'interactive',
+      'https://example.com',
+      '--save-storage-state',
+      'auth.json',
+    ]);
     expect(result.command).toBe('interactive');
     expect(result.saveStorageState).toBe('auth.json');
   });
@@ -713,7 +773,7 @@ describe('session auto-resolve', () => {
     stderrWrite.mockRestore();
     process.exitCode = undefined;
     mockGetLatestSession.mockReturnValue(null);
-    mockDetectProjectName.mockReturnValue(null);
+    mockResolveProjectName.mockReturnValue('test-project');
   });
 
   it('auto-resolves generate to latest session when no ID given', async () => {
@@ -723,7 +783,7 @@ describe('session auto-resolve', () => {
       status: 'complete',
       project: 'my-app',
     });
-    mockDetectProjectName.mockReturnValue('my-app');
+    mockResolveProjectName.mockReturnValue('my-app');
 
     await main(['generate']);
 
@@ -759,9 +819,7 @@ describe('session auto-resolve', () => {
     await main(['generate']);
 
     expect(process.exitCode).toBe(1);
-    expect(stderrWrite).toHaveBeenCalledWith(
-      expect.stringContaining('No session ID provided'),
-    );
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('No session ID provided'));
   });
 
   it('uses explicit session ID over auto-resolve', async () => {
@@ -785,7 +843,7 @@ describe('session auto-resolve', () => {
   });
 
   it('passes project to session config during crawl', async () => {
-    mockDetectProjectName.mockReturnValue('my-project');
+    mockResolveProjectName.mockReturnValue('my-project');
     mockRunSession.mockResolvedValue({
       session: { id: 'sid' },
       pagesVisited: 1,
