@@ -63,8 +63,8 @@ Inject a maximally restrictive `Content-Security-Policy-Report-Only` header on e
 **Acceptance criteria:**
 - The injected policy blocks all resource types: scripts, styles, images, fonts, connections, media, objects, frames, workers, forms, base URIs, manifests
 - The policy includes a `report-uri` pointing to the local report collector
-- In local mode, injection happens via Playwright `page.route()` response interception
-- In MITM mode, injection happens via the reverse proxy stripping existing CSP headers and adding the deny-all policy
+- Injection happens via Playwright `page.route()` with `route.fetch()` + `route.fulfill()` — the tool fetches the upstream response, strips any `Content-Security-Policy` / `Content-Security-Policy-Report-Only` headers, adds the deny-all CSP plus `Report-To`, and fulfils the response to the browser. This path is used uniformly for local HTTP, localhost HTTPS, and remote HTTPS targets (including those that ship their own CSP)
+- The previous dual-mode architecture with an MITM proxy was retired in April 2026 — see ADR [Single-Mode CSP Injection](adr/single-mode-csp-injection.md)
 
 ### F5: Triple Violation Capture
 
@@ -86,16 +86,11 @@ Store all violations, crawled pages, sessions, and generated policies in a local
 - Violations queryable by directive, page URL, origin, with grouping
 - Session-based isolation (multiple analysis runs don't interfere)
 
-### F7: MITM Reverse Proxy
+### F7: ~~MITM Reverse Proxy~~ (Removed April 2026)
 
-Intercept HTTPS responses from remote sites to strip existing CSP headers and inject the deny-all policy.
+Originally planned as a fallback injection mechanism for remote HTTPS sites with existing CSP headers. Removed entirely in commit `ee4fbdb` once Playwright `page.route()` + `route.fetch()` + `route.fulfill()` was confirmed to rewrite response headers reliably on all targets. See ADR [Single-Mode CSP Injection](adr/single-mode-csp-injection.md) for the rationale and trade-offs.
 
-**Acceptance criteria:**
-- Auto-generate a local CA certificate on first use (stored in `.csp-analyser/certs/`)
-- Start an HTTP MITM proxy that Playwright routes traffic through
-- Strip `Content-Security-Policy` and `Content-Security-Policy-Report-Only` response headers
-- Inject the deny-all report-only CSP header
-- Auto-detect when MITM mode is needed (remote HTTPS URLs) vs local mode (localhost/HTTP)
+The `http-mitm-proxy` dependency, the `cert-manager` / `mitm-proxy` modules, the `--mode` CLI flag, and the `mode` MCP parameter no longer exist.
 
 ### F8: CSP Policy Generation
 
@@ -105,7 +100,10 @@ Analyze collected violations and generate a minimal, correct CSP policy.
 - Map blocked URIs to appropriate CSP source expressions (`'self'`, `'unsafe-inline'`, `data:`, exact origins, wildcard domains)
 - Support three strictness levels: strict (exact origins), moderate (domain wildcards for CDNs), permissive (broad wildcards)
 - Optimize with `default-src` factoring when multiple directives share the same sources
-- Optionally include `'sha256-...'` hashes for inline scripts/styles (computed from full DOM content, not truncated violation samples)
+- Optionally include `'sha256-...'` hashes for inline scripts/styles, computed from the full inline content captured via DOM traversal and MutationObserver (see F16)
+- Optionally replace `'unsafe-inline'` with nonce placeholders (`--nonce`) or with hash sources (`--hash`)
+- Optionally add `'strict-dynamic'` alongside nonces (`--strict-dynamic`, implies `--nonce`)
+- Optionally strip `'unsafe-eval'` from the generated policy for iterative hardening (`--strip-unsafe-eval`)
 
 ### F9: Policy Export
 
@@ -118,6 +116,8 @@ Output the generated policy in multiple formats suitable for different deploymen
 - Apache config: `Header always set Content-Security-Policy "..."`
 - Cloudflare Workers handler format
 - Cloudflare Pages `_headers` file format
+- Azure Front Door Bicep snippet
+- Helmet.js configuration object
 - Structured JSON for programmatic consumption
 
 ### F10: MCP Server Interface
@@ -194,6 +194,44 @@ Provide rich terminal output with colors, progress indicators, and summary table
 - Summary table after completion: pages crawled, violations found, unique directives, elapsed time, top 5 violated directives
 - `src/utils/terminal.ts` utility module with zero external dependencies
 
+### F16: Full Inline Content Hash Extraction
+
+Extract the full content of every inline `<script>`, `<style>`, `on*` event-handler attribute, and `style` attribute on every page and compute matching SHA-256 hashes, so that `--hash` can remove `'unsafe-inline'` from `script-src` / `style-src` with correctness.
+
+**Acceptance criteria:**
+- A MutationObserver is installed at page init (via `page.addInitScript()`) and observes `childList` / `subtree` / `attributes` mutations on `document.documentElement`, forwarding matched inline content to Node.js via an exposed function for the entire page lifecycle
+- A post-load DOM scan runs via `page.evaluate()` after each page fires `load`, enumerating inline content as a belt-and-suspenders safety net
+- Content is hashed in Node.js (SHA-256) and stored in the `inline_hashes` table with `UNIQUE(session_id, kind, hash)` to deduplicate across mechanisms and pages
+- `policy-generator.ts` merges these hashes into the directive map when `includeHashes` is set
+- Works for both headless crawl mode and interactive mode (including new tabs)
+- See ADR [Inline Content Hash Extraction](adr/inline-content-hash-extraction.md)
+
+### F17: Project-Scoped Sessions & Auto-Resolution
+
+Tag each session with the current project and auto-resolve to the most recent completed session when a session ID is not provided.
+
+**Acceptance criteria:**
+- Project name is detected by walking upwards from CWD for a `package.json` and reading its `name` field, falling back to the basename of CWD, then to `default`
+- `sessions` table has a `project_name` column populated at creation, indexed for lookup
+- `generate`, `export`, `score`, and `permissions` accept the session ID as optional; when omitted, the CLI looks up the most recent `status = 'completed'` session for the current project
+- `csp-analyser sessions` filters to the current project by default; `--all` removes the filter
+- MCP tools receive the same auto-resolution behaviour
+- `diff` remains fully explicit — both session IDs must be provided
+- See ADR [Project-Scoped Sessions](adr/project-scoped-sessions.md)
+
+### F18: Platform-Appropriate Data Directory
+
+Store the SQLite database, storage-state files, and related artefacts in a platform-appropriate user-data directory regardless of the process's CWD.
+
+**Acceptance criteria:**
+- Linux: `$XDG_CONFIG_HOME/csp-analyser` (defaulting to `~/.config/csp-analyser`)
+- macOS: `~/Library/Application Support/csp-analyser`
+- Windows: `%LOCALAPPDATA%\csp-analyser`
+- Fallback: `~/csp-analyser`
+- Single `getDataDir()` helper in `src/utils/file-utils.ts` consumed by CLI, MCP server, and session manager
+- Directory created lazily with `0o700` permissions
+- See ADR [Platform-Appropriate Data Directory](adr/platform-data-directory.md)
+
 ## 5. Non-Functional Requirements
 
 | Requirement | Target |
@@ -209,11 +247,12 @@ Provide rich terminal output with colors, progress indicators, and summary table
 ## 6. Out of Scope (Initial Release)
 
 - ~~Permissions-Policy analysis~~ — Implemented in Phase 9a (see F12)
+- ~~MITM reverse proxy~~ — Shipped in Phase 4, then removed in April 2026 (see F7 and ADR [Single-Mode CSP Injection](adr/single-mode-csp-injection.md))
 - Distributed/remote analysis (this is a local tool)
 - Browser extensions
 - GUI/web dashboard
 - Automatic CSP deployment to production
-- CSP nonce injection into application source code
+- Automatic rewriting of application source to emit CSP nonces at runtime (the tool can generate nonce *placeholders* in the policy; emitting matching nonces in responses is the application's responsibility)
 
 ## 7. Tech Stack
 
@@ -221,13 +260,14 @@ Provide rich terminal output with colors, progress indicators, and summary table
 |-----------|---------|---------|
 | Browser automation | Playwright | 1.59.1 |
 | Database | better-sqlite3 | 12.8.0 |
-| HTTPS proxy | http-mitm-proxy | 1.1.0 |
 | Agent protocol | @modelcontextprotocol/sdk | 1.29.0 |
 | Testing | Vitest | latest |
 | Linting | ESLint | latest |
 | Formatting | Prettier | latest |
 | Language | TypeScript | strict mode |
-| Runtime | Node.js | 24.x |
+| Runtime | Node.js | 20+ |
+
+**Removed:** `http-mitm-proxy` (1.1.0) was part of the original stack for the MITM injection path and was dropped in April 2026 — see ADR [Single-Mode CSP Injection](adr/single-mode-csp-injection.md).
 
 ## 8. Implementation Status
 
@@ -243,6 +283,10 @@ Provide rich terminal output with colors, progress indicators, and summary table
 | 7 | Hardening & Review | Complete | Security audit, architecture review, bug fixes, test improvements. 627 tests (97% line coverage) |
 | 8 | DX & Robustness | Complete | ESLint/Prettier, Cloudflare Pages export, symlink path validation, rate limiting, TOCTOU fix, npm publish readiness, defensive JSON.parse |
 | 9 | Advanced Features | Complete | Permissions-Policy analysis, session diff, CSP scoring, enhanced CLI output. 781 tests across 28 test files |
+| 10 | v0.2 — Publish & Packaging | Complete | Scoped package `@makerx/csp-analyser`, README, CI workflows, `better-npm-audit`, global-install fix, storageState CWD restriction |
+| 11 | v0.3 — Policy Hardening Flags | Complete | `--nonce` placeholder generation, `--hash` to replace `'unsafe-inline'`, Azure Front Door + Helmet export formats |
+| 12 | v0.4 — Architecture Refinements | Complete | MITM proxy removed entirely (see ADR), platform-appropriate data directory (XDG / LOCALAPPDATA / macOS Application Support), project-scoped sessions with auto-resolution |
+| 13 | v0.5 — Hash Correctness & Hardening | Complete | Full inline content hash extraction via DOM scan + MutationObserver (see ADR), `--strip-unsafe-eval`, `cspanalyser.com` custom domain, documentation site on GitHub Pages |
 
 ### Phase 1 Artifacts
 - `src/types.ts` — All shared interfaces, enums, config types
@@ -487,6 +531,39 @@ Phase 9 adds analytical features that enhance the tool's value beyond basic CSP 
 - Pipeline correctness verified across all new features
 - Module boundaries and type safety maintained
 - No circular dependencies introduced
+
+### Phase 10 — Publish & Packaging (v0.2)
+
+- Package scoped under `@makerx/csp-analyser` (org-aligned namespace)
+- Public README added; documentation references updated
+- GitHub Actions workflows for PR checks and publish pipelines
+- `better-npm-audit` added for automated dependency auditing
+- Global-install bug (`cli` not resolving) fixed
+- `storageStatePath` restricted to CWD + data directory (no arbitrary filesystem reads)
+
+### Phase 11 — Policy Hardening Flags (v0.3)
+
+- `--hash` flag added to replace `'unsafe-inline'` with hash sources where the violation sample permits it (commit `3a8255e`). At this point the underlying hash correctness limit (256-char truncation) was still present — resolved in Phase 13 — but the flag and the formatter plumbing landed here
+- Automatic nonce placeholder generation for `'unsafe-inline'` policies (`--nonce`), plus `--strict-dynamic` which implies `--nonce`
+- New export formats: Azure Front Door Bicep snippet, Helmet.js configuration object
+
+### Phase 12 — Architecture Refinements (v0.4)
+
+- `src/mitm-proxy.ts`, `src/cert-manager.ts`, and `http-mitm-proxy` dependency removed entirely; `SessionMode` collapses to `'local'`; `--mode` flag and MCP `mode` parameter dropped (commit `ee4fbdb`). See ADR [Single-Mode CSP Injection](adr/single-mode-csp-injection.md)
+- Test count dropped from 792 → 743 on MITM removal
+- `getDataDir()` helper added to `src/utils/file-utils.ts`; CLI, MCP server, and session manager all migrated to platform-appropriate data directories (commit `349f2f0`). See ADR [Platform-Appropriate Data Directory](adr/platform-data-directory.md)
+- `sessions.project_name` column added; CLI and MCP commands auto-resolve to the latest completed session for the current project when no ID is supplied (commit `082409f`). See ADR [Project-Scoped Sessions](adr/project-scoped-sessions.md)
+- Interactive mode now detects browser window close via both `disconnected` and "all pages closed" signals
+
+### Phase 13 — Hash Correctness & Hardening (v0.5)
+
+- `src/inline-content-extractor.ts` — post-load DOM scan that extracts the full content of every inline `<script>`, `<style>`, `on*` attribute, and `style` attribute; hashed in Node.js and stored in the new `inline_hashes` table (commit `36e0a3d`)
+- `src/inline-content-observer.ts` — MutationObserver installed via `page.addInitScript()` that observes `childList` / `subtree` / `attributes` mutations from the earliest possible moment and forwards matched content to Node.js for hashing (commit `53105fd`)
+- `inline_hashes` deduplication via `UNIQUE(session_id, kind, hash)` — same content captured by both mechanisms is silently dropped on insert
+- `policy-generator.ts` merges the hashes into the directive map so `--hash` now produces useful policies for real applications (resolves the 256-char truncation limitation that made Phase 11's `--hash` largely cosmetic)
+- `--strip-unsafe-eval` flag added to remove `'unsafe-eval'` from the generated policy (commit `dbabbab`)
+- `cspanalyser.com` custom domain configured for the documentation site; package bumped to 0.5.0 (commit `061d9ee`)
+- See ADR [Inline Content Hash Extraction](adr/inline-content-hash-extraction.md)
 
 ## 9. Success Metrics
 

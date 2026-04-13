@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Superseded by [Single-Mode CSP Injection](single-mode-csp-injection.md) (commit `ee4fbdb`, April 2026).
+
+The MITM proxy code path was removed entirely after we confirmed that Playwright's `page.route()` combined with `route.fetch()` + `route.fulfill()` reliably intercepts and rewrites response headers for both local and remote HTTPS targets, including sites that send an existing CSP. The dual-mode complexity (CA certificate management, proxy trust configuration, auto-detection logic, two injection code paths) was no longer justified.
+
+Retained for historical context.
 
 ## Context
 

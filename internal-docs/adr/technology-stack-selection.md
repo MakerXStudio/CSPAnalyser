@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Amended April 2026 (commit `ee4fbdb`) — the `http-mitm-proxy` dependency was removed when MITM mode was retired in favour of Playwright-only CSP injection. See [Single-Mode CSP Injection](single-mode-csp-injection.md). The rest of the stack selection still stands.
 
 ## Context
 
@@ -12,7 +12,7 @@ The tool requires:
 
 - A headless browser with low-level access to CSP violation events and response interception
 - A database for storing violations, sessions, and generated policies with fast, reliable writes under rapid event bursts
-- An HTTPS intercepting proxy to strip and replace CSP headers on remote sites
+- A reliable mechanism to strip and replace CSP response headers on both local and remote HTTPS sites (originally framed as an HTTPS intercepting proxy; now satisfied by Playwright `page.route()`)
 - A standard protocol for exposing tools to AI coding agents
 - A language with strong typing for the violation-to-policy transformation pipeline
 
@@ -35,13 +35,14 @@ The tool requires:
 
 ## Options
 
-### Playwright + better-sqlite3 + http-mitm-proxy + MCP SDK
+### Playwright + better-sqlite3 + MCP SDK
 
-- Playwright provides `page.route()` for response interception without a proxy (local mode), `page.exposeFunction()` for bridging DOM events to Node.js, and `context.storageState()` for clean auth handoff
+- Playwright provides `page.route()` with `route.fetch()` + `route.fulfill()` for full response interception (no proxy required), `page.exposeFunction()` for bridging DOM events to Node.js, and `context.storageState()` for clean auth handoff
 - better-sqlite3 uses synchronous writes, meaning violation events are persisted immediately without async queue management; under rapid fire (dozens of violations in milliseconds during page load), no events are lost to unresolved promises
-- http-mitm-proxy is a dedicated MITM proxy library with automatic CA certificate generation and TLS interception
 - `@modelcontextprotocol/sdk` implements the Model Context Protocol, the standard agent tool protocol supported by Claude Code, Codex, Gemini, and Copilot
 - TypeScript with strict mode provides full type safety across the violation-to-directive transformation pipeline
+
+**Note:** The original decision included `http-mitm-proxy` for a secondary injection path. That dependency was removed in April 2026 once we confirmed Playwright's response interception worked reliably against remote HTTPS sites that send existing CSP headers. See [Single-Mode CSP Injection](single-mode-csp-injection.md).
 
 ### Puppeteer + LevelDB + custom proxy + REST API
 
@@ -59,21 +60,23 @@ The tool requires:
 | Response interception | `page.route()` built-in | Requires CDP `Fetch.enable` |
 | DB write reliability | Synchronous (no lost events) | Async (requires queue) |
 | Violation querying | SQL (GROUP BY, JOIN, aggregation) | Manual K-V indexing |
-| HTTPS interception | Proven library, auto CA certs | Custom implementation |
+| HTTPS interception | Built-in via Playwright `page.route()` | Custom implementation |
 | Agent integration | Standard MCP protocol, multi-agent | Custom per-agent REST clients |
 | Cross-browser | Chromium, Firefox, WebKit | Chromium only |
 | Install complexity | `npm install` (prebuild binaries) | `npm install` + manual LevelDB setup |
 
 ## Decision
 
-Use **Playwright + better-sqlite3 + http-mitm-proxy + @modelcontextprotocol/sdk + TypeScript**.
+Use **Playwright + better-sqlite3 + @modelcontextprotocol/sdk + TypeScript**.
+
+(Originally included `http-mitm-proxy`; removed April 2026 — see Status note above.)
 
 This stack was chosen because:
 
 1. **Playwright's `storageState()`** provides the cleanest auth handoff pattern — an agent authenticates in a headed browser, exports state to JSON, and the tool loads it headlessly. No alternative offers this as a single API call.
 2. **Synchronous SQLite writes** eliminate the class of bugs where rapid violation events are lost to async write queues. During a typical page load, 20-50 violations fire within 100ms; better-sqlite3 handles this without batching or queue management.
 3. **MCP is the emerging standard** for AI agent tool integration. A single MCP server implementation makes the tool usable by Claude Code, Codex, Gemini, and Copilot without per-agent adapters.
-4. **Dual-mode CSP injection** is uniquely enabled by Playwright's `page.route()` (eliminating the proxy for local development) combined with http-mitm-proxy (for remote HTTPS sites).
+4. **Single-path CSP injection** is enabled end-to-end by Playwright's `page.route()` with `route.fetch()` + `route.fulfill()`, which strips the origin's CSP headers and rewrites them with our deny-all policy before the browser parses the response. This works uniformly for local and remote HTTPS targets and removed the need for a separate MITM proxy dependency.
 
 ## Consequences
 
@@ -86,6 +89,6 @@ This stack was chosen because:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| http-mitm-proxy unmaintained (last published 2023) | Medium | Medium | MITM proxy is only used for remote HTTPS sites; local mode uses Playwright route interception. If the library fails on newer TLS, fork or replace with `@bjowes/http-mitm-proxy` (active fork, published Jan 2025) |
 | better-sqlite3 native compilation fails on exotic platforms | Low | High | Prebuild binaries cover all major platforms; fallback to `sql.js` (WASM-based) if needed |
+| Playwright `page.route()` misses a header rewrite on an unusual response path (HTTP/2 server push, early hints) | Low | Medium | Covered by automated interactive/crawler tests against remote CSP-hardened sites; if a regression surfaces we can reintroduce a targeted proxy rather than restore the full dual-mode architecture |
 | MCP protocol breaking changes | Low | Medium | Pin SDK version; MCP is backed by Anthropic with broad industry adoption |
