@@ -24,6 +24,8 @@ function createMockContext(pagesByUrl: Record<string, { links?: string[]; status
       const page: Record<string, unknown> = {
         close: vi.fn().mockResolvedValue(undefined),
         $$eval: vi.fn().mockResolvedValue([]),
+        evaluate: vi.fn().mockResolvedValue(undefined),
+        waitForLoadState: vi.fn().mockResolvedValue(undefined),
         goto: vi.fn().mockImplementation((url: string) => {
           const entry = pagesByUrl[url];
           if (entry?.error) {
@@ -246,6 +248,8 @@ describe('crawl', () => {
             return Promise.resolve({ status: () => 200 });
           }),
           $$eval: vi.fn().mockResolvedValue([]),
+          evaluate: vi.fn().mockResolvedValue(undefined),
+          waitForLoadState: vi.fn().mockResolvedValue(undefined),
           close: vi.fn().mockResolvedValue(undefined),
         };
         return Promise.resolve(page as unknown as Page);
@@ -305,6 +309,8 @@ describe('crawl', () => {
         return Promise.resolve({
           goto: vi.fn().mockResolvedValue({ status: () => 200 }),
           $$eval: vi.fn().mockResolvedValue([]),
+          evaluate: vi.fn().mockResolvedValue(undefined),
+          waitForLoadState: vi.fn().mockResolvedValue(undefined),
           close: closeFn,
         } as unknown as Page);
       }),
@@ -323,6 +329,8 @@ describe('crawl', () => {
         return Promise.resolve({
           goto: vi.fn().mockRejectedValue(new Error('timeout')),
           $$eval: vi.fn().mockResolvedValue([]),
+          evaluate: vi.fn().mockResolvedValue(undefined),
+          waitForLoadState: vi.fn().mockResolvedValue(undefined),
           close: closeFn,
         } as unknown as Page);
       }),
@@ -417,6 +425,84 @@ describe('crawl', () => {
     expect(pages[0].statusCode).toBe(201);
   });
 
+  describe('late-resource probing', () => {
+    it('invokes page.evaluate to probe favicons and trigger lazy-load scroll', async () => {
+      const evaluateMock = vi.fn().mockResolvedValue(undefined);
+      const context = {
+        newPage: vi.fn().mockImplementation(() => {
+          return Promise.resolve({
+            goto: vi.fn().mockResolvedValue({ status: () => 200 }),
+            $$eval: vi.fn().mockResolvedValue([]),
+            evaluate: evaluateMock,
+            waitForLoadState: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn().mockResolvedValue(undefined),
+          } as unknown as Page);
+        }),
+      } as unknown as BrowserContext;
+
+      await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG);
+
+      expect(evaluateMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for networkidle after probing late resources', async () => {
+      const waitForLoadStateMock = vi.fn().mockResolvedValue(undefined);
+      const context = {
+        newPage: vi.fn().mockImplementation(() => {
+          return Promise.resolve({
+            goto: vi.fn().mockResolvedValue({ status: () => 200 }),
+            $$eval: vi.fn().mockResolvedValue([]),
+            evaluate: vi.fn().mockResolvedValue(undefined),
+            waitForLoadState: waitForLoadStateMock,
+            close: vi.fn().mockResolvedValue(undefined),
+          } as unknown as Page);
+        }),
+      } as unknown as BrowserContext;
+
+      await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG);
+
+      expect(waitForLoadStateMock).toHaveBeenCalledWith('networkidle', { timeout: 3000 });
+    });
+
+    it('swallows errors from page.evaluate so crawl continues', async () => {
+      const context = {
+        newPage: vi.fn().mockImplementation(() => {
+          return Promise.resolve({
+            goto: vi.fn().mockResolvedValue({ status: () => 200 }),
+            $$eval: vi.fn().mockResolvedValue([]),
+            evaluate: vi.fn().mockRejectedValue(new Error('page closed')),
+            waitForLoadState: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn().mockResolvedValue(undefined),
+          } as unknown as Page);
+        }),
+      } as unknown as BrowserContext;
+
+      const result = await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG);
+
+      expect(result.pagesVisited).toBe(1);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('swallows networkidle timeout so crawl continues', async () => {
+      const context = {
+        newPage: vi.fn().mockImplementation(() => {
+          return Promise.resolve({
+            goto: vi.fn().mockResolvedValue({ status: () => 200 }),
+            $$eval: vi.fn().mockResolvedValue([]),
+            evaluate: vi.fn().mockResolvedValue(undefined),
+            waitForLoadState: vi.fn().mockRejectedValue(new Error('Timeout 3000ms exceeded')),
+            close: vi.fn().mockResolvedValue(undefined),
+          } as unknown as Page);
+        }),
+      } as unknown as BrowserContext;
+
+      const result = await crawl(context, db, sessionId, 'https://example.com/', DEFAULT_CRAWL_CONFIG);
+
+      expect(result.pagesVisited).toBe(1);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
   describe('settlement delay', () => {
     it('waits the configured settlementDelay before closing the page', async () => {
       const callOrder: string[] = [];
@@ -426,6 +512,8 @@ describe('crawl', () => {
           const page = {
             goto: vi.fn().mockResolvedValue({ status: () => 200 }),
             $$eval: vi.fn().mockResolvedValue([]),
+            evaluate: vi.fn().mockResolvedValue(undefined),
+            waitForLoadState: vi.fn().mockResolvedValue(undefined),
             close: vi.fn().mockImplementation(() => {
               callOrder.push('close');
               return Promise.resolve();
@@ -467,6 +555,8 @@ describe('crawl', () => {
               return Promise.resolve({ status: () => 200 });
             }),
             $$eval: vi.fn().mockResolvedValue([]),
+            evaluate: vi.fn().mockResolvedValue(undefined),
+            waitForLoadState: vi.fn().mockResolvedValue(undefined),
             close: vi.fn().mockImplementation(() => {
               if (violationTimer) clearTimeout(violationTimer);
               return Promise.resolve();

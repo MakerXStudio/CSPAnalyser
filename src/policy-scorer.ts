@@ -147,6 +147,24 @@ export function scoreCspPolicy(directives: Record<string, string[]>): CspScore {
     }
   }
 
+  // 'unsafe-hashes' in script-src-attr or style-src-attr. This keyword is
+  // required for hashes to apply to inline event handlers and style="..."
+  // attributes, but it broadens the attack surface: any attribute with the
+  // same hashed content is allowed anywhere in the DOM. Prefer refactoring
+  // inline handlers to addEventListener and inline styles to CSS classes.
+  for (const d of ['script-src-attr', 'style-src-attr']) {
+    if (directiveContains(directives, d, "'unsafe-hashes'")) {
+      findings.push({
+        directive: d,
+        message: `'unsafe-hashes' in ${d} broadens the attack surface — consider refactoring inline ${
+          d === 'script-src-attr' ? 'event handlers to addEventListener' : 'styles to CSS classes'
+        }`,
+        severity: 'info',
+        points: -5,
+      });
+    }
+  }
+
   // ── Info deductions (missing hardening directives) ─────────────────
 
   if (!('object-src' in directives) && !directiveContains(directives, 'default-src', "'none'")) {

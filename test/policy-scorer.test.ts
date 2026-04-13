@@ -177,6 +177,33 @@ describe('scoreCspPolicy — info deductions', () => {
     });
     expect(score.findings.some((f) => f.directive === 'form-action')).toBe(true);
   });
+
+  it("penalizes 'unsafe-hashes' in style-src-attr", () => {
+    const score = scoreCspPolicy({
+      'default-src': ["'self'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'style-src-attr': ["'unsafe-hashes'", "'sha256-abc'"],
+    });
+    const finding = score.findings.find((f) => f.directive === 'style-src-attr');
+    expect(finding).toBeDefined();
+    expect(finding?.points).toBe(-5);
+    expect(finding?.severity).toBe('info');
+  });
+
+  it("penalizes 'unsafe-hashes' in script-src-attr", () => {
+    const score = scoreCspPolicy({
+      'default-src': ["'self'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'script-src-attr': ["'unsafe-hashes'", "'sha256-abc'"],
+    });
+    const finding = score.findings.find((f) => f.directive === 'script-src-attr');
+    expect(finding).toBeDefined();
+    expect(finding?.points).toBe(-5);
+  });
 });
 
 // ── Positive signals ───────────────────────────────────────────────────

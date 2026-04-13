@@ -29,6 +29,58 @@ function sanitizeErrorMessage(message: string): string {
 }
 
 /**
+ * Triggers late-loading resources that headless browsers often skip or that
+ * load asynchronously after initial page load. Without this, common violations
+ * for favicons and lazy-loaded images are missed.
+ *
+ * - Explicitly requests declared favicon/icon link hrefs (plus /favicon.ico as
+ *   a fallback) via Image() to trigger img-src violations. Headless Chromium
+ *   does not always request favicons, and even when it does, the request may
+ *   fire after the page is closed.
+ * - Scrolls to the bottom of the page to trigger IntersectionObserver-based
+ *   lazy-loading for images, iframes, and other deferred resources.
+ *
+ * Runs entirely in the page context. Failures are swallowed — we only care
+ * about triggering the requests so violations get reported.
+ */
+async function triggerLateResources(page: Page): Promise<void> {
+  try {
+    await page.evaluate(() => {
+      // 1. Probe favicons so CSP img-src violations fire even if the headless
+      //    browser skipped the implicit favicon request.
+      const iconHrefs = new Set<string>();
+      document
+        .querySelectorAll<HTMLLinkElement>('link[rel~="icon"], link[rel~="shortcut"], link[rel~="apple-touch-icon"]')
+        .forEach((l) => {
+          if (l.href) iconHrefs.add(l.href);
+        });
+      // Always try the default path as well
+      iconHrefs.add(new URL('/favicon.ico', location.href).href);
+
+      for (const href of iconHrefs) {
+        try {
+          const img = new Image();
+          img.src = href;
+        } catch {
+          // ignore
+        }
+      }
+
+      // 2. Scroll to bottom to trigger IntersectionObserver lazy-loading,
+      //    then back to top so later screenshots/interactions start at the top.
+      try {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        window.scrollTo(0, 0);
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // Page may have navigated or closed — ignore.
+  }
+}
+
+/**
  * Normalizes a URL by stripping the fragment and trailing whitespace.
  */
 function normalizeUrl(url: string, baseUrl?: string): string | null {
@@ -98,6 +150,22 @@ export async function crawl(
 
       if (pageRecord && callbacks?.onPageLoaded) {
         await callbacks.onPageLoaded(page, url, pageRecord.id);
+      }
+
+      // Trigger late-loading resources (favicons, lazy-loaded images). These
+      // frequently produce violations that are otherwise missed because the
+      // headless browser skips favicon fetches or IntersectionObserver-based
+      // content never enters the viewport during a typical crawl.
+      await triggerLateResources(page);
+
+      // After triggering probes and lazy-load, wait for network to go idle
+      // so the resulting requests complete (and any violations are reported)
+      // before we close the page. Short timeout so a perpetually-busy page
+      // doesn't stall the crawl.
+      try {
+        await page.waitForLoadState('networkidle', { timeout: 3000 });
+      } catch {
+        // Timeout is fine — we proceed to the settlement delay.
       }
 
       // Extract links if we haven't reached max depth

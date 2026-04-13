@@ -425,6 +425,58 @@ describe('hash-based unsafe-inline removal', () => {
   });
 });
 
+// ── 'unsafe-hashes' required for -attr directives with hashes ──────────
+
+describe("auto-add 'unsafe-hashes' to attr directives with hashes", () => {
+  it("adds 'unsafe-hashes' to style-src-attr when a hash is present", () => {
+    const result = optimizePolicy({
+      'style-src-attr': ["'sha256-abc'"],
+    });
+    expect(result['style-src-attr']).toContain("'unsafe-hashes'");
+    expect(result['style-src-attr']).toContain("'sha256-abc'");
+  });
+
+  it("adds 'unsafe-hashes' to script-src-attr when a hash is present", () => {
+    const result = optimizePolicy({
+      'script-src-attr': ["'sha256-xyz'"],
+    });
+    expect(result['script-src-attr']).toContain("'unsafe-hashes'");
+  });
+
+  it("supports sha384 and sha512", () => {
+    const result = optimizePolicy({
+      'style-src-attr': ["'sha384-longhash'"],
+      'script-src-attr': ["'sha512-longerhash'"],
+    });
+    expect(result['style-src-attr']).toContain("'unsafe-hashes'");
+    expect(result['script-src-attr']).toContain("'unsafe-hashes'");
+  });
+
+  it("does not add 'unsafe-hashes' when no hashes are present", () => {
+    const result = optimizePolicy({
+      'style-src-attr': ["'unsafe-inline'"],
+    });
+    expect(result['style-src-attr']).not.toContain("'unsafe-hashes'");
+  });
+
+  it("does not add 'unsafe-hashes' to non-attr hash directives", () => {
+    const result = optimizePolicy({
+      'script-src-elem': ["'self'", "'sha256-abc'"],
+      'style-src-elem': ["'self'", "'sha256-def'"],
+    });
+    expect(result['script-src-elem']).not.toContain("'unsafe-hashes'");
+    expect(result['style-src-elem']).not.toContain("'unsafe-hashes'");
+  });
+
+  it("does not duplicate 'unsafe-hashes' when already present", () => {
+    const result = optimizePolicy({
+      'style-src-attr': ["'unsafe-hashes'", "'sha256-abc'"],
+    });
+    const count = result['style-src-attr'].filter((s) => s === "'unsafe-hashes'").length;
+    expect(count).toBe(1);
+  });
+});
+
 // ── Strip 'unsafe-eval' ─────────────────────────────────────────────────
 
 describe('stripUnsafeEval', () => {

@@ -164,6 +164,32 @@ export function optimizePolicy(
     }
   }
 
+  // CSP spec: hashes under script-src-attr / style-src-attr (inline event
+  // handlers and style="" attributes) are ignored unless 'unsafe-hashes' is
+  // also present. Without this, browsers block the inline content even though
+  // its hash appears in the policy. Applied unconditionally — this is a
+  // correctness fix, not an opt-in optimization. See CSP3 §2.3.2.
+  //
+  // Note: 'unsafe-hashes' broadens the attack surface compared to hashes in
+  // <script>/<style> blocks (any attribute with the same hashed content is
+  // allowed anywhere in the DOM). The scorer flags this so users are nudged
+  // toward refactoring inline handlers/styles to external files or listeners.
+  const attrHashDirectives = ['script-src-attr', 'style-src-attr'];
+  for (const directive of attrHashDirectives) {
+    if (directive in result) {
+      const sources = result[directive];
+      const hasHash = sources.some(
+        (s) =>
+          s.startsWith("'sha256-") ||
+          s.startsWith("'sha384-") ||
+          s.startsWith("'sha512-"),
+      );
+      if (hasHash && !sources.includes("'unsafe-hashes'")) {
+        result[directive] = [...sources, "'unsafe-hashes'"].sort();
+      }
+    }
+  }
+
   // Replace 'unsafe-inline' with nonce placeholder in script/style directives
   if (options?.useNonces) {
     const nonceDirectives = [

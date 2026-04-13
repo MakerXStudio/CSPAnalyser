@@ -356,6 +356,14 @@ export function createMcpServer(db: Database.Database): McpServer {
           .enum(['strict', 'moderate', 'permissive'])
           .optional()
           .describe('Policy strictness (default: moderate)'),
+        useHashes: z
+          .boolean()
+          .optional()
+          .describe("Score the hash-optimized policy (removes 'unsafe-inline' where hashes exist, adds 'unsafe-hashes' where required) (default: false)"),
+        stripUnsafeEval: z
+          .boolean()
+          .optional()
+          .describe("Score the policy with 'unsafe-eval' stripped (default: false)"),
       },
     },
     async (args) => {
@@ -367,9 +375,12 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const directives = generatePolicy(db, args.sessionId, {
           strictness: args.strictness ?? 'moderate',
-          includeHashes: false,
+          includeHashes: args.useHashes ?? false,
         });
-        const optimized = optimizePolicy(directives, session.targetUrl);
+        const optimized = optimizePolicy(directives, session.targetUrl, {
+          useHashes: args.useHashes,
+          stripUnsafeEval: args.stripUnsafeEval,
+        });
 
         const { scoreCspPolicy, formatScore } = await import('./policy-scorer.js');
         const score = scoreCspPolicy(optimized);

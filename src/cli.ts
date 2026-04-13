@@ -567,7 +567,7 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
     const session = getSession(db, sessionId);
     const directives = generatePolicy(db, sessionId, {
       strictness: args.strictness,
-      includeHashes: false,
+      includeHashes: args.hash,
     });
     const optimized = optimizePolicy(directives, session?.targetUrl, {
       useNonces: args.nonce,
