@@ -26,7 +26,6 @@ description: Complete reference of all CLI flags and commands
 | `--max-pages <n>` | integer (1+) | `10` | `crawl` | Maximum number of pages to visit during crawl |
 | `--strictness <level>` | `strict` \| `moderate` \| `permissive` | `moderate` | `crawl`, `generate`, `export`, `diff`, `score` | Controls how specific source expressions are. See [strictness levels](/guides/strictness). |
 | `--format <fmt>` | `header` \| `meta` \| `nginx` \| `apache` \| `cloudflare` \| `cloudflare-pages` \| `json` | `header` | `crawl`, `generate`, `export` | Output format for the generated policy. See [export formats](/guides/export-formats). |
-| `--mode <mode>` | `local` \| `mitm` | auto-detect | `crawl`, `interactive` | CSP injection mode. `local` uses Playwright route interception, `mitm` uses HTTPS intercepting proxy. Auto-detected based on target URL. |
 | `--storage-state <path>` | string (file path) | -- | `crawl`, `interactive` | Path to a Playwright storage state JSON file for authenticated sessions. Must have `.json` extension. |
 | `--save-storage-state <path>` | string (file path) | -- | `interactive` | Export browser cookies and storage state to a JSON file when the session ends. See [authentication guide](/guides/authentication). |
 | `--violation-limit <n>` | integer (0+) | `10000` | `crawl`, `interactive` | Maximum violations to accept per session. `0` for unlimited. |

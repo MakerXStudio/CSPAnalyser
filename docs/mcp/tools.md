@@ -14,7 +14,6 @@ Start a new CSP analysis session: crawl a website with a deny-all report-only CS
 | Parameter | Type | Required | Default | Description |
 |-----------|------|:--------:|---------|-------------|
 | `targetUrl` | `string` (URL) | Yes | -- | The URL to analyse |
-| `mode` | `"local" \| "mitm"` | No | auto-detect | Proxy mode |
 | `depth` | `integer` (0-10) | No | 1 | Crawl depth |
 | `maxPages` | `integer` (1-1000) | No | 10 | Maximum pages to crawl |
 | `settlementDelay` | `integer` (0-10000) | No | 500 | Milliseconds to wait after page load for late violations |
@@ -33,7 +32,7 @@ Start a new CSP analysis session: crawl a website with a deny-all report-only CS
 }
 ```
 
-**Response includes:** `sessionId`, `targetUrl`, `mode`, `pagesVisited`, `violationsFound`, `errors`
+**Response includes:** `sessionId`, `targetUrl`, `pagesVisited`, `violationsFound`, `errors`
 
 ---
 
@@ -44,7 +43,6 @@ Analyse a single page for CSP violations. Convenience wrapper that sets `depth=0
 | Parameter | Type | Required | Default | Description |
 |-----------|------|:--------:|---------|-------------|
 | `url` | `string` (URL) | Yes | -- | The URL to analyse |
-| `mode` | `"local" \| "mitm"` | No | auto-detect | Proxy mode |
 | `storageStatePath` | `string` | No | -- | Path to Playwright storageState JSON |
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness level |
 
@@ -56,7 +54,7 @@ Analyse a single page for CSP violations. Convenience wrapper that sets `depth=0
 }
 ```
 
-**Response includes:** `sessionId`, `targetUrl`, `mode`, `pagesVisited`, `violationsFound`, `errors`
+**Response includes:** `sessionId`, `targetUrl`, `pagesVisited`, `violationsFound`, `errors`
 
 ---
 

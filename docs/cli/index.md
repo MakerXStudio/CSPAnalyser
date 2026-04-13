@@ -24,7 +24,6 @@ Options:
   --strictness <level>   strict | moderate | permissive (default: moderate)
   --format <fmt>         header | meta | nginx | apache | cloudflare
                          | cloudflare-pages | json (default: header)
-  --mode <mode>          local | mitm (default: auto-detect)
   --storage-state <path> Playwright storage state file for auth
   --save-storage-state <path>  Export session state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)

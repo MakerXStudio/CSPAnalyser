@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve as resolvePath, dirname } from 'node:path';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import type Database from 'better-sqlite3';
-import type { Session, SessionConfig, CrawlConfig, SessionMode } from './types.js';
+import type { Session, SessionConfig, CrawlConfig } from './types.js';
 import {
   createSession,
   updateSession,
@@ -17,10 +17,8 @@ import { setupCspInjection, type CapturedPermissionsPolicy } from './csp-injecto
 import { parsePermissionsPolicyHeaders } from './permissions-policy.js';
 import { setupViolationListener } from './violation-listener.js';
 import { crawl, type CrawlCallbacks } from './crawler.js';
-import { shouldUseMitmMode, extractOrigin } from './utils/url-utils.js';
+import { extractOrigin } from './utils/url-utils.js';
 import { createAuthenticatedContext, type AuthOptions } from './auth.js';
-import { startMitmProxy, type MitmProxyInstance, type MitmProxyOptions } from './mitm-proxy.js';
-import { ensureCACertificate, secureCertFiles } from './cert-manager.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -31,10 +29,6 @@ const DEFAULT_CRAWL_CONFIG: CrawlConfig = {
   waitStrategy: 'load',
   settlementDelay: 500,
 };
-
-import { getDataDir } from './utils/file-utils.js';
-
-const DEFAULT_DATA_DIR = getDataDir();
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -56,12 +50,10 @@ export interface InteractiveSessionResult {
 export interface RunSessionOptions {
   onProgress?: (msg: string) => void;
   headless?: boolean;
-  dataDir?: string;
 }
 
 export interface InteractiveSessionOptions {
   onProgress?: (msg: string) => void;
-  dataDir?: string;
   /** If set, export browser storage state (cookies, localStorage) to this path on session end */
   saveStorageStatePath?: string;
 }
@@ -70,9 +62,8 @@ export interface InteractiveSessionOptions {
  * Injectable dependencies for testing — production code uses the real imports.
  */
 export interface SessionDeps {
-  launchBrowser: (options: { headless: boolean; args?: string[] }) => Promise<Browser>;
+  launchBrowser: (options: { headless: boolean }) => Promise<Browser>;
   startReportServer: typeof startReportServer;
-  startMitmProxy: (options: MitmProxyOptions) => Promise<MitmProxyInstance>;
   createAuthenticatedContext: typeof createAuthenticatedContext;
   crawl: typeof crawl;
   setupCspInjection: typeof setupCspInjection;
@@ -85,11 +76,10 @@ export interface SessionDeps {
  * Runs a complete CSP analysis session.
  *
  * 1. Creates session in DB
- * 2. Launches browser + report server
- * 3. Optionally starts MITM proxy for remote HTTPS sites
- * 4. Authenticates if configured
- * 5. Crawls pages, injecting CSP and capturing violations
- * 6. Cleans up and returns results
+ * 2. Starts report server + launches browser
+ * 3. Authenticates if configured
+ * 4. Crawls pages, injecting CSP via Playwright route API and capturing violations
+ * 5. Cleans up and returns results
  */
 export async function runSession(
   db: Database.Database,
@@ -98,34 +88,29 @@ export async function runSession(
   deps?: Partial<SessionDeps>,
 ): Promise<SessionResult> {
   const headless = options?.headless ?? true;
-  const dataDir = options?.dataDir ?? DEFAULT_DATA_DIR;
   const progress = options?.onProgress ?? (() => {});
 
   // Resolve dependencies (allow injection for testing)
   const _launchBrowser =
     deps?.launchBrowser ??
-    (async (opts: { headless: boolean; args?: string[] }) => {
+    (async (opts: { headless: boolean }) => {
       const { chromium } = await import('playwright');
-      return chromium.launch({ headless: opts.headless, args: opts.args });
+      return chromium.launch({ headless: opts.headless });
     });
   const _startReportServer = deps?.startReportServer ?? startReportServer;
-  const _startMitmProxy = deps?.startMitmProxy ?? startMitmProxy;
   const _createAuthContext = deps?.createAuthenticatedContext ?? createAuthenticatedContext;
   const _crawl = deps?.crawl ?? crawl;
   const _setupCspInjection = deps?.setupCspInjection ?? setupCspInjection;
   const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
 
   // 1. Create session
-  const mode: SessionMode = config.mode ?? (shouldUseMitmMode(config.targetUrl) ? 'mitm' : 'local');
-  const sessionConfig: SessionConfig = { ...config, mode };
-  const session = createSession(db, sessionConfig);
+  const session = createSession(db, config);
   const sessionId = session.id;
   progress(`Session created: ${sessionId}`);
-  logger.info('Session created', { sessionId, mode, targetUrl: config.targetUrl });
+  logger.info('Session created', { sessionId, targetUrl: config.targetUrl });
 
   let browser: Browser | null = null;
   let reportServer: { port: number; token: string; close: () => Promise<void> } | null = null;
-  let mitmProxy: MitmProxyInstance | null = null;
   let context: BrowserContext | null = null;
 
   try {
@@ -141,34 +126,18 @@ export async function runSession(
     updateSession(db, sessionId, { reportServerPort });
     logger.info('Report server started', { port: reportServerPort });
 
-    // 3. Start MITM proxy if needed (before browser so we can pin its CA cert)
-    let proxyPort: number | null = null;
-    if (mode === 'mitm') {
-      progress('Starting MITM proxy...');
-      const certPaths = await ensureCACertificate(dataDir);
-      mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths, targetOrigin });
-      secureCertFiles(certPaths);
-      proxyPort = mitmProxy.port;
-      updateSession(db, sessionId, { proxyPort });
-      logger.info('MITM proxy started', { port: proxyPort });
-    }
-
-    // 4. Launch browser
+    // 3. Launch browser
     progress('Launching browser...');
     browser = await _launchBrowser({ headless });
 
-    // 5. Create authenticated context
+    // 4. Create authenticated context
     progress('Setting up browser context...');
-    const proxyServer = mitmProxy ? `http://127.0.0.1:${mitmProxy.port}` : undefined;
     const authOptions: AuthOptions = {
       storageStatePath: config.storageStatePath,
       cookies: config.cookies,
       headless,
-      proxyServer,
     };
 
-    // For MITM mode, we need to cast the browser to the auth module's interface
-    // The auth module uses lightweight interfaces compatible with real Playwright
     const authResult = await _createAuthContext(
       browser as unknown as Parameters<typeof createAuthenticatedContext>[0],
       config.targetUrl,
@@ -210,11 +179,9 @@ export async function runSession(
 
     const callbacks: CrawlCallbacks = {
       onPageCreated: async (page: Page, _url: string, pageId: string) => {
-        if (mode === 'local') {
-          await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
-            onPermissionsPolicy(captured, reqUrl, pageId);
-          }, targetOrigin);
-        }
+        await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
+          onPermissionsPolicy(captured, reqUrl, pageId);
+        }, targetOrigin);
         await _setupViolationListener(page, db, sessionId, pageId);
       },
       onPageLoaded: async (_page: Page, url: string, _pageId: string) => {
@@ -270,13 +237,6 @@ export async function runSession(
         /* ignore */
       }
     }
-    if (mitmProxy) {
-      try {
-        mitmProxy.close();
-      } catch {
-        /* ignore */
-      }
-    }
     if (reportServer) {
       try {
         await reportServer.close();
@@ -310,32 +270,27 @@ export async function runInteractiveSession(
   options?: InteractiveSessionOptions,
   deps?: Partial<SessionDeps>,
 ): Promise<InteractiveSessionResult> {
-  const dataDir = options?.dataDir ?? DEFAULT_DATA_DIR;
   const progress = options?.onProgress ?? (() => {});
 
   const _launchBrowser =
     deps?.launchBrowser ??
-    (async (opts: { headless: boolean; args?: string[] }) => {
+    (async (opts: { headless: boolean }) => {
       const { chromium } = await import('playwright');
-      return chromium.launch({ headless: opts.headless, args: opts.args });
+      return chromium.launch({ headless: opts.headless });
     });
   const _startReportServer = deps?.startReportServer ?? startReportServer;
-  const _startMitmProxy = deps?.startMitmProxy ?? startMitmProxy;
   const _createAuthContext = deps?.createAuthenticatedContext ?? createAuthenticatedContext;
   const _setupCspInjection = deps?.setupCspInjection ?? setupCspInjection;
   const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
 
   // 1. Create session
-  const mode: SessionMode = config.mode ?? (shouldUseMitmMode(config.targetUrl) ? 'mitm' : 'local');
-  const sessionConfig: SessionConfig = { ...config, mode };
-  const session = createSession(db, sessionConfig);
+  const session = createSession(db, config);
   const sessionId = session.id;
   progress(`Session created: ${sessionId}`);
-  logger.info('Interactive session created', { sessionId, mode, targetUrl: config.targetUrl });
+  logger.info('Interactive session created', { sessionId, targetUrl: config.targetUrl });
 
   let browser: Browser | null = null;
   let reportServer: { port: number; token: string; close: () => Promise<void> } | null = null;
-  let mitmProxy: MitmProxyInstance | null = null;
   let context: BrowserContext | null = null;
 
   try {
@@ -350,27 +305,16 @@ export async function runInteractiveSession(
     const reportToken = reportServer.token;
     updateSession(db, sessionId, { reportServerPort });
 
-    // 3. Start MITM proxy if needed (before browser so we can pin its CA cert)
-    if (mode === 'mitm') {
-      progress('Starting MITM proxy...');
-      const certPaths = await ensureCACertificate(dataDir);
-      mitmProxy = await _startMitmProxy({ reportServerPort, reportToken, certPaths, targetOrigin });
-      secureCertFiles(certPaths);
-      updateSession(db, sessionId, { proxyPort: mitmProxy.port });
-    }
-
-    // 4. Launch headed browser
+    // 3. Launch headed browser
     progress('Launching browser...');
     browser = await _launchBrowser({ headless: false });
 
-    // 5. Create authenticated context
+    // 4. Create authenticated context
     progress('Setting up browser context...');
-    const proxyServer = mitmProxy ? `http://127.0.0.1:${mitmProxy.port}` : undefined;
     const authOptions: AuthOptions = {
       storageStatePath: config.storageStatePath,
       cookies: config.cookies,
       headless: false,
-      proxyServer,
     };
     const authResult = await _createAuthContext(
       browser as unknown as Parameters<typeof createAuthenticatedContext>[0],
@@ -381,27 +325,25 @@ export async function runInteractiveSession(
 
     updateSession(db, sessionId, { status: 'crawling' });
 
-    // 6. Helper: set up CSP injection + violation capture on a page
+    // 5. Helper: set up CSP injection + violation capture on a page
     const setupPage = async (page: Page): Promise<void> => {
-      if (mode === 'local') {
-        await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
-          const headers: Record<string, string> = {};
-          for (const c of captured) {
-            headers[c.headerName] = c.headerValue;
-          }
-          const parsed = parsePermissionsPolicyHeaders(headers);
-          for (const p of parsed) {
-            insertPermissionsPolicy(db, {
-              sessionId,
-              pageId: null,
-              directive: p.directive,
-              allowlist: p.allowlist,
-              headerType: p.headerType,
-              sourceUrl: reqUrl,
-            });
-          }
-        }, targetOrigin);
-      }
+      await _setupCspInjection(page, reportServerPort, reportToken, (captured, reqUrl) => {
+        const headers: Record<string, string> = {};
+        for (const c of captured) {
+          headers[c.headerName] = c.headerValue;
+        }
+        const parsed = parsePermissionsPolicyHeaders(headers);
+        for (const p of parsed) {
+          insertPermissionsPolicy(db, {
+            sessionId,
+            pageId: null,
+            directive: p.directive,
+            allowlist: p.allowlist,
+            headerType: p.headerType,
+            sourceUrl: reqUrl,
+          });
+        }
+      }, targetOrigin);
       await _setupViolationListener(page, db, sessionId, null);
 
       // Track page navigations as page records
@@ -415,11 +357,11 @@ export async function runInteractiveSession(
       });
     };
 
-    // 7. Create initial page, set up, and navigate
+    // 6. Create initial page, set up, and navigate
     const initialPage = await context.newPage();
     await setupPage(initialPage);
 
-    // 8. Listen for additional pages (new tabs opened by the user)
+    // 7. Listen for additional pages (new tabs opened by the user)
     context.on('page', (page: Page) => {
       setupPage(page).catch((err: unknown) => {
         logger.error('Failed to set up interactive page', {
@@ -431,14 +373,14 @@ export async function runInteractiveSession(
     progress('Browser open — browse freely, close the browser when done');
     await initialPage.goto(config.targetUrl, { waitUntil: 'load' });
 
-    // 9. Wait for browser to disconnect (user closes browser)
+    // 8. Wait for browser to disconnect (user closes browser)
     // Local const needed for TypeScript closure narrowing (browser is non-null here)
     const launchedBrowser = browser;
     await new Promise<void>((resolve) => {
       launchedBrowser.on('disconnected', () => resolve());
     });
 
-    // 10. Export storage state if requested (before context closes)
+    // 9. Export storage state if requested (before context closes)
     let savedStorageStatePath: string | undefined;
     if (options?.saveStorageStatePath) {
       try {
@@ -456,7 +398,7 @@ export async function runInteractiveSession(
       }
     }
 
-    // 11. Build result
+    // 10. Build result
     updateSession(db, sessionId, { status: 'complete' });
     const violations = getViolations(db, sessionId);
     const pages = getPages(db, sessionId);
@@ -490,13 +432,6 @@ export async function runInteractiveSession(
     if (context) {
       try {
         await context.close();
-      } catch {
-        /* ignore */
-      }
-    }
-    if (mitmProxy) {
-      try {
-        mitmProxy.close();
       } catch {
         /* ignore */
       }

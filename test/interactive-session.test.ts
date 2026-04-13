@@ -78,11 +78,6 @@ function createTestDeps(overrides?: Partial<SessionDeps>): SessionDeps {
       token: 'test-token-123',
       close: vi.fn().mockResolvedValue(undefined),
     }),
-    startMitmProxy: vi.fn().mockResolvedValue({
-      port: 8080,
-      caCertPath: '/tmp/ca.pem',
-      close: vi.fn(),
-    }),
     createAuthenticatedContext: vi.fn().mockResolvedValue({
       context: mockBrowser._mockContext,
     }),
@@ -114,11 +109,6 @@ function createAutoDisconnectDeps(overrides?: Partial<SessionDeps>): SessionDeps
       port: 9876,
       token: 'test-token-123',
       close: vi.fn().mockResolvedValue(undefined),
-    }),
-    startMitmProxy: vi.fn().mockResolvedValue({
-      port: 8080,
-      caCertPath: '/tmp/ca.pem',
-      close: vi.fn(),
     }),
     createAuthenticatedContext: vi.fn().mockResolvedValue({
       context: mockBrowser._mockContext,
@@ -324,33 +314,6 @@ describe('runInteractiveSession', () => {
     await promise;
   });
 
-  it('skips CSP injection in MITM mode', async () => {
-    const deps = createAutoDisconnectDeps();
-
-    await runInteractiveSession(
-      db,
-      { targetUrl: 'https://example.com', mode: 'mitm' },
-      {},
-      deps,
-    );
-
-    expect(deps.setupCspInjection).not.toHaveBeenCalled();
-    expect(deps.startMitmProxy).toHaveBeenCalled();
-  });
-
-  it('still sets up violation listener in MITM mode', async () => {
-    const deps = createAutoDisconnectDeps();
-
-    await runInteractiveSession(
-      db,
-      { targetUrl: 'https://example.com', mode: 'mitm' },
-      {},
-      deps,
-    );
-
-    expect(deps.setupViolationListener).toHaveBeenCalled();
-  });
-
   it('calls onProgress at key stages', async () => {
     const deps = createAutoDisconnectDeps();
     const messages: string[] = [];
@@ -545,7 +508,7 @@ describe('runInteractiveSession', () => {
     stderrWrite.mockRestore();
   });
 
-  it('uses local mode for remote HTTPS URLs by default', async () => {
+  it('uses local mode for remote HTTPS URLs', async () => {
     const deps = createAutoDisconnectDeps();
 
     const result = await runInteractiveSession(
@@ -556,7 +519,6 @@ describe('runInteractiveSession', () => {
     );
 
     expect(result.session.mode).toBe('local');
-    expect(deps.startMitmProxy).not.toHaveBeenCalled();
   });
 
   it('tracks page navigations via the load event handler', async () => {
@@ -651,20 +613,6 @@ describe('runInteractiveSession', () => {
 
     disconnectHandler!();
     await promise;
-  });
-
-  it('respects explicit mode override', async () => {
-    const deps = createAutoDisconnectDeps();
-
-    const result = await runInteractiveSession(
-      db,
-      { targetUrl: 'https://example.com', mode: 'local' },
-      {},
-      deps,
-    );
-
-    expect(result.session.mode).toBe('local');
-    expect(deps.startMitmProxy).not.toHaveBeenCalled();
   });
 
   it('exports storage state when saveStorageStatePath is provided', async () => {

@@ -121,7 +121,6 @@ describe('parseCliArgs', () => {
         '--max-pages', '20',
         '--strictness', 'strict',
         '--format', 'nginx',
-        '--mode', 'mitm',
         '--storage-state', '/tmp/state.json',
         '--report-only',
       ]);
@@ -132,7 +131,6 @@ describe('parseCliArgs', () => {
         maxPages: 20,
         strictness: 'strict',
         format: 'nginx',
-        mode: 'mitm',
         storageState: '/tmp/state.json',
         reportOnly: true,
       });
@@ -263,12 +261,6 @@ describe('parseCliArgs', () => {
     it('throws on invalid format', () => {
       expect(() => parseCliArgs(['crawl', 'https://example.com', '--format', 'yaml'])).toThrow(
         'Invalid format: "yaml"',
-      );
-    });
-
-    it('throws on invalid mode', () => {
-      expect(() => parseCliArgs(['crawl', 'https://example.com', '--mode', 'remote'])).toThrow(
-        'Invalid mode: "remote"',
       );
     });
 
@@ -521,7 +513,6 @@ describe('main', () => {
       'crawl', 'https://example.com',
       '--depth', '3',
       '--max-pages', '20',
-      '--mode', 'mitm',
       '--storage-state', '/tmp/state.json',
     ]);
 
@@ -529,7 +520,6 @@ describe('main', () => {
       expect.anything(),
       expect.objectContaining({
         targetUrl: 'https://example.com',
-        mode: 'mitm',
         crawlConfig: { depth: 3, maxPages: 20 },
         storageStatePath: '/tmp/state.json',
       }),

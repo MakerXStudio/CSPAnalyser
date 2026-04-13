@@ -73,21 +73,6 @@ export function isSameOrigin(url1: string, url2: string): boolean {
 }
 
 /**
- * Auto-detection logic for whether MITM proxy mode is needed.
- *
- * Always returns false — local mode (Playwright page.route()) works reliably
- * for all targets including remote HTTPS. The MITM proxy adds complexity
- * (TLS cert generation, proxy trust, Chrome background service noise) that
- * is unnecessary with modern Playwright's route.fetch()/route.fulfill().
- *
- * Users can still force MITM mode with --mode mitm or mode: 'mitm' for
- * the rare edge case where page.route() doesn't intercept CSP headers.
- */
-export function shouldUseMitmMode(_targetUrl: string): boolean {
-  return false;
-}
-
-/**
  * Common multi-part ccTLD suffixes where wildcarding the second-level
  * domain would be catastrophically permissive (e.g., *.co.uk).
  */

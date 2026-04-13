@@ -358,7 +358,6 @@ describe('start_session', () => {
 
     await callTool('start_session', {
       targetUrl: 'https://example.com',
-      mode: 'local',
       depth: 2,
       maxPages: 50,
       storageStatePath: '/tmp/state.json',
@@ -366,7 +365,6 @@ describe('start_session', () => {
 
     expect(mockRunSession).toHaveBeenCalledWith(db, expect.objectContaining({
       targetUrl: 'https://example.com',
-      mode: 'local',
       crawlConfig: { depth: 2, maxPages: 50, settlementDelay: undefined },
       storageStatePath: '/tmp/state.json',
     }));
@@ -423,7 +421,6 @@ describe('crawl_url', () => {
     expect(data.violationsFound).toBe(3);
     expect(data.sessionId).toBe(session.id);
     expect(data.targetUrl).toBeDefined();
-    expect(data.mode).toBeDefined();
   });
 
   it('sets depth=0 and maxPages=1 for single-page crawl', async () => {

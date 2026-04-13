@@ -3,7 +3,6 @@ import {
   extractOrigin,
   isLocalhost,
   isSameOrigin,
-  shouldUseMitmMode,
   generateWildcardDomain,
   normalizeBlockedUri,
   validateTargetUrl,
@@ -91,32 +90,6 @@ describe('isSameOrigin', () => {
 
   it('ignores path differences', () => {
     expect(isSameOrigin('https://example.com/page1', 'https://example.com/page2?q=1')).toBe(true);
-  });
-});
-
-describe('shouldUseMitmMode', () => {
-  it('returns false for http URLs', () => {
-    expect(shouldUseMitmMode('http://example.com/')).toBe(false);
-  });
-
-  it('returns false for localhost https', () => {
-    expect(shouldUseMitmMode('https://localhost:3000/')).toBe(false);
-  });
-
-  it('returns false for 127.0.0.1 https', () => {
-    expect(shouldUseMitmMode('https://127.0.0.1:3000/')).toBe(false);
-  });
-
-  it('returns false for [::1] https', () => {
-    expect(shouldUseMitmMode('https://[::1]:3000/')).toBe(false);
-  });
-
-  it('returns false for remote https (local mode is default)', () => {
-    expect(shouldUseMitmMode('https://example.com/')).toBe(false);
-  });
-
-  it('returns false for http localhost', () => {
-    expect(shouldUseMitmMode('http://localhost:3000/')).toBe(false);
   });
 });
 

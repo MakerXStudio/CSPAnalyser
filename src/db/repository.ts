@@ -145,7 +145,7 @@ export function createSession(db: Database.Database, config: SessionConfig): Ses
     INSERT INTO sessions (id, target_url, status, mode, config)
     VALUES (?, ?, 'created', ?, ?)
   `);
-  stmt.run(id, config.targetUrl, config.mode ?? 'local', JSON.stringify(persistConfig));
+  stmt.run(id, config.targetUrl, 'local', JSON.stringify(persistConfig));
   const session = getSession(db, id);
   if (!session) {
     throw new Error(`Failed to retrieve session after insert: ${id}`);
@@ -156,7 +156,7 @@ export function createSession(db: Database.Database, config: SessionConfig): Ses
 export function updateSession(
   db: Database.Database,
   id: string,
-  updates: Partial<Pick<Session, 'status' | 'reportServerPort' | 'proxyPort'>>,
+  updates: Partial<Pick<Session, 'status' | 'reportServerPort'>>,
 ): void {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -168,10 +168,6 @@ export function updateSession(
   if (updates.reportServerPort !== undefined) {
     sets.push('report_server_port = ?');
     params.push(updates.reportServerPort);
-  }
-  if (updates.proxyPort !== undefined) {
-    sets.push('proxy_port = ?');
-    params.push(updates.proxyPort);
   }
 
   if (sets.length === 0) return;

@@ -38,7 +38,6 @@ import {
 import {
   extractOrigin,
   isSameOrigin,
-  shouldUseMitmMode,
   generateWildcardDomain,
   normalizeBlockedUri,
 } from '../src/utils/url-utils.js';
@@ -129,25 +128,6 @@ describe('URL handling edge cases', () => {
     expect(normalizeBlockedUri('mediastream:id')).toBe('mediastream:');
   });
 
-  it('shouldUseMitmMode returns false for http localhost', () => {
-    expect(shouldUseMitmMode('http://localhost:3000')).toBe(false);
-  });
-
-  it('shouldUseMitmMode returns false for http remote', () => {
-    expect(shouldUseMitmMode('http://example.com')).toBe(false);
-  });
-
-  it('shouldUseMitmMode returns false for https localhost', () => {
-    expect(shouldUseMitmMode('https://localhost:3000')).toBe(false);
-  });
-
-  it('shouldUseMitmMode returns false for https remote (local mode is default)', () => {
-    expect(shouldUseMitmMode('https://example.com')).toBe(false);
-  });
-
-  it('shouldUseMitmMode returns false for https [::1]', () => {
-    expect(shouldUseMitmMode('https://[::1]:3000')).toBe(false);
-  });
 });
 
 // ── CSP injector: line 105 (invalid URL in error path) ────────────────────
@@ -679,11 +659,6 @@ describe('session-manager onPageLoaded callback', () => {
         port: 9876,
         token: 'test-token',
         close: vi.fn().mockResolvedValue(undefined),
-      }),
-      startMitmProxy: vi.fn().mockResolvedValue({
-        port: 8080,
-        caCertPath: '/tmp/ca.pem',
-        close: vi.fn(),
       }),
       createAuthenticatedContext: vi.fn().mockResolvedValue({ context: mockContext }),
       crawl: vi.fn().mockImplementation(async (_ctx, _db, _sid, _url, _config, callbacks) => {

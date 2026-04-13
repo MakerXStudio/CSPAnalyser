@@ -129,13 +129,12 @@ describe('Session CRUD', () => {
     expect(updated.updatedAt).toBeTruthy();
   });
 
-  it('updateSession updates ports', () => {
+  it('updateSession updates report server port', () => {
     const session = createSession(db, TEST_CONFIG);
-    updateSession(db, session.id, { reportServerPort: 8080, proxyPort: 9090 });
+    updateSession(db, session.id, { reportServerPort: 8080 });
 
     const updated = getSession(db, session.id)!;
     expect(updated.reportServerPort).toBe(8080);
-    expect(updated.proxyPort).toBe(9090);
   });
 
   it('updateSession with partial updates only changes specified fields', () => {

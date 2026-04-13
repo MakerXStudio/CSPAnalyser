@@ -67,7 +67,6 @@ export interface ParsedArgs {
   maxPages: number;
   strictness: StrictnessLevel;
   format: ExportFormat;
-  mode?: 'local' | 'mitm';
   storageState?: string;
   saveStorageState?: string;
   reportOnly: boolean;
@@ -86,8 +85,6 @@ const VALID_FORMATS: ReadonlySet<string> = new Set([
   'cloudflare-pages',
   'json',
 ]);
-const VALID_MODES: ReadonlySet<string> = new Set(['local', 'mitm']);
-
 // ── Help text ───────────────────────────────────────────────────────────
 
 export const HELP_TEXT = `csp-analyser — Generate Content Security Policy headers by crawling websites
@@ -108,7 +105,6 @@ Options:
   --max-pages <n>        Max pages to visit (default: 10, crawl only)
   --strictness <level>   strict | moderate | permissive (default: moderate)
   --format <fmt>         header | meta | nginx | apache | cloudflare | cloudflare-pages | json (default: header)
-  --mode <mode>          local | mitm (default: auto-detect)
   --storage-state <path> Playwright storage state file for auth
   --save-storage-state <path>  Export session cookies/state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
@@ -150,7 +146,6 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'max-pages': { type: 'string' },
       strictness: { type: 'string' },
       format: { type: 'string' },
-      mode: { type: 'string' },
       'storage-state': { type: 'string' },
       'save-storage-state': { type: 'string' },
       'violation-limit': { type: 'string' },
@@ -232,11 +227,6 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     );
   }
 
-  const mode = values.mode as string | undefined;
-  if (mode !== undefined && !VALID_MODES.has(mode)) {
-    throw new Error(`Invalid mode: "${mode}". Must be local or mitm.`);
-  }
-
   const parsed: ParsedArgs = {
     command: command as Command,
     depth,
@@ -254,10 +244,6 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     parsed.sessionIdB = positionals[2];
   } else {
     parsed.sessionId = positionalArg;
-  }
-
-  if (mode !== undefined) {
-    parsed.mode = mode as 'local' | 'mitm';
   }
 
   const storageState = values['storage-state'] as string | undefined;
@@ -325,7 +311,6 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
   try {
     const config: SessionConfig = {
       targetUrl: args.url,
-      mode: args.mode,
       crawlConfig: { depth: args.depth, maxPages: args.maxPages },
       storageStatePath: args.storageState,
       violationLimit: args.violationLimit,
@@ -393,7 +378,6 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
   try {
     const config: SessionConfig = {
       targetUrl: args.url,
-      mode: args.mode,
       storageStatePath: args.storageState,
       violationLimit: args.violationLimit,
     };

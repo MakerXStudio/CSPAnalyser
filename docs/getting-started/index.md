@@ -76,7 +76,7 @@ csp-analyser setup
 
 ## Data directory
 
-CSP Analyser stores its SQLite database, session data, and MITM certificates in a platform-appropriate directory:
+CSP Analyser stores its SQLite database and session data in a platform-appropriate directory:
 
 | Platform | Location |
 |----------|----------|
@@ -87,7 +87,6 @@ CSP Analyser stores its SQLite database, session data, and MITM certificates in 
 ```
 csp-analyser/
   data.db     # SQLite database (sessions, violations, policies)
-  certs/      # MITM proxy CA certificates (if using --mode mitm)
 ```
 
 The directory is created automatically on first run.

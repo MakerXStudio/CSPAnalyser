@@ -8,7 +8,7 @@ export type SessionStatus =
   | 'complete'
   | 'failed';
 
-export type SessionMode = 'local' | 'mitm';
+export type SessionMode = 'local';
 
 export type ViolationSource = 'dom_event' | 'report_uri' | 'reporting_api';
 
@@ -37,7 +37,6 @@ export interface CrawlConfig {
 
 export interface SessionConfig {
   targetUrl: string;
-  mode?: SessionMode;
   crawlConfig?: Partial<CrawlConfig>;
   storageStatePath?: string;
   cookies?: CookieParam[];

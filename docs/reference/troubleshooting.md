@@ -90,14 +90,6 @@ csp-analyser interactive https://app.example.com
 csp-analyser crawl https://app.example.com --storage-state auth.json
 ```
 
-### Wrong mode
-
-If analysing a remote HTTPS site that already has a CSP header, the existing header may take precedence in local mode. Try forcing MITM mode:
-
-```bash
-csp-analyser crawl https://remote-site.com --mode mitm
-```
-
 ### Settlement delay too short
 
 Some violations fire after dynamic content loads (e.g., lazy-loaded images, deferred scripts). The default 500ms settlement delay may not be enough:
@@ -138,22 +130,6 @@ Session not found: a1b2c3d4-...
 # The database is stored at .csp-analyser/data.db relative to the working directory
 ```
 
-## MITM proxy certificate errors
-
-**Symptom:** Pages fail to load in MITM mode with TLS/certificate errors.
-
-**Cause:** The MITM proxy generates a CA certificate on first use. If this certificate is corrupted or the proxy cannot write to the certificate directory, connections fail.
-
-**Fix:**
-
-1. Delete the certificate directory and let it regenerate:
-
-```bash
-rm -rf .csp-analyser/certs/
-csp-analyser crawl https://remote-site.com --mode mitm
-```
-
-2. Ensure the `.csp-analyser/` directory is writable
 
 ## Database locked
 

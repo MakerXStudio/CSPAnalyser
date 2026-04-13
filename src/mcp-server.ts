@@ -67,7 +67,6 @@ export function createMcpServer(db: Database.Database): McpServer {
       description: 'Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations',
       inputSchema: {
         targetUrl: z.url().describe('The URL to analyse'),
-        mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
         depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
         maxPages: z
           .number()
@@ -107,7 +106,6 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const result = await runSession(db, {
           targetUrl: args.targetUrl,
-          mode: args.mode,
           crawlConfig: {
             depth: args.depth,
             maxPages: args.maxPages,
@@ -120,7 +118,6 @@ export function createMcpServer(db: Database.Database): McpServer {
         return toolResult({
           sessionId: result.session.id,
           targetUrl: result.session.targetUrl,
-          mode: result.session.mode,
           pagesVisited: result.pagesVisited,
           violationsFound: result.violationsFound,
           errors: result.errors,
@@ -141,7 +138,6 @@ export function createMcpServer(db: Database.Database): McpServer {
       description: 'Analyse a single page for CSP violations (convenience wrapper: depth=0, maxPages=1)',
       inputSchema: {
         url: z.url().describe('The URL to analyse'),
-        mode: z.enum(['local', 'mitm']).optional().describe('Proxy mode (auto-detected if omitted)'),
         storageStatePath: z
           .string()
           .optional()
@@ -159,7 +155,6 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const result = await runSession(db, {
           targetUrl: args.url,
-          mode: args.mode,
           crawlConfig: {
             depth: 0,
             maxPages: 1,
@@ -170,7 +165,6 @@ export function createMcpServer(db: Database.Database): McpServer {
         return toolResult({
           sessionId: result.session.id,
           targetUrl: result.session.targetUrl,
-          mode: result.session.mode,
           pagesVisited: result.pagesVisited,
           violationsFound: result.violationsFound,
           errors: result.errors,
@@ -427,7 +421,6 @@ export function createMcpServer(db: Database.Database): McpServer {
             id: session.id,
             targetUrl: session.targetUrl,
             status: session.status,
-            mode: session.mode,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
           },
@@ -454,7 +447,6 @@ export function createMcpServer(db: Database.Database): McpServer {
           id: s.id,
           targetUrl: s.targetUrl,
           status: s.status,
-          mode: s.mode,
           createdAt: s.createdAt,
         })),
       });

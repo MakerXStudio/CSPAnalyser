@@ -51,11 +51,6 @@ function createTestDeps(overrides?: Partial<SessionDeps>): SessionDeps {
       token: 'test-token',
       close: vi.fn().mockResolvedValue(undefined),
     }),
-    startMitmProxy: vi.fn().mockResolvedValue({
-      port: 8080,
-      caCertPath: '/tmp/ca.pem',
-      close: vi.fn(),
-    }),
     createAuthenticatedContext: vi.fn().mockResolvedValue({
       context: mockBrowser._mockContext,
     }),
@@ -93,7 +88,7 @@ describe('runSession', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('uses local mode for remote HTTPS URLs by default', async () => {
+  it('uses local mode for remote HTTPS URLs', async () => {
     const config: SessionConfig = {
       targetUrl: 'https://example.com',
     };
@@ -102,36 +97,6 @@ describe('runSession', () => {
     const result = await runSession(db, config, {}, deps);
 
     expect(result.session.mode).toBe('local');
-    expect(deps.startMitmProxy).not.toHaveBeenCalled();
-  });
-
-  it('passes proxy server to auth context in MITM mode', async () => {
-    const config: SessionConfig = {
-      targetUrl: 'https://example.com',
-      mode: 'mitm',
-    };
-    const deps = createTestDeps();
-
-    await runSession(db, config, {}, deps);
-
-    expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
-      expect.anything(),
-      'https://example.com',
-      expect.objectContaining({ proxyServer: 'http://127.0.0.1:8080' }),
-    );
-  });
-
-  it('respects explicit mode override', async () => {
-    const config: SessionConfig = {
-      targetUrl: 'https://example.com',
-      mode: 'local',
-    };
-    const deps = createTestDeps();
-
-    const result = await runSession(db, config, {}, deps);
-
-    expect(result.session.mode).toBe('local');
-    expect(deps.startMitmProxy).not.toHaveBeenCalled();
   });
 
   it('launches browser with headless option', async () => {
@@ -174,7 +139,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: '/tmp/state.json', cookies: undefined, headless: true, proxyServer: undefined },
+      { storageStatePath: '/tmp/state.json', cookies: undefined, headless: true },
     );
   });
 
@@ -190,7 +155,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: undefined, cookies: [{ name: 'session', value: 'abc' }], headless: true, proxyServer: undefined },
+      { storageStatePath: undefined, cookies: [{ name: 'session', value: 'abc' }], headless: true },
     );
   });
 
@@ -203,7 +168,7 @@ describe('runSession', () => {
     expect(deps.createAuthenticatedContext).toHaveBeenCalledWith(
       expect.anything(),
       'http://localhost:3000',
-      { storageStatePath: undefined, cookies: undefined, headless: true, proxyServer: undefined },
+      { storageStatePath: undefined, cookies: undefined, headless: true },
     );
   });
 
@@ -280,25 +245,6 @@ describe('runSession', () => {
     expect(deps.setupViolationListener).toHaveBeenCalled();
   });
 
-  it('skips CSP injection in MITM mode (proxy handles it)', async () => {
-    const config: SessionConfig = { targetUrl: 'https://example.com', mode: 'mitm' };
-    const deps = createTestDeps();
-
-    deps.crawl = vi.fn().mockImplementation(
-      async (_ctx, _db, _sid, _url, _config, callbacks) => {
-        if (callbacks?.onPageCreated) {
-          await callbacks.onPageCreated({} as any, 'https://example.com');
-        }
-        return { pagesVisited: 1, errors: [] };
-      },
-    );
-
-    await runSession(db, config, {}, deps);
-
-    expect(deps.setupCspInjection).not.toHaveBeenCalled();
-    expect(deps.setupViolationListener).toHaveBeenCalled();
-  });
-
   it('counts violations in the result', async () => {
     const config: SessionConfig = { targetUrl: 'http://localhost:3000' };
     const deps = createTestDeps();
@@ -349,22 +295,19 @@ describe('runSession', () => {
   });
 
   it('cleans up on success', async () => {
-    const config: SessionConfig = { targetUrl: 'https://example.com', mode: 'mitm' };
+    const config: SessionConfig = { targetUrl: 'https://example.com' };
     const mockBrowser = createMockBrowser();
     const reportClose = vi.fn().mockResolvedValue(undefined);
-    const proxyClose = vi.fn();
 
     const deps = createTestDeps({
       launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
       startReportServer: vi.fn().mockResolvedValue({ port: 9876, token: 'test-token', close: reportClose }),
-      startMitmProxy: vi.fn().mockResolvedValue({ port: 8080, caCertPath: '/tmp/ca.pem', close: proxyClose }),
       createAuthenticatedContext: vi.fn().mockResolvedValue({ context: mockBrowser._mockContext }),
     });
 
     await runSession(db, config, {}, deps);
 
     expect(mockBrowser._mockContext.close).toHaveBeenCalled();
-    expect(proxyClose).toHaveBeenCalled();
     expect(reportClose).toHaveBeenCalled();
     expect(mockBrowser.close).toHaveBeenCalled();
   });

@@ -16,7 +16,6 @@ csp-analyser crawl <url> [options]
 | `--max-pages <n>` | `10` | Maximum number of pages to visit before stopping. Must be a positive integer. |
 | `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
 | `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, or `json`. |
-| `--mode <mode>` | auto-detect | Interception mode: `local` (Playwright route API) or `mitm` (MITM proxy). |
 | `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for authenticated crawling. |
 | `--violation-limit <n>` | `10000` | Maximum violations to capture per session. Set to `0` for unlimited. |
 | `--report-only` | `false` | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one. |
