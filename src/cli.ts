@@ -57,6 +57,7 @@ export type Command =
   | 'sessions'
   | 'setup'
   | 'start'
+  | 'hash-static'
   | 'help'
   | 'version';
 
@@ -77,6 +78,15 @@ export interface ParsedArgs {
   strictDynamic: boolean;
   hash: boolean;
   stripUnsafeEval: boolean;
+  /** For hash-static: file/directory paths to scan */
+  inputs?: string[];
+  /** For hash-static: write the generated meta tag into each scanned HTML */
+  inject: boolean;
+  /** For hash-static: extra source expressions to add to specific directives */
+  extraScriptElem?: string[];
+  extraStyleElem?: string[];
+  extraStyleAttr?: string[];
+  extraScriptAttr?: string[];
 }
 
 // ── Valid values ─────────────────────────────────────────────────────────
@@ -108,6 +118,8 @@ Usage:
   csp-analyser score [session-id]        Score policy (defaults to latest session)
   csp-analyser sessions                  List all analysis sessions
   csp-analyser permissions [session-id]  Show Permissions-Policy headers (defaults to latest)
+  csp-analyser hash-static <path>...     Hash inline content in static HTML files
+                                         and emit a CSP (no browser required)
 
 Options:
   --depth <n>            Crawl depth (default: 1, crawl only)
@@ -126,6 +138,14 @@ Options:
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help
   --version, -v          Show version
+
+hash-static options:
+  --inject               Rewrite each scanned HTML to include the generated
+                         <meta http-equiv="Content-Security-Policy"> in <head>
+  --extra-script-elem <src>  Extra source(s) for script-src-elem (repeatable)
+  --extra-style-elem <src>   Extra source(s) for style-src-elem (repeatable)
+  --extra-style-attr <src>   Extra source(s) for style-src-attr (repeatable)
+  --extra-script-attr <src>  Extra source(s) for script-src-attr (repeatable)
 `;
 
 // ── Argument parsing ────────────────────────────────────────────────────
@@ -144,6 +164,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictDynamic: false,
       hash: false,
       stripUnsafeEval: false,
+      inject: false,
     };
   }
   if (argv.includes('--version') || argv.includes('-v')) {
@@ -158,6 +179,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictDynamic: false,
       hash: false,
       stripUnsafeEval: false,
+      inject: false,
     };
   }
 
@@ -177,6 +199,11 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'strip-unsafe-eval': { type: 'boolean', default: false },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
+      inject: { type: 'boolean', default: false },
+      'extra-script-elem': { type: 'string', multiple: true },
+      'extra-style-elem': { type: 'string', multiple: true },
+      'extra-style-attr': { type: 'string', multiple: true },
+      'extra-script-attr': { type: 'string', multiple: true },
     },
     allowPositionals: true,
     strict: false,
@@ -201,6 +228,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'sessions',
       'setup',
       'start',
+      'hash-static',
     ].includes(command)
   ) {
     throw new Error(`Unknown command: ${command ?? '(none)'}. Run with --help for usage.`);
@@ -219,6 +247,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictDynamic: false,
       hash: false,
       stripUnsafeEval: false,
+      inject: false,
     };
   }
 
@@ -260,7 +289,9 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     );
   }
 
-  const format = (values.format as string | undefined) ?? 'header';
+  // hash-static defaults to meta (since the common path is --inject into HTML)
+  const format =
+    (values.format as string | undefined) ?? (command === 'hash-static' ? 'meta' : 'header');
   if (!VALID_FORMATS.has(format)) {
     throw new Error(
       `Invalid format: "${format}". Must be header, meta, nginx, apache, cloudflare, cloudflare-pages, azure-frontdoor, helmet, or json.`,
@@ -278,9 +309,27 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     nonce: ((values.nonce as boolean | undefined) ?? false) || ((values['strict-dynamic'] as boolean | undefined) ?? false),
     hash: (values.hash as boolean | undefined) ?? false,
     stripUnsafeEval: (values['strip-unsafe-eval'] as boolean | undefined) ?? false,
+    inject: (values.inject as boolean | undefined) ?? false,
   };
 
-  if ((command === 'crawl' || command === 'interactive') && positionalArg) {
+  if (command === 'hash-static') {
+    // Positional args are file/directory paths to scan. Require at least one.
+    const inputs = positionals.slice(1) as string[];
+    if (inputs.length === 0) {
+      throw new Error(
+        'Missing path argument for "hash-static". Usage: hash-static <path> [<path>...] [--inject]',
+      );
+    }
+    parsed.inputs = inputs;
+    const eScript = values['extra-script-elem'] as string[] | undefined;
+    const eStyle = values['extra-style-elem'] as string[] | undefined;
+    const eStyleAttr = values['extra-style-attr'] as string[] | undefined;
+    const eScriptAttr = values['extra-script-attr'] as string[] | undefined;
+    if (eScript) parsed.extraScriptElem = eScript;
+    if (eStyle) parsed.extraStyleElem = eStyle;
+    if (eStyleAttr) parsed.extraStyleAttr = eStyleAttr;
+    if (eScriptAttr) parsed.extraScriptAttr = eScriptAttr;
+  } else if ((command === 'crawl' || command === 'interactive') && positionalArg) {
     validateTargetUrl(positionalArg);
     parsed.url = positionalArg;
   } else if (command === 'diff') {
@@ -545,6 +594,47 @@ async function runExportCommand(args: ParsedArgs): Promise<void> {
   } finally {
     db.close();
   }
+}
+
+async function runHashStaticCommand(args: ParsedArgs): Promise<void> {
+  const { scanHtmlFiles, buildStaticPolicy, injectCspMeta } = await import(
+    './static-html-analyser.js'
+  );
+  const { directivesToString } = await import('./policy-formatter.js');
+  const { readFileSync } = await import('node:fs');
+  const { writeFileSync } = await import('node:fs');
+
+  const paths = args.inputs ?? [];
+  const { result, files } = await scanHtmlFiles(paths);
+  const directives = buildStaticPolicy(result, {
+    extraScriptElem: args.extraScriptElem,
+    extraStyleElem: args.extraStyleElem,
+    extraStyleAttr: args.extraStyleAttr,
+    extraScriptAttr: args.extraScriptAttr,
+  });
+  const policyString = directivesToString(directives);
+
+  if (args.inject) {
+    if (files.length === 0) {
+      throw new Error(`No HTML files found under: ${paths.join(', ')}`);
+    }
+    for (const file of files) {
+      const html = readFileSync(file, 'utf8');
+      writeFileSync(file, injectCspMeta(html, policyString));
+    }
+    process.stdout.write(
+      `CSP injected into ${files.length} HTML file(s). ` +
+        `script-src-elem hashes: ${result.scriptElem.size}, ` +
+        `style-src-elem: ${result.styleElem.size}, ` +
+        `style-src-attr: ${result.styleAttr.size}, ` +
+        `script-src-attr: ${result.scriptAttr.size}.\n`,
+    );
+    return;
+  }
+
+  // Otherwise format according to --format and print.
+  const formatted = formatPolicy(directives, args.format, args.reportOnly);
+  process.stdout.write(formatted + '\n');
 }
 
 async function runDiffCommand(args: ParsedArgs): Promise<void> {
@@ -889,6 +979,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         return;
       case 'permissions':
         await runPermissionsCommand(args);
+        return;
+      case 'hash-static':
+        await runHashStaticCommand(args);
         return;
     }
   } catch (err) {

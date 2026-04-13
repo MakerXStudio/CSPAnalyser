@@ -17,6 +17,8 @@ Usage:
   csp-analyser score [session-id]        Score policy (defaults to latest session)
   csp-analyser sessions                  List all analysis sessions
   csp-analyser permissions [session-id]  Show Permissions-Policy headers (defaults to latest)
+  csp-analyser hash-static <path>...     Hash inline content in static HTML files
+                                         and emit a CSP (no browser required)
 
 Options:
   --depth <n>            Crawl depth (default: 1, crawl only)
@@ -50,6 +52,7 @@ Options:
 | [`score`](./score) | `[session-id]` | Score a policy against security best practices |
 | [`sessions`](./sessions) | -- | List all analysis sessions with ID, status, timestamp, and violation count |
 | [`permissions`](./permissions) | `[session-id]` | Show Permissions-Policy headers captured during crawling |
+| [`hash-static`](./hash-static) | `<path>...` | Hash inline content in static HTML files and emit or inject a CSP (no browser required) |
 
 ## Global options
 

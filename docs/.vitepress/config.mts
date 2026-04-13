@@ -8,16 +8,12 @@ export default defineConfig({
   base: '/',
   ignoreDeadLinks: true,
 
+  // Note: the Content-Security-Policy meta tag is NOT declared here — it is
+  // injected post-build by scripts/generate-csp.mjs, which hashes the actual
+  // inline content from the built HTML so the policy never drifts from the
+  // output. See the script header for how to capture runtime-injected hashes.
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
-    [
-      'meta',
-      {
-        'http-equiv': 'Content-Security-Policy',
-        content:
-          "default-src 'self'; base-uri 'self'; font-src 'self'; form-action 'self'; img-src 'self' data:; object-src 'none'; script-src-elem 'self' 'sha256-8nM4WrpM1u8GC8Dt6Qu3Cw8hRBgGGhoYBrmd0tBQ+QQ=' 'sha256-DQUgNM9X0iH2019NkUxeBvnBoEoRKkHBc/I0iLqPNPA=' 'sha256-La1r0VSk0Po4KFI0duEKhmPu+u0I416JW3oONqtdf4M='; style-src-attr 'unsafe-hashes' 'sha256-+hZXdsbhLzxxkvd2M1OswNwbdnZLTO/zrekviXJwBXU=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=' 'sha256-B10mpnNxgkVfOTJci9xDpY8b+vrCTbVAb2abhZDQzPQ=' 'sha256-K6tyCl4ixBxHA7EhQQQ3FPdMIASAMOY5X3dG/dN495w=' 'sha256-UBwgzPF93ltSrtsHPxvIhqcs2cGF57mEDa4nGXu5Z2E=' 'sha256-Wi3+8jbn12vus9Oq4FOqEUCOpuRG3clBaVvLZZ2b9Fs=' 'sha256-cmdnZAQ9Sz/DBsLKbUCeA/dpDVLa2vMPOArwu9K/DLc=' 'sha256-g3qMmuQ1iSjSYGpi8/uhXrdcZGFemU5eoRtBX6xjeUc=' 'sha256-iYwYhiMcsGmXCUzLEpEzZNz5dINrlkqf1sLbLhEcqGM=' 'sha256-mc/FArgxuOj5vGNP2U9rZeJ70zL4CCOy+qHHI5Pvxr0=' 'sha256-qNJfWKpUa+9t3V7DObXtkSGVtQaK5sVnLbVurtS2IQE=' 'sha256-u9VPJmPho+yfz5iKnELpLCwdgYLsePehd2H36mSWFdQ=' 'sha256-xWy5hUKvawTkfXjCN9TJovpVPCC5q4K1RkOLcTfiqBk='; style-src-elem 'self'",
-      },
-    ],
     ['meta', { name: 'theme-color', content: '#5b7ee5' }],
     ['meta', { name: 'og:type', content: 'website' }],
     ['meta', { name: 'og:title', content: 'CSP Analyser' }],
@@ -63,6 +59,7 @@ export default defineConfig({
             { text: 'permissions', link: '/cli/permissions' },
             { text: 'sessions', link: '/cli/sessions' },
             { text: 'setup', link: '/cli/setup' },
+            { text: 'hash-static', link: '/cli/hash-static' },
           ],
         },
       ],
