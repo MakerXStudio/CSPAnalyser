@@ -42,18 +42,26 @@ function extractInlineContentFromDom(): InlineContentItem[] {
     }
   }
 
-  // Inline event handlers and style attributes on all elements
+  // Inline event handlers and style attributes on all elements.
+  //
+  // Note: empty string values (e.g. <div style="">) MUST be hashed too —
+  // browsers evaluate CSP against inline attributes even when the value is
+  // empty, and the empty string has a specific SHA-256 hash
+  // (47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=) that must be listed for
+  // the attribute to be allowed. getAttribute returns null when the
+  // attribute is absent and '' when present-but-empty, so null is the
+  // correct filter.
   const allElements = document.querySelectorAll('*');
   for (const el of allElements) {
     // Check for inline style attribute
     const styleAttr = el.getAttribute('style');
-    if (styleAttr && styleAttr.trim()) {
+    if (styleAttr !== null) {
       items.push({ content: styleAttr, directive: 'style-src-attr' });
     }
 
     // Check for inline event handler attributes (on*)
     for (const attr of el.attributes) {
-      if (attr.name.startsWith('on') && attr.value.trim()) {
+      if (attr.name.startsWith('on')) {
         items.push({ content: attr.value, directive: 'script-src-attr' });
       }
     }

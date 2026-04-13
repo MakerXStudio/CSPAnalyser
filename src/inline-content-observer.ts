@@ -29,14 +29,20 @@ export function generateObserverInitScript(): string {
   // Script kept compact but readable; wrapped in IIFE and try/catch so a failure
   // here never breaks the page or the crawl. Deduplication happens server-side
   // via the UNIQUE constraint on inline_hashes, so over-reporting is safe.
+  // Note: empty string values for style="" and on*="" attributes MUST be
+  // reported — the browser evaluates CSP against present-but-empty inline
+  // attributes (the empty string has hash 47DEQpj8...). Only <script> and
+  // <style> block content is filtered for whitespace-only, because empty
+  // blocks don't execute/apply and thus don't trigger CSP.
   return `(function(){try{
-var report=function(c,d){if(!c||!String(c).trim())return;try{window.__cspInlineContentReport({content:String(c),directive:d})}catch(e){}};
+var reportBlock=function(c,d){if(!c||!String(c).trim())return;try{window.__cspInlineContentReport({content:String(c),directive:d})}catch(e){}};
+var reportAttr=function(c,d){if(c==null)return;try{window.__cspInlineContentReport({content:String(c),directive:d})}catch(e){}};
 var processEl=function(el){if(!el||el.nodeType!==1)return;
 var tag=el.tagName;
-if(tag==='SCRIPT'&&!el.hasAttribute('src'))report(el.textContent,'script-src-elem');
-if(tag==='STYLE')report(el.textContent,'style-src-elem');
-var s=el.getAttribute&&el.getAttribute('style');if(s)report(s,'style-src-attr');
-if(el.attributes){for(var i=0;i<el.attributes.length;i++){var a=el.attributes[i];if(a.name.indexOf('on')===0&&a.value)report(a.value,'script-src-attr')}}};
+if(tag==='SCRIPT'&&!el.hasAttribute('src'))reportBlock(el.textContent,'script-src-elem');
+if(tag==='STYLE')reportBlock(el.textContent,'style-src-elem');
+var s=el.getAttribute&&el.getAttribute('style');if(s!==null)reportAttr(s,'style-src-attr');
+if(el.attributes){for(var i=0;i<el.attributes.length;i++){var a=el.attributes[i];if(a.name.indexOf('on')===0)reportAttr(a.value,'script-src-attr')}}};
 var processTree=function(node){if(!node||node.nodeType!==1)return;processEl(node);if(node.querySelectorAll){var all=node.querySelectorAll('*');for(var i=0;i<all.length;i++)processEl(all[i])}};
 var obs=new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var m=ms[i];if(m.type==='childList'){for(var j=0;j<m.addedNodes.length;j++)processTree(m.addedNodes[j])}else if(m.type==='attributes'){processEl(m.target)}}});
 obs.observe(document,{childList:true,subtree:true,attributes:true});

@@ -81,6 +81,36 @@ describe('extractInlineHashes', () => {
     expect(hashes[0].directive).toBe('style-src-attr');
   });
 
+  it('hashes empty style attributes (empty-string hash is required by CSP)', async () => {
+    // Browsers evaluate CSP against <div style=""> and block it unless the
+    // empty-string hash (47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=) is
+    // listed in style-src-attr. Extractor must emit it.
+    const page = makeMockPage([
+      { content: '', directive: 'style-src-attr' },
+    ]);
+
+    const count = await extractInlineHashes(page, db, sessionId, null);
+
+    expect(count).toBe(1);
+    const hashes = getInlineHashes(db, sessionId);
+    expect(hashes[0].directive).toBe('style-src-attr');
+    expect(hashes[0].hash).toBe(sha256(''));
+    expect(hashes[0].contentLength).toBe(0);
+  });
+
+  it('hashes empty on* event handler attributes', async () => {
+    const page = makeMockPage([
+      { content: '', directive: 'script-src-attr' },
+    ]);
+
+    const count = await extractInlineHashes(page, db, sessionId, null);
+
+    expect(count).toBe(1);
+    const hashes = getInlineHashes(db, sessionId);
+    expect(hashes[0].directive).toBe('script-src-attr');
+    expect(hashes[0].hash).toBe(sha256(''));
+  });
+
   it('handles multiple inline items', async () => {
     const page = makeMockPage([
       { content: 'console.log("a")', directive: 'script-src-elem' },
