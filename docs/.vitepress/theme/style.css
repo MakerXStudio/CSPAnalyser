@@ -1,0 +1,20 @@
+/* Footer MakerX logo — swap between light and dark variants based on theme */
+.footer-logo {
+  display: inline-block;
+  height: 32px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}
+
+.footer-logo-dark {
+  display: none;
+}
+
+.dark .footer-logo-light {
+  display: none;
+}
+
+.dark .footer-logo-dark {
+  display: inline-block;
+}
