@@ -91,6 +91,7 @@ Generate an optimised CSP policy from violations captured in a session.
 | `sessionId` | `string` (UUID) | Yes | -- | The session ID |
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
 | `includeHashes` | `boolean` | No | `false` | Include SHA-256 hashes for inline scripts/styles |
+| `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`) |
 
 **Example:**
 
@@ -98,7 +99,7 @@ Generate an optimised CSP policy from violations captured in a session.
 {
   "sessionId": "a1b2c3d4-...",
   "strictness": "strict",
-  "includeHashes": true
+  "useHashes": true
 }
 ```
 
@@ -116,6 +117,7 @@ Export a CSP policy in a deployment-ready format.
 | `format` | `"header" \| "meta" \| "nginx" \| "apache" \| "cloudflare" \| "cloudflare-pages" \| "azure-frontdoor" \| "helmet" \| "json"` | Yes | -- | Output format |
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
 | `isReportOnly` | `boolean` | No | `false` | Use `Content-Security-Policy-Report-Only` header |
+| `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources |
 
 **Example:**
 
@@ -123,7 +125,7 @@ Export a CSP policy in a deployment-ready format.
 {
   "sessionId": "a1b2c3d4-...",
   "format": "nginx",
-  "isReportOnly": true
+  "useHashes": true
 }
 ```
 

@@ -93,8 +93,9 @@ Inline `<script>` tags or inline event handlers (`onclick`, `onload`) are in use
 
 **How to fix:**
 1. Move inline scripts to external `.js` files
-2. Use nonces or hashes instead of `'unsafe-inline'`. CSP Analyser can generate SHA-256 hashes for short inline scripts when samples are available.
-3. Remove inline event handlers and use `addEventListener()` instead
+2. Use hashes: run with `--hash` to automatically replace `'unsafe-inline'` with SHA-256 hashes for short inline scripts where samples are available
+3. Use nonces: run with `--nonce` to replace `'unsafe-inline'` with nonce placeholders (requires runtime nonce injection on your server)
+4. Remove inline event handlers and use `addEventListener()` instead
 
 ### Missing `object-src`
 

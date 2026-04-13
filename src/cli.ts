@@ -74,6 +74,7 @@ export interface ParsedArgs {
   violationLimit?: number;
   nonce: boolean;
   strictDynamic: boolean;
+  hash: boolean;
 }
 
 // ── Valid values ─────────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ Options:
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
   --nonce                Replace 'unsafe-inline' with nonce placeholders
   --strict-dynamic       Add 'strict-dynamic' with nonces (implies --nonce)
+  --hash                 Remove 'unsafe-inline' when hash sources are available
   --report-only          Generate report-only policy
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help
@@ -136,6 +138,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       reportOnly: false,
       nonce: false,
       strictDynamic: false,
+      hash: false,
     };
   }
   if (argv.includes('--version') || argv.includes('-v')) {
@@ -148,6 +151,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       reportOnly: false,
       nonce: false,
       strictDynamic: false,
+      hash: false,
     };
   }
 
@@ -163,6 +167,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'violation-limit': { type: 'string' },
       nonce: { type: 'boolean', default: false },
       'strict-dynamic': { type: 'boolean', default: false },
+      hash: { type: 'boolean', default: false },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
     },
@@ -204,6 +209,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       reportOnly: false,
       nonce: false,
       strictDynamic: false,
+      hash: false,
     };
   }
 
@@ -261,6 +267,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     reportOnly: (values['report-only'] as boolean | undefined) ?? false,
     strictDynamic: (values['strict-dynamic'] as boolean | undefined) ?? false,
     nonce: ((values.nonce as boolean | undefined) ?? false) || ((values['strict-dynamic'] as boolean | undefined) ?? false),
+    hash: (values.hash as boolean | undefined) ?? false,
   };
 
   if ((command === 'crawl' || command === 'interactive') && positionalArg) {
@@ -355,6 +362,7 @@ function generateAndFormat(
   const optimized = optimizePolicy(directives, targetUrl, {
     useNonces: args.nonce,
     useStrictDynamic: args.strictDynamic,
+    useHashes: args.hash,
   });
   return formatPolicy(optimized, args.format, args.reportOnly);
 }
@@ -425,6 +433,7 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
     const optimized = optimizePolicy(directives, result.session.targetUrl, {
       useNonces: args.nonce,
       useStrictDynamic: args.strictDynamic,
+      useHashes: args.hash,
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
@@ -493,6 +502,7 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
     const optimized = optimizePolicy(directives, result.session.targetUrl, {
       useNonces: args.nonce,
       useStrictDynamic: args.strictDynamic,
+      useHashes: args.hash,
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
@@ -550,6 +560,7 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
     const optimized = optimizePolicy(directives, session?.targetUrl, {
       useNonces: args.nonce,
       useStrictDynamic: args.strictDynamic,
+      useHashes: args.hash,
     });
     const score = scoreCspPolicy(optimized);
     process.stdout.write(formatScore(score) + '\n');

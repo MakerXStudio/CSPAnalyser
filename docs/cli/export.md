@@ -16,6 +16,9 @@ When `session-id` is omitted, the most recent completed session is used automati
 |---|---|---|
 | `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
 | `--format <fmt>` | `header` | Output format (see below). |
+| `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
+| `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
+| `--hash` | `false` | Remove `'unsafe-inline'` from directives that have hash sources. |
 | `--report-only` | `false` | Generate a report-only header. |
 
 ## Formats

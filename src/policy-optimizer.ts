@@ -54,6 +54,8 @@ export interface OptimizePolicyOptions {
   useNonces?: boolean;
   /** Add 'strict-dynamic' alongside nonces in script-src directives */
   useStrictDynamic?: boolean;
+  /** Remove 'unsafe-inline' from directives that already contain hash sources (sha256/sha384/sha512) */
+  useHashes?: boolean;
 }
 
 /**
@@ -102,6 +104,37 @@ export function optimizePolicy(
   }
   if (!('form-action' in result)) {
     result['form-action'] = ["'self'"];
+  }
+
+  // Remove 'unsafe-inline' from directives that already have hash-based sources.
+  // Per CSP3 spec, when a hash source is present, 'unsafe-inline' is ignored by
+  // conformant browsers — removing it makes the policy explicit and avoids confusion.
+  if (options?.useHashes) {
+    const hashDirectives = [
+      'script-src', 'script-src-elem', 'script-src-attr',
+      'style-src', 'style-src-elem', 'style-src-attr',
+    ];
+    for (const directive of hashDirectives) {
+      if (directive in result) {
+        const sources = result[directive];
+        const hasHash = sources.some((s) =>
+          s.startsWith("'sha256-") || s.startsWith("'sha384-") || s.startsWith("'sha512-"),
+        );
+        if (hasHash && sources.includes("'unsafe-inline'")) {
+          result[directive] = sources.filter((s) => s !== "'unsafe-inline'");
+        }
+      }
+    }
+    // Also check default-src
+    if ('default-src' in result) {
+      const sources = result['default-src'];
+      const hasHash = sources.some((s) =>
+        s.startsWith("'sha256-") || s.startsWith("'sha384-") || s.startsWith("'sha512-"),
+      );
+      if (hasHash && sources.includes("'unsafe-inline'")) {
+        result['default-src'] = sources.filter((s) => s !== "'unsafe-inline'");
+      }
+    }
   }
 
   // Replace 'unsafe-inline' with nonce placeholder in script/style directives

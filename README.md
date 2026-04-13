@@ -12,6 +12,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 - Dual violation capture (DOM events + HTTP reporting endpoint)
 - Smart policy optimization (common sources factored into `default-src`)
 - Nonce generation replacing `unsafe-inline` with `nonce-` placeholders
+- Hash-based `unsafe-inline` removal using SHA-256/384/512 hashes
 - `strict-dynamic` support for script loading
 - Session diffing to compare policy changes over time
 - Policy scoring and security grading
@@ -82,6 +83,7 @@ csp-analyser interactive https://example.com --save-storage-state auth.json
                         cloudflare-pages | azure-frontdoor | helmet | json
 --nonce                 Replace unsafe-inline with nonce placeholders
 --strict-dynamic        Add strict-dynamic alongside nonces (implies --nonce)
+--hash                  Remove unsafe-inline when hash sources are available
 --storage-state <path>  Playwright storage state file for auth
 --cookies <json>        Raw cookies as JSON string
 --manual-login          Open browser for manual login before crawl

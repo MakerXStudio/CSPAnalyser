@@ -27,6 +27,9 @@ Options:
   --storage-state <path> Playwright storage state file for auth
   --save-storage-state <path>  Export session state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
+  --nonce                Replace 'unsafe-inline' with nonce placeholders
+  --strict-dynamic       Add 'strict-dynamic' with nonces (implies --nonce)
+  --hash                 Remove 'unsafe-inline' when hash sources are available
   --report-only          Generate report-only policy
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help

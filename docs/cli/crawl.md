@@ -18,6 +18,9 @@ csp-analyser crawl <url> [options]
 | `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
 | `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for authenticated crawling. |
 | `--violation-limit <n>` | `10000` | Maximum violations to capture per session. Set to `0` for unlimited. |
+| `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders in script/style directives. |
+| `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces in script directives. Implies `--nonce`. |
+| `--hash` | `false` | Remove `'unsafe-inline'` from directives that already have SHA-256/384/512 hash sources. |
 | `--report-only` | `false` | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one. |
 
 ## How crawling works

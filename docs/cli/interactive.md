@@ -17,6 +17,9 @@ csp-analyser interactive <url> [options]
 | `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for pre-authenticated sessions. |
 | `--save-storage-state <path>` | -- | Export cookies and storage state to a JSON file when the browser closes. |
 | `--violation-limit <n>` | `10000` | Maximum violations to capture. Set to `0` for unlimited. |
+| `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
+| `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
+| `--hash` | `false` | Remove `'unsafe-inline'` from directives that have hash sources. |
 | `--report-only` | `false` | Generate a report-only header. |
 
 ::: info

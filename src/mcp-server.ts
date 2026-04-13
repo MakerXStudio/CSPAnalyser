@@ -243,6 +243,10 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe('Include SHA-256 hashes for inline scripts/styles (default: false)'),
+        useHashes: z
+          .boolean()
+          .optional()
+          .describe("Remove 'unsafe-inline' from directives that have hash sources (implies includeHashes, default: false)"),
       },
     },
     async (args) => {
@@ -254,10 +258,12 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const directives = generatePolicy(db, args.sessionId, {
           strictness: args.strictness ?? 'moderate',
-          includeHashes: args.includeHashes ?? false,
+          includeHashes: args.includeHashes ?? args.useHashes ?? false,
         });
 
-        const optimized = optimizePolicy(directives, session.targetUrl);
+        const optimized = optimizePolicy(directives, session.targetUrl, {
+          useHashes: args.useHashes,
+        });
         const policyString = directivesToString(optimized);
 
         return toolResult({
@@ -292,6 +298,10 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe('Use Content-Security-Policy-Report-Only header (default: false)'),
+        useHashes: z
+          .boolean()
+          .optional()
+          .describe("Remove 'unsafe-inline' from directives that have hash sources (default: false)"),
       },
     },
     async (args) => {
@@ -303,10 +313,12 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const directives = generatePolicy(db, args.sessionId, {
           strictness: args.strictness ?? 'moderate',
-          includeHashes: false,
+          includeHashes: args.useHashes ?? false,
         });
 
-        const optimized = optimizePolicy(directives, session.targetUrl);
+        const optimized = optimizePolicy(directives, session.targetUrl, {
+          useHashes: args.useHashes,
+        });
         const formatted = formatPolicy(optimized, args.format, args.isReportOnly ?? false);
 
         return toolResult({

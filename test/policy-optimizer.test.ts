@@ -335,3 +335,92 @@ describe('nonce generation', () => {
     expect(result['style-src-attr']).toContain("'nonce-{{CSP_NONCE}}'");
   });
 });
+
+// ── Hash-based unsafe-inline removal ────────────────────────────────────
+
+describe('hash-based unsafe-inline removal', () => {
+  it('removes unsafe-inline from script-src when hash sources exist', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'", "'sha256-abc123'"] },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['script-src']).toContain("'sha256-abc123'");
+    expect(result['script-src']).toContain("'self'");
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('removes unsafe-inline from style-src when hash sources exist', () => {
+    const result = optimizePolicy(
+      { 'style-src': ["'self'", "'unsafe-inline'", "'sha256-xyz789'"] },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['style-src']).toContain("'sha256-xyz789'");
+    expect(result['style-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('keeps unsafe-inline when no hash sources exist', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['script-src']).toContain("'unsafe-inline'");
+  });
+
+  it('does not modify when useHashes is false', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'", "'sha256-abc123'"] },
+      undefined,
+      { useHashes: false },
+    );
+    expect(result['script-src']).toContain("'unsafe-inline'");
+    expect(result['script-src']).toContain("'sha256-abc123'");
+  });
+
+  it('removes unsafe-inline from default-src when hash sources exist', () => {
+    const result = optimizePolicy(
+      { 'default-src': ["'self'", "'unsafe-inline'", "'sha256-def456'"] },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['default-src']).toContain("'sha256-def456'");
+    expect(result['default-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('handles sha384 and sha512 hash sources', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'unsafe-inline'", "'sha384-longhash'", "'sha512-longerhash'"] },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+    expect(result['script-src']).toContain("'sha384-longhash'");
+    expect(result['script-src']).toContain("'sha512-longerhash'");
+  });
+
+  it('handles script-src-elem and style-src-attr sub-directives', () => {
+    const result = optimizePolicy(
+      {
+        'script-src-elem': ["'unsafe-inline'", "'sha256-abc'"],
+        'style-src-attr': ["'unsafe-inline'", "'sha256-def'"],
+      },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['script-src-elem']).not.toContain("'unsafe-inline'");
+    expect(result['script-src-elem']).toContain("'sha256-abc'");
+    expect(result['style-src-attr']).not.toContain("'unsafe-inline'");
+    expect(result['style-src-attr']).toContain("'sha256-def'");
+  });
+
+  it('does not affect directives without unsafe-inline', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'sha256-abc123'"] },
+      undefined,
+      { useHashes: true },
+    );
+    expect(result['script-src']).toEqual(["'self'", "'sha256-abc123'"]);
+  });
+});
