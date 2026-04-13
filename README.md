@@ -12,6 +12,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 - Dual violation capture (DOM events + HTTP reporting endpoint)
 - Smart policy optimization (common sources factored into `default-src`)
 - Nonce generation replacing `unsafe-inline` with `nonce-` placeholders
+- Full inline content hash extraction (scripts, styles, event handlers, style attributes)
 - Hash-based `unsafe-inline` removal using SHA-256/384/512 hashes
 - `strict-dynamic` support for script loading
 - Session diffing to compare policy changes over time

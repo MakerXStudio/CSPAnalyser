@@ -100,7 +100,7 @@ csp-analyser score abc123
 csp-analyser score abc123 --strictness strict
 ```
 
-A stricter policy typically scores higher because it avoids `'unsafe-inline'` and prefers hashes. Use `--hash` to automatically replace `'unsafe-inline'` with SHA-256 hashes, or `--nonce` to replace it with nonce placeholders.
+A stricter policy typically scores higher because it avoids `'unsafe-inline'` and prefers hashes. Use `--hash` to replace `'unsafe-inline'` with SHA-256 hashes computed from the full inline content extracted during crawling, or `--nonce` to replace it with nonce placeholders.
 
 ### Compare scores across strictness levels
 

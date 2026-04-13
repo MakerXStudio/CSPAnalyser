@@ -20,13 +20,14 @@ import {
   insertPermissionsPolicy,
   getPermissionsPolicies,
   getPermissionsPolicyByDirective,
+  insertInlineHash,
+  getInlineHashes,
   type InsertViolationParams,
 } from '../../src/db/repository.js';
 import type { SessionConfig } from '../../src/types.js';
 
 const TEST_CONFIG: SessionConfig = {
   targetUrl: 'https://example.com',
-  mode: 'local',
 };
 
 function createTestDb(): Database.Database {
@@ -803,5 +804,116 @@ describe('permissions policy repository', () => {
     expect(getPermissionsPolicies(db, session.id)).toHaveLength(1);
     db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);
     expect(getPermissionsPolicies(db, session.id)).toEqual([]);
+  });
+});
+
+// ── Inline hash repository ────────────────────────────────────────────────
+
+describe('inline hash repository', () => {
+  let db: Database.Database;
+  let session: ReturnType<typeof createSession>;
+
+  beforeEach(() => {
+    db = createTestDb();
+    session = createSession(db, TEST_CONFIG);
+  });
+
+  it('inserts and retrieves an inline hash', () => {
+    const result = insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123==',
+      contentLength: 100,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.directive).toBe('script-src-elem');
+    expect(result!.hash).toBe('abc123==');
+    expect(result!.contentLength).toBe(100);
+
+    const hashes = getInlineHashes(db, session.id);
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0].sessionId).toBe(session.id);
+  });
+
+  it('deduplicates by session + directive + hash', () => {
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123==',
+      contentLength: 100,
+    });
+
+    const duplicate = insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123==',
+      contentLength: 100,
+    });
+
+    expect(duplicate).toBeNull();
+    expect(getInlineHashes(db, session.id)).toHaveLength(1);
+  });
+
+  it('allows same hash for different directives', () => {
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123==',
+      contentLength: 100,
+    });
+
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'style-src-elem',
+      hash: 'abc123==',
+      contentLength: 100,
+    });
+
+    expect(getInlineHashes(db, session.id)).toHaveLength(2);
+  });
+
+  it('returns empty array for session with no hashes', () => {
+    expect(getInlineHashes(db, session.id)).toEqual([]);
+  });
+
+  it('returns hashes ordered by directive then hash', () => {
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'style-src-elem',
+      hash: 'zzz==',
+      contentLength: 50,
+    });
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'aaa==',
+      contentLength: 50,
+    });
+
+    const hashes = getInlineHashes(db, session.id);
+    expect(hashes[0].directive).toBe('script-src-elem');
+    expect(hashes[1].directive).toBe('style-src-elem');
+  });
+
+  it('cascades on session delete', () => {
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123==',
+      contentLength: 100,
+    });
+
+    expect(getInlineHashes(db, session.id)).toHaveLength(1);
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);
+    expect(getInlineHashes(db, session.id)).toEqual([]);
   });
 });

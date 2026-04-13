@@ -22,6 +22,8 @@ import type {
   ExportFormat,
   PermissionsPolicy,
   PermissionsPolicyRow,
+  InlineHash,
+  InlineHashRow,
 } from '../types.js';
 
 const logger = createLogger();
@@ -474,4 +476,60 @@ export function getPermissionsPolicyByDirective(
     )
     .all(sessionId, directive) as PermissionsPolicyRow[];
   return rows.map(toPermissionsPolicy);
+}
+
+// ── Inline hash repository ──────────────────────────────────────────────────
+
+function toInlineHash(row: InlineHashRow): InlineHash {
+  return {
+    id: String(row.id),
+    sessionId: row.session_id,
+    pageId: row.page_id != null ? String(row.page_id) : null,
+    directive: row.directive,
+    hash: row.hash,
+    contentLength: row.content_length,
+    createdAt: row.created_at,
+  };
+}
+
+export interface InsertInlineHashParams {
+  sessionId: string;
+  pageId: string | null;
+  directive: string;
+  hash: string;
+  contentLength: number;
+}
+
+export function insertInlineHash(
+  db: Database.Database,
+  p: InsertInlineHashParams,
+): InlineHash | null {
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO inline_hashes
+      (session_id, page_id, directive, hash, content_length)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const result = stmt.run(
+    p.sessionId,
+    p.pageId != null ? Number(p.pageId) : null,
+    p.directive,
+    p.hash,
+    p.contentLength,
+  );
+  if (result.changes === 0) return null;
+
+  const row = db
+    .prepare('SELECT * FROM inline_hashes WHERE id = ?')
+    .get(result.lastInsertRowid) as InlineHashRow;
+  return toInlineHash(row);
+}
+
+export function getInlineHashes(
+  db: Database.Database,
+  sessionId: string,
+): InlineHash[] {
+  const rows = db
+    .prepare('SELECT * FROM inline_hashes WHERE session_id = ? ORDER BY directive, hash')
+    .all(sessionId) as InlineHashRow[];
+  return rows.map(toInlineHash);
 }

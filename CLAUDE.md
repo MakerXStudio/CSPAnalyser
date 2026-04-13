@@ -43,14 +43,15 @@ After completing each phase of work:
 2. **Auth** (`auth.ts`) — handles authentication via storage state files, manual login, or raw cookies using Playwright
 3. **CSP Injection** (`csp-injector.ts`) — intercepts responses via Playwright route API to strip existing CSP headers and inject deny-all report-only CSP
 4. **Violation Capture** — dual capture: DOM event listeners (`violation-listener.ts`) + HTTP report endpoint (`report-server.ts`), parsed by `report-parser.ts`
+5. **Inline Hash Extraction** (`inline-content-extractor.ts`) — after each page loads, extracts full inline content (`<script>`, `<style>`, event handlers, `style` attributes) via `page.evaluate()` and computes SHA-256 hashes stored in `inline_hashes` table
 5. **Crawler** (`crawler.ts`) — same-origin link discovery up to configurable depth/max pages
-6. **Policy Generation** — `rule-builder.ts` (violation → source expressions) → `policy-generator.ts` (aggregate) → `policy-optimizer.ts` (collapse to `default-src`) → `policy-formatter.ts` (export as header/meta/nginx/apache/cloudflare/json)
+6. **Policy Generation** — `rule-builder.ts` (violation → source expressions) → `policy-generator.ts` (aggregate + merge inline hashes) → `policy-optimizer.ts` (collapse to `default-src`) → `policy-formatter.ts` (export as header/meta/nginx/apache/cloudflare/json)
 7. **MITM Proxy** (`mitm-proxy.ts`, `cert-manager.ts`) — alternative mode for non-Playwright HTTP interception
 
 ### Data layer
 
 - **SQLite** via `better-sqlite3` — schema in `src/db/schema.ts`, repository in `src/db/repository.ts`
-- Four entities: `Session`, `Page`, `Violation`, `Policy` — row types use `snake_case`, domain types use `camelCase`
+- Five entities: `Session`, `Page`, `Violation`, `Policy`, `InlineHash` — row types use `snake_case`, domain types use `camelCase`
 - All types defined in `src/types.ts`
 
 ### Interfaces

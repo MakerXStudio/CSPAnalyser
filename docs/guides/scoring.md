@@ -93,7 +93,7 @@ Inline `<script>` tags or inline event handlers (`onclick`, `onload`) are in use
 
 **How to fix:**
 1. Move inline scripts to external `.js` files
-2. Use hashes: run with `--hash` to automatically replace `'unsafe-inline'` with SHA-256 hashes for short inline scripts where samples are available
+2. Use hashes: run with `--hash` to automatically replace `'unsafe-inline'` with SHA-256 hashes computed from full inline content (scripts, styles, event handlers, and style attributes)
 3. Use nonces: run with `--nonce` to replace `'unsafe-inline'` with nonce placeholders (requires runtime nonce injection on your server)
 4. Remove inline event handlers and use `addEventListener()` instead
 

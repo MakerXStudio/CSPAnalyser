@@ -1,8 +1,8 @@
 import type Database from 'better-sqlite3';
 import type { Violation, StrictnessLevel } from './types.js';
-import { getViolations, getSession } from './db/repository.js';
+import { getViolations, getSession, getInlineHashes } from './db/repository.js';
 import { violationToSourceExpression, violationToHashSource } from './rule-builder.js';
-import { CSP_DIRECTIVES } from './utils/csp-constants.js';
+import { CSP_DIRECTIVES, DIRECTIVE_FALLBACK_MAP } from './utils/csp-constants.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -90,5 +90,37 @@ export function generatePolicy(
     strictness: options.strictness,
   });
 
-  return generatePolicyFromViolations(violations, session.targetUrl, options);
+  const directives = generatePolicyFromViolations(violations, session.targetUrl, options);
+
+  // Merge inline content hashes from the inline_hashes table.
+  // These are full-content hashes computed from the DOM (not truncated samples).
+  if (options.includeHashes) {
+    const inlineHashes = getInlineHashes(db, sessionId);
+    for (const ih of inlineHashes) {
+      const hashSource = `'sha256-${ih.hash}'`;
+
+      // Resolve the target directive: use the parent directive if it already
+      // exists in the map (e.g. script-src-elem → script-src), otherwise
+      // use the sub-directive as-is.
+      let targetDirective = ih.directive;
+      const directiveKey = ih.directive as keyof typeof DIRECTIVE_FALLBACK_MAP;
+      if (directiveKey in DIRECTIVE_FALLBACK_MAP) {
+        const parentDirective = DIRECTIVE_FALLBACK_MAP[directiveKey];
+        if (parentDirective && parentDirective in directives) {
+          targetDirective = parentDirective;
+        }
+      }
+
+      if (targetDirective in directives) {
+        if (!directives[targetDirective].includes(hashSource)) {
+          directives[targetDirective].push(hashSource);
+          directives[targetDirective].sort();
+        }
+      } else {
+        directives[targetDirective] = [hashSource];
+      }
+    }
+  }
+
+  return directives;
 }

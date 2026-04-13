@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS permissions_policies (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(session_id, page_id, directive, header_type)
 );
+
+CREATE TABLE IF NOT EXISTS inline_hashes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+  directive TEXT NOT NULL,
+  hash TEXT NOT NULL,
+  content_length INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(session_id, directive, hash)
+);
 `;
 
 export function initializeDatabase(db: Database.Database): void {

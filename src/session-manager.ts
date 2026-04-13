@@ -19,6 +19,7 @@ import { setupViolationListener } from './violation-listener.js';
 import { crawl, type CrawlCallbacks } from './crawler.js';
 import { extractOrigin } from './utils/url-utils.js';
 import { createAuthenticatedContext, type AuthOptions } from './auth.js';
+import { extractInlineHashes } from './inline-content-extractor.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -68,6 +69,7 @@ export interface SessionDeps {
   crawl: typeof crawl;
   setupCspInjection: typeof setupCspInjection;
   setupViolationListener: typeof setupViolationListener;
+  extractInlineHashes: typeof extractInlineHashes;
 }
 
 // ── Main orchestrator ────────────────────────────────────────────────────
@@ -102,6 +104,7 @@ export async function runSession(
   const _crawl = deps?.crawl ?? crawl;
   const _setupCspInjection = deps?.setupCspInjection ?? setupCspInjection;
   const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
+  const _extractInlineHashes = deps?.extractInlineHashes ?? extractInlineHashes;
 
   // 1. Create session
   const session = createSession(db, config);
@@ -184,8 +187,9 @@ export async function runSession(
         }, targetOrigin);
         await _setupViolationListener(page, db, sessionId, pageId);
       },
-      onPageLoaded: async (_page: Page, url: string, _pageId: string) => {
+      onPageLoaded: async (page: Page, url: string, pageId: string) => {
         progress(`Visited: ${url}`);
+        await _extractInlineHashes(page, db, sessionId, pageId);
       },
     };
 
@@ -282,6 +286,7 @@ export async function runInteractiveSession(
   const _createAuthContext = deps?.createAuthenticatedContext ?? createAuthenticatedContext;
   const _setupCspInjection = deps?.setupCspInjection ?? setupCspInjection;
   const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
+  const _extractInlineHashes = deps?.extractInlineHashes ?? extractInlineHashes;
 
   // 1. Create session
   const session = createSession(db, config);
@@ -346,7 +351,7 @@ export async function runInteractiveSession(
       }, targetOrigin);
       await _setupViolationListener(page, db, sessionId, null);
 
-      // Track page navigations as page records
+      // Track page navigations as page records and extract inline hashes
       page.on('load', () => {
         const url = page.url();
         if (url === 'about:blank') return;
@@ -354,6 +359,11 @@ export async function runInteractiveSession(
         if (record) {
           progress(`Visited: ${url}`);
         }
+        _extractInlineHashes(page, db, sessionId, record?.id ?? null).catch((err: unknown) => {
+          logger.warn('Failed to extract inline hashes in interactive mode', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       });
     };
 

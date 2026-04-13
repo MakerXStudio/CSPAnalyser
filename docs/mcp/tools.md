@@ -90,7 +90,7 @@ Generate an optimised CSP policy from violations captured in a session.
 |-----------|------|:--------:|---------|-------------|
 | `sessionId` | `string` (UUID) | Yes | -- | The session ID |
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
-| `includeHashes` | `boolean` | No | `false` | Include SHA-256 hashes for inline scripts/styles |
+| `includeHashes` | `boolean` | No | `false` | Include SHA-256 hashes for inline scripts/styles (from violation samples and full DOM extraction) |
 | `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`) |
 
 **Example:**

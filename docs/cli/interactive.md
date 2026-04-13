@@ -19,7 +19,7 @@ csp-analyser interactive <url> [options]
 | `--violation-limit <n>` | `10000` | Maximum violations to capture. Set to `0` for unlimited. |
 | `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
 | `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
-| `--hash` | `false` | Remove `'unsafe-inline'` from directives that have hash sources. |
+| `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
 | `--report-only` | `false` | Generate a report-only header. |
 
 ::: info
@@ -31,8 +31,10 @@ The `--depth` and `--max-pages` options do not apply to interactive mode. You co
 1. A Chromium browser window opens, navigated to the provided URL
 2. A deny-all report-only CSP is injected into every response
 3. As you browse, every CSP violation is captured in the background
-4. When you close the browser window, the session ends
-5. The captured violations are aggregated into a policy, which is printed to stdout
+4. After each page load, all inline content (`<script>`, `<style>`, event handlers, `style` attributes) is extracted from the DOM and SHA-256 hashes are computed
+5. New tabs opened during your session are also instrumented — violations and inline hashes are captured across all tabs
+6. When you close the browser window, the session ends
+7. The captured violations and inline hashes are aggregated into a policy, which is printed to stdout
 
 Each page you visit is recorded. The summary table shows the total pages visited and violations captured.
 
@@ -68,6 +70,14 @@ Starts the session already logged in.
 ```bash
 csp-analyser interactive https://example.com --strictness strict --format json
 ```
+
+### Replace `'unsafe-inline'` with hashes
+
+```bash
+csp-analyser interactive https://app.example.com --hash
+```
+
+As you browse, CSP Analyser extracts the full content of every inline `<script>`, `<style>`, event handler, and `style` attribute and computes SHA-256 hashes. The resulting policy uses these hashes instead of `'unsafe-inline'`, so no runtime changes to your application are required.
 
 ### Export session state for later headless crawls
 

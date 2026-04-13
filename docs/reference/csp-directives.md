@@ -77,6 +77,6 @@ CSP Analyser generates these source expression types:
 | Wildcard | `*.example.com` | Any subdomain of the given domain |
 | `'unsafe-inline'` | `'unsafe-inline'` | Inline scripts/styles (risky) |
 | `'unsafe-eval'` | `'unsafe-eval'` | `eval()` and similar (risky) |
-| Hash | `'sha256-abc123...'` | SHA-256 hash of inline script/style content |
+| Hash | `'sha256-abc123...'` | SHA-256 hash of inline content (extracted from `<script>`, `<style>`, event handlers, `style` attributes) |
 | Scheme | `data:`, `blob:` | All resources using the given URI scheme |
 | `'none'` | `'none'` | Block everything for this directive |

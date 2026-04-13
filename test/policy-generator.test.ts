@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
 import Database from 'better-sqlite3';
 import {
   createDatabase,
   createSession,
   insertViolation,
+  insertInlineHash,
 } from '../src/db/repository.js';
 import {
   generatePolicyFromViolations,
@@ -264,5 +266,115 @@ describe('generatePolicy', () => {
     expect(result['script-src']!.some((s) => s.startsWith("'sha256-"))).toBe(true);
     expect(result['script-src']).toContain("'unsafe-inline'");
     expect(result['style-src']).toEqual(['https://cdn.example.com']);
+  });
+
+  it('merges inline hashes from the inline_hashes table', () => {
+    // Create an unsafe-inline violation for script-src
+    insertViolation(db, {
+      sessionId,
+      pageId: null,
+      documentUri: 'https://example.com/',
+      blockedUri: "'unsafe-inline'",
+      violatedDirective: 'script-src',
+      effectiveDirective: 'script-src',
+      capturedVia: 'dom_event',
+    });
+
+    // Insert an inline hash from the extractor
+    insertInlineHash(db, {
+      sessionId,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123base64hash==',
+      contentLength: 500,
+    });
+
+    const result = generatePolicy(db, sessionId, {
+      strictness: 'strict',
+      includeHashes: true,
+    });
+
+    // Hash should be merged into script-src (parent of script-src-elem)
+    expect(result['script-src']).toContain("'sha256-abc123base64hash=='");
+    expect(result['script-src']).toContain("'unsafe-inline'");
+  });
+
+  it('does not merge inline hashes when includeHashes is false', () => {
+    insertViolation(db, {
+      sessionId,
+      pageId: null,
+      documentUri: 'https://example.com/',
+      blockedUri: "'unsafe-inline'",
+      violatedDirective: 'script-src',
+      effectiveDirective: 'script-src',
+      capturedVia: 'dom_event',
+    });
+
+    insertInlineHash(db, {
+      sessionId,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'abc123base64hash==',
+      contentLength: 500,
+    });
+
+    const result = generatePolicy(db, sessionId, {
+      strictness: 'strict',
+      includeHashes: false,
+    });
+
+    expect(result['script-src']).toEqual(["'unsafe-inline'"]);
+  });
+
+  it('uses sub-directive when parent is not in the map', () => {
+    // No script-src violations — only inline hashes for script-src-attr
+    insertInlineHash(db, {
+      sessionId,
+      pageId: null,
+      directive: 'script-src-attr',
+      hash: 'attrhash==',
+      contentLength: 20,
+    });
+
+    const result = generatePolicy(db, sessionId, {
+      strictness: 'strict',
+      includeHashes: true,
+    });
+
+    // Should create the sub-directive since there's no parent
+    expect(result['script-src-attr']).toContain("'sha256-attrhash=='");
+  });
+
+  it('deduplicates inline hashes already present from violation samples', () => {
+    const sampleContent = 'alert(1)';
+    insertViolation(db, {
+      sessionId,
+      pageId: null,
+      documentUri: 'https://example.com/',
+      blockedUri: "'unsafe-inline'",
+      violatedDirective: 'script-src',
+      effectiveDirective: 'script-src',
+      sample: sampleContent,
+      capturedVia: 'dom_event',
+    });
+
+    // Insert the same hash that violationToHashSource would compute
+    const hash = createHash('sha256').update(sampleContent).digest('base64');
+    insertInlineHash(db, {
+      sessionId,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash,
+      contentLength: sampleContent.length,
+    });
+
+    const result = generatePolicy(db, sessionId, {
+      strictness: 'strict',
+      includeHashes: true,
+    });
+
+    // Should have the hash only once
+    const hashSources = result['script-src']!.filter((s) => s.startsWith("'sha256-"));
+    expect(hashSources).toHaveLength(1);
   });
 });

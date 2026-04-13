@@ -86,6 +86,7 @@ function createTestDeps(overrides?: Partial<SessionDeps>): SessionDeps {
     crawl: vi.fn().mockResolvedValue({ pagesVisited: 0, errors: [] } satisfies CrawlResult),
     setupCspInjection: vi.fn().mockResolvedValue(vi.fn()),
     setupViolationListener: vi.fn().mockResolvedValue(undefined),
+    extractInlineHashes: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
@@ -118,6 +119,7 @@ function createAutoDisconnectDeps(overrides?: Partial<SessionDeps>): SessionDeps
     crawl: vi.fn().mockResolvedValue({ pagesVisited: 0, errors: [] } satisfies CrawlResult),
     setupCspInjection: vi.fn().mockResolvedValue(vi.fn()),
     setupViolationListener: vi.fn().mockResolvedValue(undefined),
+    extractInlineHashes: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
@@ -615,6 +617,95 @@ describe('runInteractiveSession', () => {
 
     disconnectHandler!();
     await promise;
+  });
+
+  it('extracts inline hashes on page load', async () => {
+    const mockBrowser = createMockBrowser();
+    let disconnectHandler: EventHandler | null = null;
+
+    mockBrowser.on = vi.fn().mockImplementation((event: string, handler: EventHandler) => {
+      if (event === 'disconnected') {
+        disconnectHandler = handler;
+      }
+    });
+
+    const extractSpy = vi.fn().mockResolvedValue(0);
+    const deps = createTestDeps({
+      launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
+      createAuthenticatedContext: vi.fn().mockResolvedValue({
+        context: mockBrowser._mockContext,
+      }),
+      extractInlineHashes: extractSpy,
+    });
+
+    const promise = runInteractiveSession(
+      db,
+      { targetUrl: 'http://localhost:3000' },
+      {},
+      deps,
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Trigger a page load event
+    const mockPage = mockBrowser._mockContext._mockPage;
+    const loadHandlers = mockPage._eventHandlers.get('load');
+    mockPage.url.mockReturnValue('http://localhost:3000/page');
+    loadHandlers![0]!();
+
+    // Allow the async extractor call to settle
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(extractSpy).toHaveBeenCalled();
+    const session = (await db.prepare('SELECT id FROM sessions LIMIT 1').get()) as { id: string };
+    expect(extractSpy).toHaveBeenCalledWith(
+      mockPage,
+      db,
+      session.id,
+      expect.any(String),
+    );
+
+    disconnectHandler!();
+    await promise;
+  });
+
+  it('does not fail the session if inline hash extraction throws', async () => {
+    const mockBrowser = createMockBrowser();
+    let disconnectHandler: EventHandler | null = null;
+
+    mockBrowser.on = vi.fn().mockImplementation((event: string, handler: EventHandler) => {
+      if (event === 'disconnected') {
+        disconnectHandler = handler;
+      }
+    });
+
+    const deps = createTestDeps({
+      launchBrowser: vi.fn().mockResolvedValue(mockBrowser),
+      createAuthenticatedContext: vi.fn().mockResolvedValue({
+        context: mockBrowser._mockContext,
+      }),
+      extractInlineHashes: vi.fn().mockRejectedValue(new Error('extractor crashed')),
+    });
+
+    const promise = runInteractiveSession(
+      db,
+      { targetUrl: 'http://localhost:3000' },
+      {},
+      deps,
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const mockPage = mockBrowser._mockContext._mockPage;
+    const loadHandlers = mockPage._eventHandlers.get('load');
+    mockPage.url.mockReturnValue('http://localhost:3000/page');
+    loadHandlers![0]!();
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    disconnectHandler!();
+    const result = await promise;
+    expect(result.session.status).toBe('complete');
   });
 
   it('exports storage state when saveStorageStatePath is provided', async () => {

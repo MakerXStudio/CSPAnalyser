@@ -105,7 +105,7 @@ Analyze collected violations and generate a minimal, correct CSP policy.
 - Map blocked URIs to appropriate CSP source expressions (`'self'`, `'unsafe-inline'`, `data:`, exact origins, wildcard domains)
 - Support three strictness levels: strict (exact origins), moderate (domain wildcards for CDNs), permissive (broad wildcards)
 - Optimize with `default-src` factoring when multiple directives share the same sources
-- Optionally include `'sha256-...'` hashes for inline scripts/styles
+- Optionally include `'sha256-...'` hashes for inline scripts/styles (computed from full DOM content, not truncated violation samples)
 
 ### F9: Policy Export
 
@@ -276,7 +276,8 @@ Provide rich terminal output with colors, progress indicators, and summary table
 
 ### Phase 3 Artifacts
 - `src/rule-builder.ts` — Maps violations to CSP source expressions ('self', exact origins, wildcard domains, special keywords) with three strictness levels; sha256 hash generation for inline script/style samples (skips truncated samples)
-- `src/policy-generator.ts` — Aggregates violations into directive map (Record<string, string[]>) with deduplication; validates effectiveDirective against known CSP directives; DB-backed and pure function variants
+- `src/inline-content-extractor.ts` — Extracts full inline content (`<script>`, `<style>`, event handlers, `style` attributes) via `page.evaluate()` after page load; computes SHA-256 hashes and stores in `inline_hashes` table
+- `src/policy-generator.ts` — Aggregates violations into directive map (Record<string, string[]>) with deduplication; merges inline hashes from `inline_hashes` table; validates effectiveDirective against known CSP directives; DB-backed and pure function variants
 - `src/policy-optimizer.ts` — default-src factoring (intersects sources across fetch directives), source deduplication, deterministic directive/source ordering, nonce placeholder generation, hash-based `'unsafe-inline'` removal
 - `src/policy-formatter.ts` — 6 export formats (header, meta, nginx, apache, cloudflare, json) with HTML escaping for meta, quote escaping for nginx/apache, report-only variants
 

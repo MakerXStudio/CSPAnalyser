@@ -76,7 +76,7 @@ While moderate would produce the exact origin `https://unpkg.com` (only 2 labels
 | `blob:` URI | `blob:` | `blob:` | `blob:` |
 | Inline script/style | `'unsafe-inline'` | `'unsafe-inline'` | `'unsafe-inline'` |
 
-All levels produce `'unsafe-inline'` for inline content. Use `--hash` to replace it with SHA-256 hashes or `--nonce` to replace it with nonce placeholders.
+All levels produce `'unsafe-inline'` for inline content. Use `--hash` to replace it with SHA-256 hashes computed from the full inline content extracted during crawling, or `--nonce` to replace it with nonce placeholders.
 
 ## When to use each
 

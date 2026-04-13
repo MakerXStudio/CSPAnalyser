@@ -184,6 +184,28 @@ export interface PermissionsPolicyRow {
   created_at: string;
 }
 
+// ── Inline hash types ──────────────────────────────────────────────────────
+
+export interface InlineHash {
+  id: string;
+  sessionId: string;
+  pageId: string | null;
+  directive: string;
+  hash: string;
+  contentLength: number;
+  createdAt: string;
+}
+
+export interface InlineHashRow {
+  id: number;
+  session_id: string;
+  page_id: number | null;
+  directive: string;
+  hash: string;
+  content_length: number;
+  created_at: string;
+}
+
 // ── CSP directive type ─────────────────────────────────────────────────────
 
 export type CspDirective =

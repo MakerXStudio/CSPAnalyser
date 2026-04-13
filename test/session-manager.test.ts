@@ -57,6 +57,7 @@ function createTestDeps(overrides?: Partial<SessionDeps>): SessionDeps {
     crawl: vi.fn().mockResolvedValue({ pagesVisited: 3, errors: [] } satisfies CrawlResult),
     setupCspInjection: vi.fn().mockResolvedValue(vi.fn()),
     setupViolationListener: vi.fn().mockResolvedValue(undefined),
+    extractInlineHashes: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
@@ -374,5 +375,33 @@ describe('runSession', () => {
     expect(statuses).toContain('crawling');
     // Final status should be 'complete'
     expect(result.session.status).toBe('complete');
+  });
+
+  it('calls extractInlineHashes on each crawled page', async () => {
+    const config: SessionConfig = { targetUrl: 'http://localhost:3000' };
+    const extractSpy = vi.fn().mockResolvedValue(0);
+    const deps = createTestDeps({
+      crawl: vi.fn().mockImplementation(async (_ctx, _db, _sid, _url, _config, callbacks) => {
+        const mockPage = { evaluate: vi.fn().mockResolvedValue([]) };
+        if (callbacks?.onPageCreated) {
+          await callbacks.onPageCreated(mockPage, 'http://localhost:3000', 'page-1');
+        }
+        if (callbacks?.onPageLoaded) {
+          await callbacks.onPageLoaded(mockPage, 'http://localhost:3000', 'page-1');
+        }
+        return { pagesVisited: 1, errors: [] };
+      }),
+      extractInlineHashes: extractSpy,
+    });
+
+    await runSession(db, config, {}, deps);
+
+    expect(extractSpy).toHaveBeenCalledTimes(1);
+    expect(extractSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      db,
+      expect.any(String),
+      'page-1',
+    );
   });
 });

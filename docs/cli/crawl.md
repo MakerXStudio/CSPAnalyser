@@ -20,7 +20,7 @@ csp-analyser crawl <url> [options]
 | `--violation-limit <n>` | `10000` | Maximum violations to capture per session. Set to `0` for unlimited. |
 | `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders in script/style directives. |
 | `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces in script directives. Implies `--nonce`. |
-| `--hash` | `false` | Remove `'unsafe-inline'` from directives that already have SHA-256/384/512 hash sources. |
+| `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
 | `--report-only` | `false` | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one. |
 
 ## How crawling works
@@ -34,7 +34,7 @@ The crawler uses breadth-first search (BFS) starting from the provided URL:
 5. Add unvisited links to the queue at depth + 1
 6. Repeat until `--max-pages` is reached or no more links remain within `--depth`
 
-On each page, a deny-all `Content-Security-Policy-Report-Only` header is injected. Every resource the page tries to load triggers a violation, which is captured via both DOM event listeners and an HTTP report endpoint. After crawling completes, these violations are aggregated into a minimal policy.
+On each page, a deny-all `Content-Security-Policy-Report-Only` header is injected. Every resource the page tries to load triggers a violation, which is captured via both DOM event listeners and an HTTP report endpoint. After each page loads, the crawler also extracts all inline content (`<script>`, `<style>`, event handlers, `style` attributes) from the DOM and computes SHA-256 hashes. After crawling completes, these violations and inline hashes are aggregated into a minimal policy.
 
 A settlement delay (500ms by default) follows each page load to catch violations from lazy-loaded resources and deferred scripts.
 

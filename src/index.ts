@@ -38,7 +38,10 @@ export type {
   ViolationFilters,
   ViolationSummaryEntry,
   InsertPolicyParams,
+  InsertInlineHashParams,
 } from './db/repository.js';
+
+export type { InlineHash } from './types.js';
 
 // ── Utilities ─────────────────────────────────────────────────────────────
 export {
@@ -80,6 +83,9 @@ export type { PlaywrightPage, PlaywrightRoute, PlaywrightResponse } from './csp-
 
 // ── Violation Listener ───────────────────────────────────────────────────
 export { setupViolationListener, generateInitScript } from './violation-listener.js';
+
+// ── Inline Content Extraction ───────────────────────────────────────────
+export { extractInlineHashes } from './inline-content-extractor.js';
 
 // ── Crawler ──────────────────────────────────────────────────────────────
 export { crawl } from './crawler.js';

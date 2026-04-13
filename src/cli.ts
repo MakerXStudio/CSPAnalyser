@@ -843,25 +843,34 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         process.stdout.write(`csp-analyser ${getVersion()}\n`);
         return;
       case 'setup':
-        return await runSetupCommand();
+        await runSetupCommand();
+        return;
       case 'crawl':
         await ensureBrowserInstalled();
-        return await runCrawlCommand(args);
+        await runCrawlCommand(args);
+        return;
       case 'interactive':
         await ensureBrowserInstalled();
-        return await runInteractiveCommand(args);
+        await runInteractiveCommand(args);
+        return;
       case 'generate':
-        return await runGenerateCommand(args);
+        await runGenerateCommand(args);
+        return;
       case 'export':
-        return await runExportCommand(args);
+        await runExportCommand(args);
+        return;
       case 'diff':
-        return await runDiffCommand(args);
+        await runDiffCommand(args);
+        return;
       case 'score':
-        return await runScoreCommand(args);
+        await runScoreCommand(args);
+        return;
       case 'sessions':
-        return await runSessionsCommand();
+        await runSessionsCommand();
+        return;
       case 'permissions':
-        return await runPermissionsCommand(args);
+        await runPermissionsCommand(args);
+        return;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
