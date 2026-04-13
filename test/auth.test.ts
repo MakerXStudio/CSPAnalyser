@@ -166,19 +166,18 @@ describe('validateStorageStatePath', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('returns resolved path for a valid .json file', () => {
+  it('returns resolved path for a valid .json file in an allowed directory', () => {
     const filePath = path.join(tempDir, 'state.json');
     fs.writeFileSync(filePath, '{}');
 
-    expect(validateStorageStatePath(filePath)).toBe(filePath);
+    expect(validateStorageStatePath(filePath, [tempDir])).toBe(filePath);
   });
 
   it('resolves relative paths', () => {
     const filePath = path.join(tempDir, 'state.json');
     fs.writeFileSync(filePath, '{}');
 
-    // Use a relative path that resolves to the same location
-    const result = validateStorageStatePath(filePath);
+    const result = validateStorageStatePath(filePath, [tempDir]);
     expect(path.isAbsolute(result)).toBe(true);
   });
 
@@ -186,17 +185,43 @@ describe('validateStorageStatePath', () => {
     const filePath = path.join(tempDir, 'state.txt');
     fs.writeFileSync(filePath, '{}');
 
-    expect(() => validateStorageStatePath(filePath)).toThrow('.json extension');
+    expect(() => validateStorageStatePath(filePath, [tempDir])).toThrow('.json extension');
   });
 
   it('throws if file does not exist', () => {
     const filePath = path.join(tempDir, 'nonexistent.json');
 
-    expect(() => validateStorageStatePath(filePath)).toThrow('does not exist');
+    expect(() => validateStorageStatePath(filePath, [tempDir])).toThrow('does not exist');
   });
 
   it('throws for path traversal attempts with non-.json result', () => {
-    expect(() => validateStorageStatePath('/etc/passwd')).toThrow('.json extension');
+    expect(() => validateStorageStatePath('/etc/passwd', [tempDir])).toThrow('.json extension');
+  });
+
+  it('throws if file is outside all allowed directories', () => {
+    const filePath = path.join(tempDir, 'state.json');
+    fs.writeFileSync(filePath, '{}');
+
+    const otherDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'auth-other-')));
+    try {
+      expect(() => validateStorageStatePath(filePath, [otherDir])).toThrow(
+        'must be within the current working directory',
+      );
+    } finally {
+      fs.rmSync(otherDir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows file in any of multiple allowed directories', () => {
+    const filePath = path.join(tempDir, 'state.json');
+    fs.writeFileSync(filePath, '{}');
+
+    const otherDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'auth-other-')));
+    try {
+      expect(validateStorageStatePath(filePath, [otherDir, tempDir])).toBe(filePath);
+    } finally {
+      fs.rmSync(otherDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -207,7 +232,8 @@ describe('createAuthenticatedContext', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'auth-ctx-test-')));
+    // Create temp dir under CWD so storage state files pass directory containment checks
+    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(process.cwd(), '.tmp-auth-ctx-test-')));
   });
 
   afterEach(() => {

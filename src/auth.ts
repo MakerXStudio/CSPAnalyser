@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createLogger } from './utils/logger.js';
+import { getDataDir } from './utils/file-utils.js';
 import type { CookieParam } from './types.js';
 
 const logger = createLogger();
@@ -55,10 +56,14 @@ export interface AuthOptions {
 
 /**
  * Validates a storageStatePath: resolves it through symlinks, checks .json extension,
- * and verifies it exists. Uses fs.realpathSync() to prevent symlink-based path traversal.
- * Throws a descriptive error for invalid paths.
+ * verifies it exists, and ensures it is contained within an allowed directory (CWD or
+ * the CSP Analyser data directory). Uses fs.realpathSync() to prevent symlink-based
+ * path traversal. Throws a descriptive error for invalid paths.
  */
-export function validateStorageStatePath(storageStatePath: string): string {
+export function validateStorageStatePath(
+  storageStatePath: string,
+  allowedDirs?: readonly string[],
+): string {
   const resolved = path.resolve(storageStatePath);
 
   if (!resolved.endsWith('.json')) {
@@ -75,6 +80,20 @@ export function validateStorageStatePath(storageStatePath: string): string {
   if (!realPath.endsWith('.json')) {
     throw new Error(
       `Invalid storageStatePath: symlink target must have .json extension (got "${realPath}")`,
+    );
+  }
+
+  // Directory containment: the resolved path must be under CWD or the data directory.
+  // This prevents an MCP client from reading arbitrary .json files on disk.
+  const dirs = allowedDirs ?? [process.cwd(), getDataDir()];
+  const isContained = dirs.some((dir) => {
+    const normalizedDir = dir.endsWith(path.sep) ? dir : dir + path.sep;
+    return realPath.startsWith(normalizedDir) || realPath === dir;
+  });
+
+  if (!isContained) {
+    throw new Error(
+      'Invalid storageStatePath: file must be within the current working directory or the CSP Analyser data directory',
     );
   }
 

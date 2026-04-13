@@ -148,3 +148,9 @@ vite.config.ts.timestamp-*
 
 # CSP Analyser data
 .csp-analyser/
+
+# Test temp directories
+.tmp-auth-ctx-test-*
+
+# Security audit logs
+.security/
