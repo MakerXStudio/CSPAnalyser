@@ -248,3 +248,90 @@ describe('optimizePolicy', () => {
     expect(input).toEqual(inputCopy);
   });
 });
+
+// ── Nonce generation ──────────────────────────────────────────────────
+
+describe('nonce generation', () => {
+  it('replaces unsafe-inline with nonce placeholder in script-src', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: true },
+    );
+    expect(result['script-src']).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('replaces unsafe-inline with nonce placeholder in style-src', () => {
+    const result = optimizePolicy(
+      { 'style-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: true },
+    );
+    expect(result['style-src']).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['style-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('adds strict-dynamic alongside nonce in script-src when enabled', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: true, useStrictDynamic: true },
+    );
+    expect(result['script-src']).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['script-src']).toContain("'strict-dynamic'");
+  });
+
+  it('does not add strict-dynamic to style-src', () => {
+    const result = optimizePolicy(
+      { 'style-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: true, useStrictDynamic: true },
+    );
+    expect(result['style-src']).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['style-src']).not.toContain("'strict-dynamic'");
+  });
+
+  it('replaces unsafe-inline in default-src when nonces enabled', () => {
+    const result = optimizePolicy(
+      { 'default-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: true },
+    );
+    expect(result['default-src']).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['default-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('does not modify directives without unsafe-inline', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", 'https://cdn.example.com'] },
+      undefined,
+      { useNonces: true },
+    );
+    expect(result['script-src']).not.toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['script-src']).toContain("'self'");
+  });
+
+  it('does not modify when useNonces is false', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: false },
+    );
+    expect(result['script-src']).toContain("'unsafe-inline'");
+    expect(result['script-src']).not.toContain("'nonce-{{CSP_NONCE}}'");
+  });
+
+  it('handles script-src-elem and style-src-attr', () => {
+    const result = optimizePolicy(
+      {
+        'script-src-elem': ["'unsafe-inline'"],
+        'style-src-attr': ["'unsafe-inline'"],
+      },
+      undefined,
+      { useNonces: true },
+    );
+    expect(result['script-src-elem']).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(result['style-src-attr']).toContain("'nonce-{{CSP_NONCE}}'");
+  });
+});

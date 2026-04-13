@@ -71,6 +71,8 @@ export interface ParsedArgs {
   saveStorageState?: string;
   reportOnly: boolean;
   violationLimit?: number;
+  nonce: boolean;
+  strictDynamic: boolean;
 }
 
 // ── Valid values ─────────────────────────────────────────────────────────
@@ -111,6 +113,8 @@ Options:
   --storage-state <path> Playwright storage state file for auth
   --save-storage-state <path>  Export session cookies/state after interactive browsing
   --violation-limit <n>  Max violations per session (default: 10000, 0 for unlimited)
+  --nonce                Replace 'unsafe-inline' with nonce placeholders
+  --strict-dynamic       Add 'strict-dynamic' with nonces (implies --nonce)
   --report-only          Generate report-only policy
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help
@@ -129,6 +133,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictness: 'moderate',
       format: 'header',
       reportOnly: false,
+      nonce: false,
+      strictDynamic: false,
     };
   }
   if (argv.includes('--version') || argv.includes('-v')) {
@@ -139,6 +145,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictness: 'moderate',
       format: 'header',
       reportOnly: false,
+      nonce: false,
+      strictDynamic: false,
     };
   }
 
@@ -152,6 +160,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'storage-state': { type: 'string' },
       'save-storage-state': { type: 'string' },
       'violation-limit': { type: 'string' },
+      nonce: { type: 'boolean', default: false },
+      'strict-dynamic': { type: 'boolean', default: false },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
     },
@@ -191,6 +201,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictness: 'moderate',
       format: 'header',
       reportOnly: false,
+      nonce: false,
+      strictDynamic: false,
     };
   }
 
@@ -237,6 +249,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     strictness: strictness as StrictnessLevel,
     format: format as ExportFormat,
     reportOnly: (values['report-only'] as boolean | undefined) ?? false,
+    strictDynamic: (values['strict-dynamic'] as boolean | undefined) ?? false,
+    nonce: ((values.nonce as boolean | undefined) ?? false) || ((values['strict-dynamic'] as boolean | undefined) ?? false),
   };
 
   if (command === 'crawl' || command === 'interactive') {
@@ -300,7 +314,10 @@ function generateAndFormat(
     strictness: args.strictness,
     includeHashes: true,
   });
-  const optimized = optimizePolicy(directives, targetUrl);
+  const optimized = optimizePolicy(directives, targetUrl, {
+    useNonces: args.nonce,
+    useStrictDynamic: args.strictDynamic,
+  });
   return formatPolicy(optimized, args.format, args.reportOnly);
 }
 
@@ -365,7 +382,10 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
       }) + '\n',
     );
 
-    const optimized = optimizePolicy(directives, result.session.targetUrl);
+    const optimized = optimizePolicy(directives, result.session.targetUrl, {
+      useNonces: args.nonce,
+      useStrictDynamic: args.strictDynamic,
+    });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
   } finally {
@@ -428,7 +448,10 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
       }) + '\n',
     );
 
-    const optimized = optimizePolicy(directives, result.session.targetUrl);
+    const optimized = optimizePolicy(directives, result.session.targetUrl, {
+      useNonces: args.nonce,
+      useStrictDynamic: args.strictDynamic,
+    });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
   } finally {
@@ -491,7 +514,10 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
       strictness: args.strictness,
       includeHashes: false,
     });
-    const optimized = optimizePolicy(directives, session?.targetUrl);
+    const optimized = optimizePolicy(directives, session?.targetUrl, {
+      useNonces: args.nonce,
+      useStrictDynamic: args.strictDynamic,
+    });
     const score = scoreCspPolicy(optimized);
     process.stdout.write(formatScore(score) + '\n');
   } finally {

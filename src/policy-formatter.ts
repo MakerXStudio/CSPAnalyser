@@ -114,19 +114,52 @@ resource cspRule 'Microsoft.Cdn/profiles/ruleSets/rules@2024-09-01' = {
     }
 
     case 'helmet': {
+      const hasNonce = Object.values(directives).some((sources) =>
+        sources.some((s) => s.includes('{{CSP_NONCE}}')),
+      );
       const helmetDirectives: Record<string, string[]> = {};
       for (const [directive, sources] of Object.entries(directives)) {
-        // Convert kebab-case to camelCase for Helmet
         const camelKey = directive.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-        helmetDirectives[camelKey] = sources;
+        if (hasNonce) {
+          // Replace placeholder with Helmet's nonce function reference
+          helmetDirectives[camelKey] = sources.map((s) =>
+            s === "'nonce-{{CSP_NONCE}}'" ? '$$NONCE_FN$$' : s,
+          );
+        } else {
+          helmetDirectives[camelKey] = sources;
+        }
       }
       const directiveEntries = Object.entries(helmetDirectives)
         .map(([key, sources]) => {
-          const values = sources.map((s) => JSON.stringify(s)).join(', ');
+          const values = sources
+            .map((s) => (s === '$$NONCE_FN$$' ? '(req, res) => `\'nonce-${res.locals.cspNonce}\'`' : JSON.stringify(s)))
+            .join(', ');
           return `    ${key}: [${values}],`;
         })
         .join('\n');
       const method = isReportOnly ? 'reportOnly: true,\n  ' : '';
+
+      if (hasNonce) {
+        return `import crypto from 'node:crypto';
+
+// Generate a unique nonce per request
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
+app.use(
+  helmet.contentSecurityPolicy({
+    ${method}directives: {
+${directiveEntries}
+    },
+  })
+);
+
+// In your templates, use the nonce on inline scripts/styles:
+// <script nonce="<%= cspNonce %>">...</script>`;
+      }
+
       return `app.use(
   helmet.contentSecurityPolicy({
     ${method}directives: {

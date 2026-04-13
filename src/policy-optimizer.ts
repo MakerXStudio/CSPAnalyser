@@ -49,16 +49,25 @@ export function shouldUseDefaultSrc(
   return { defaultSrc: intersection, remaining };
 }
 
+export interface OptimizePolicyOptions {
+  /** Replace 'unsafe-inline' with nonce placeholders in script/style directives */
+  useNonces?: boolean;
+  /** Add 'strict-dynamic' alongside nonces in script-src directives */
+  useStrictDynamic?: boolean;
+}
+
 /**
  * Optimizes a directive map by factoring common sources into default-src,
  * deduplicating sources, and sorting output deterministically.
  *
- * @param targetOrigin — if provided, enables deduplication of 'self' vs explicit
- *   matching origin (e.g. 'self' + 'https://example.com' → 'self')
+ * @param targetOrigin if provided, enables deduplication of 'self' vs explicit
+ *   matching origin (e.g. 'self' + 'https://example.com' -> 'self')
+ * @param options additional optimization options (nonce generation, strict-dynamic)
  */
 export function optimizePolicy(
   directives: Record<string, string[]>,
   targetOrigin?: string,
+  options?: OptimizePolicyOptions,
 ): Record<string, string[]> {
   let result: Record<string, string[]>;
 
@@ -93,6 +102,36 @@ export function optimizePolicy(
   }
   if (!('form-action' in result)) {
     result['form-action'] = ["'self'"];
+  }
+
+  // Replace 'unsafe-inline' with nonce placeholder in script/style directives
+  if (options?.useNonces) {
+    const nonceDirectives = [
+      'script-src', 'script-src-elem', 'script-src-attr',
+      'style-src', 'style-src-elem', 'style-src-attr',
+    ];
+    for (const directive of nonceDirectives) {
+      if (directive in result) {
+        const sources = result[directive];
+        const hasUnsafeInline = sources.includes("'unsafe-inline'");
+        if (hasUnsafeInline) {
+          result[directive] = sources.filter((s) => s !== "'unsafe-inline'");
+          result[directive].push("'nonce-{{CSP_NONCE}}'");
+          // Add strict-dynamic for script-src directives to propagate trust
+          if (directive.startsWith('script-src') && options.useStrictDynamic) {
+            result[directive].push("'strict-dynamic'");
+          }
+        }
+      }
+    }
+    // Also check default-src (unsafe-inline may be inherited)
+    if ('default-src' in result) {
+      const sources = result['default-src'];
+      if (sources.includes("'unsafe-inline'")) {
+        result['default-src'] = sources.filter((s) => s !== "'unsafe-inline'");
+        result['default-src'].push("'nonce-{{CSP_NONCE}}'");
+      }
+    }
   }
 
   // Sort directives: default-src first, then alphabetical

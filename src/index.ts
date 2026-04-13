@@ -92,6 +92,7 @@ export { generatePolicy, generatePolicyFromViolations } from './policy-generator
 export type { PolicyGeneratorOptions } from './policy-generator.js';
 
 export { optimizePolicy, shouldUseDefaultSrc } from './policy-optimizer.js';
+export type { OptimizePolicyOptions } from './policy-optimizer.js';
 
 export { formatPolicy, directivesToString } from './policy-formatter.js';
 
