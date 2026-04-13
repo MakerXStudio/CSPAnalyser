@@ -1,0 +1,25 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    uses: makerxstudio/shared-config/.github/workflows/node-ci.yml@main
+    with:
+      compile-script: npm run typecheck
+      test-script: npm run test:coverage
+      audit-script: npm run audit
+
+  publish:
+    needs: ci
+    uses: makerxstudio/shared-config/.github/workflows/node-trusted-publish.yml@main
+    with:
+      package-path: "./package.json"
+      access: public
