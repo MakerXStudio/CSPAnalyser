@@ -67,8 +67,11 @@ describe('concurrent session isolation', () => {
     const sessionA = createSession(db, { targetUrl: 'https://a.example.com' });
     const sessionB = createSession(db, { targetUrl: 'https://b.example.com' });
 
-    const pageA = insertPage(db, sessionA.id, 'https://a.example.com/', 200);
-    const pageB = insertPage(db, sessionB.id, 'https://b.example.com/', 200);
+    const pageAResult = insertPage(db, sessionA.id, 'https://a.example.com/', 200);
+    const pageBResult = insertPage(db, sessionB.id, 'https://b.example.com/', 200);
+    if (!pageAResult || !pageBResult) throw new Error('insertPage returned null');
+    const pageA = pageAResult;
+    const pageB = pageBResult;
 
     // Insert violations into both sessions simultaneously
     insertViolation(db, makeViolation(sessionA.id, pageA.id, 'script-src', 'https://cdn-a.com/a.js'));
@@ -226,8 +229,11 @@ describe('end-to-end policy generation pipeline', () => {
     updateSession(db, session.id, { status: 'crawling' });
 
     // 3. Insert pages
-    const page1 = insertPage(db, session.id, 'https://example.com/', 200);
-    const page2 = insertPage(db, session.id, 'https://example.com/about', 200);
+    const page1Result = insertPage(db, session.id, 'https://example.com/', 200);
+    const page2Result = insertPage(db, session.id, 'https://example.com/about', 200);
+    if (!page1Result || !page2Result) throw new Error('insertPage returned null');
+    const page1 = page1Result;
+    const page2 = page2Result;
 
     // 4. Insert violations (simulating what the violation listener would capture)
     insertViolation(db, makeViolation(session.id, page1.id, 'script-src', 'https://cdn.example.com/app.js'));
@@ -283,8 +289,9 @@ describe('end-to-end policy generation pipeline', () => {
 
   it('generates report-only policy when requested', () => {
     const session = createSession(db, { targetUrl: 'https://example.com' });
-    const page = insertPage(db, session.id, 'https://example.com/', 200);
-    insertViolation(db, makeViolation(session.id, page.id, 'script-src', 'https://cdn.example.com/app.js'));
+    const pageResult = insertPage(db, session.id, 'https://example.com/', 200);
+    if (!pageResult) throw new Error('insertPage returned null');
+    insertViolation(db, makeViolation(session.id, pageResult.id, 'script-src', 'https://cdn.example.com/app.js'));
 
     const directives = generatePolicy(db, session.id, {
       strictness: 'moderate',
