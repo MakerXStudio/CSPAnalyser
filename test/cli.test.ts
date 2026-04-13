@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { parseCliArgs, HELP_TEXT, main } from '../src/cli.js';
+import { setNoColor } from '../src/utils/terminal.js';
 
 // Mock dependencies for command execution tests
 const mockRunSession = vi.fn();
@@ -51,16 +53,17 @@ vi.mock('../src/policy-scorer.js', () => ({
 }));
 
 const mockGetPermissionsPolicies = vi.fn().mockReturnValue([]);
+const mockListSessions = vi.fn().mockReturnValue([]);
+const mockGetViolations = vi.fn().mockReturnValue([]);
 vi.mock('../src/db/repository.js', () => ({
   createDatabase: (...args: unknown[]) => mockCreateDatabase(...args),
   getSession: (...args: unknown[]) => mockGetSession(...args),
+  getViolations: (...args: unknown[]) => mockGetViolations(...args),
   getViolationSummary: (...args: unknown[]) => mockGetViolationSummary(...args),
   getPermissionsPolicies: (...args: unknown[]) => mockGetPermissionsPolicies(...args),
+  listSessions: (...args: unknown[]) => mockListSessions(...args),
 }));
 
-import { parseCliArgs, HELP_TEXT, main } from '../src/cli.js';
-import type { ParsedArgs } from '../src/cli.js';
-import { setNoColor } from '../src/utils/terminal.js';
 
 // ── parseCliArgs ────────────────────────────────────────────────────────
 
@@ -532,5 +535,105 @@ describe('main', () => {
       }),
       expect.anything(),
     );
+  });
+});
+
+// ── sessions command ─────────────────────────────────────────────────────
+
+describe('sessions command', () => {
+  it('parses sessions command with no arguments', () => {
+    const result = parseCliArgs(['sessions']);
+    expect(result.command).toBe('sessions');
+  });
+
+  it('outputs session list with timestamps and violation counts', async () => {
+    mockListSessions.mockReturnValue([
+      {
+        id: 'abc-123',
+        targetUrl: 'https://example.com',
+        status: 'complete',
+        mode: 'local',
+        config: {},
+        reportServerPort: null,
+        proxyPort: null,
+        createdAt: '2026-04-10T10:30:00Z',
+        updatedAt: '2026-04-10T10:31:00Z',
+      },
+      {
+        id: 'def-456',
+        targetUrl: 'https://other.com',
+        status: 'failed',
+        mode: 'local',
+        config: {},
+        reportServerPort: null,
+        proxyPort: null,
+        createdAt: '2026-04-09T09:00:00Z',
+        updatedAt: '2026-04-09T09:01:00Z',
+      },
+    ]);
+    mockGetViolations.mockImplementation((_db: unknown, sessionId: string) => {
+      if (sessionId === 'abc-123') return Array.from({ length: 12 }, (_, i) => ({ id: `v-${i}` }));
+      return [];
+    });
+
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await main(['sessions']);
+
+    expect(mockListSessions).toHaveBeenCalled();
+    const output = stdoutWrite.mock.calls.map((c) => c[0]).join('');
+    expect(output).toContain('abc-123');
+    expect(output).toContain('https://example.com');
+    expect(output).toContain('12 violations');
+    expect(output).toContain('def-456');
+    expect(output).toContain('https://other.com');
+    expect(output).toContain('0 violations');
+
+    stdoutWrite.mockRestore();
+  });
+
+  it('shows message when no sessions exist', async () => {
+    mockListSessions.mockReturnValue([]);
+
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    await main(['sessions']);
+
+    const output = stderrWrite.mock.calls.map((c) => c[0]).join('');
+    expect(output).toContain('No sessions found');
+
+    stderrWrite.mockRestore();
+  });
+});
+
+// ── save-storage-state flag ──────────────────────────────────────────────
+
+describe('save-storage-state flag', () => {
+  it('parses --save-storage-state flag', () => {
+    const result = parseCliArgs(['interactive', 'https://example.com', '--save-storage-state', 'auth.json']);
+    expect(result.command).toBe('interactive');
+    expect(result.saveStorageState).toBe('auth.json');
+  });
+
+  it('passes saveStorageStatePath to runInteractiveSession', async () => {
+    mockRunInteractiveSession.mockResolvedValue({
+      session: { id: 's-1', targetUrl: 'https://example.com', status: 'complete' },
+      pagesVisited: 1,
+      violationsFound: 0,
+      storageStatePath: '/tmp/auth.json',
+    });
+    mockGetViolationSummary.mockReturnValue([]);
+
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await main(['interactive', 'https://example.com', '--save-storage-state', '/tmp/auth.json']);
+
+    expect(mockRunInteractiveSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ targetUrl: 'https://example.com' }),
+      expect.objectContaining({ saveStorageStatePath: '/tmp/auth.json' }),
+    );
+
+    stdoutWrite.mockRestore();
+    stderrWrite.mockRestore();
   });
 });

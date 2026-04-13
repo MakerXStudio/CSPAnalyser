@@ -666,4 +666,48 @@ describe('runInteractiveSession', () => {
     expect(result.session.mode).toBe('local');
     expect(deps.startMitmProxy).not.toHaveBeenCalled();
   });
+
+  it('exports storage state when saveStorageStatePath is provided', async () => {
+    const { mkdtempSync, readFileSync, existsSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const os = await import('node:os');
+    const tmpDir = mkdtempSync(join(os.tmpdir(), 'csp-test-'));
+    const statePath = join(tmpDir, 'auth.json');
+
+    const mockStorageState = { cookies: [{ name: 'session', value: 'abc' }], origins: [] };
+    const deps = createAutoDisconnectDeps();
+    // Override storageState to return mock data
+    const mockBrowser = await deps.launchBrowser({ headless: false });
+    const mockCtx = await mockBrowser.newContext();
+    (mockCtx.storageState as ReturnType<typeof vi.fn>).mockResolvedValue(mockStorageState);
+
+    const result = await runInteractiveSession(
+      db,
+      { targetUrl: 'http://localhost:3000' },
+      { saveStorageStatePath: statePath },
+      deps,
+    );
+
+    expect(result.storageStatePath).toBe(statePath);
+    expect(existsSync(statePath)).toBe(true);
+    const saved = JSON.parse(readFileSync(statePath, 'utf-8'));
+    expect(saved.cookies).toEqual([{ name: 'session', value: 'abc' }]);
+
+    // Cleanup
+    const { rmSync } = await import('node:fs');
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('returns undefined storageStatePath when not requested', async () => {
+    const deps = createAutoDisconnectDeps();
+
+    const result = await runInteractiveSession(
+      db,
+      { targetUrl: 'http://localhost:3000' },
+      {},
+      deps,
+    );
+
+    expect(result.storageStatePath).toBeUndefined();
+  });
 });
