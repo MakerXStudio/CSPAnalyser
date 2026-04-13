@@ -808,12 +808,6 @@ describe('tool error handling with corrupted database', () => {
 
 describe('main', () => {
   it('starts the MCP server and connects transport', async () => {
-    const mockConnect = vi.fn().mockResolvedValue(undefined);
-    const mockClose = vi.fn().mockResolvedValue(undefined);
-
-    // Mock McpServer and StdioServerTransport via the createMcpServer output
-    const originalCreateDatabase = vi.fn();
-
     // We can't easily mock the internals of main() without module mocks,
     // but we can test that it throws/rejects appropriately with an invalid DB path
     // by checking the error handling path
