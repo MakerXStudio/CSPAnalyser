@@ -5,7 +5,7 @@ description: Deploy your generated CSP in any environment
 
 # Export Formats
 
-CSP Analyser can export your generated policy in seven deployment-ready formats. All examples below use the same policy:
+CSP Analyser can export your generated policy in nine deployment-ready formats. All examples below use the same policy:
 
 ```
 default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com
@@ -45,6 +45,47 @@ export default {
 ```text [cloudflare-pages]
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com
+```
+
+```bicep [azure-frontdoor]
+resource ruleSet 'Microsoft.Cdn/profiles/ruleSets@2024-09-01' = {
+  name: 'cspHeaders'
+  parent: frontDoorProfile
+}
+
+resource cspRule 'Microsoft.Cdn/profiles/ruleSets/rules@2024-09-01' = {
+  name: 'setCspHeader'
+  parent: ruleSet
+  properties: {
+    order: 1
+    conditions: []
+    actions: [
+      {
+        name: 'ModifyResponseHeader'
+        parameters: {
+          typeName: 'DeliveryRuleHeaderActionParameters'
+          headerAction: 'Overwrite'
+          headerName: 'Content-Security-Policy'
+          value: 'default-src ''self''; script-src ''self'' https://cdn.example.com; style-src ''self'' https://fonts.googleapis.com; img-src ''self'' data:; font-src ''self'' https://fonts.gstatic.com'
+        }
+      }
+    ]
+  }
+}
+```
+
+```js [helmet]
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://cdn.example.com"],
+      styleSrc: ["'self'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+    },
+  })
+);
 ```
 
 ```json [json]
@@ -155,6 +196,44 @@ csp-analyser export <session-id> --format cloudflare-pages >> public/_headers
 ```
 
 The `/*` pattern applies the header to all pages. Adjust the path pattern for more granular control.
+
+### Azure Front Door
+
+The `azure-frontdoor` format emits a Bicep module that adds a rules engine rule to your Front Door profile, overwriting the `Content-Security-Policy` response header on every request.
+
+```bash
+csp-analyser export <session-id> --format azure-frontdoor > infra/csp-rule.bicep
+```
+
+Deploy it as part of your existing infrastructure templates — the snippet references a `frontDoorProfile` resource that must be declared in the parent module. Single quotes in the policy string are doubled (Bicep's string-escape convention) automatically.
+
+### Helmet (Express / Node.js)
+
+The `helmet` format emits a snippet you can paste into your Express middleware stack. Directive names are camelCased to match [Helmet's API](https://helmetjs.github.io/).
+
+```bash
+csp-analyser export <session-id> --format helmet > src/middleware/csp.ts
+```
+
+If the policy contains nonces (e.g. generated with `--nonce`), the output additionally includes a per-request nonce middleware and uses Helmet's function-valued source syntax so the nonce is regenerated for each response:
+
+```js
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+      // ...
+    },
+  })
+);
+```
+
+Reference `res.locals.cspNonce` in your template engine to stamp the nonce onto inline `<script>` and `<style>` tags.
 
 ### HTML meta tag
 
