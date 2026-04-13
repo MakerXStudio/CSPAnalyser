@@ -159,7 +159,7 @@ describe('validateStorageStatePath', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-test-'));
+    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'auth-test-')));
   });
 
   afterEach(() => {
@@ -207,7 +207,7 @@ describe('createAuthenticatedContext', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-ctx-test-'));
+    tempDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'auth-ctx-test-')));
   });
 
   afterEach(() => {
