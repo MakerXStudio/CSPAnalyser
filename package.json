@@ -1,5 +1,5 @@
 {
-  "name": "csp-analyser",
+  "name": "@makerx/csp-analyser",
   "version": "0.1.0",
   "type": "module",
   "description": "Headlessly browse websites with a deny-all report-only CSP, capture violations, and generate production-ready CSP policies",
