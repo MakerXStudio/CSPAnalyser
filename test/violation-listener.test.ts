@@ -7,7 +7,6 @@ import type { SessionConfig } from '../src/types.js';
 
 const TEST_CONFIG: SessionConfig = {
   targetUrl: 'https://example.com',
-  mode: 'local',
 };
 
 describe('generateInitScript', () => {
