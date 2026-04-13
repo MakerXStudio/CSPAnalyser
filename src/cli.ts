@@ -27,6 +27,7 @@ import {
   formatSummaryTable,
 } from './utils/terminal.js';
 
+import { getDataDir } from './utils/file-utils.js';
 import { compareSessions, formatDiff } from './policy-diff.js';
 import { scoreCspPolicy, formatScore } from './policy-scorer.js';
 import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
@@ -296,7 +297,7 @@ function parsePositiveInt(value: string, name: string): number {
 // ── Shared helpers ──────────────────────────────────────────────────────
 
 function initDb(): ReturnType<typeof createDatabase> {
-  const dbPath = join(process.cwd(), '.csp-analyser', 'data.db');
+  const dbPath = join(getDataDir(), 'data.db');
   return createDatabase(dbPath);
 }
 

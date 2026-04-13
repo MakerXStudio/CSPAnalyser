@@ -62,6 +62,7 @@ export { createLogger } from './utils/logger.js';
 export type { LogLevel, Logger } from './utils/logger.js';
 
 export {
+  getDataDir,
   resolveRealPath,
   validateDbPath,
   ensureDataDirectory,

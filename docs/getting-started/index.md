@@ -76,16 +76,21 @@ csp-analyser setup
 
 ## Data directory
 
-CSP Analyser stores its SQLite database and session data in a `.csp-analyser/` directory inside your current working directory. The directory is created automatically on first run.
+CSP Analyser stores its SQLite database, session data, and MITM certificates in a platform-appropriate directory:
+
+| Platform | Location |
+|----------|----------|
+| Linux | `$XDG_CONFIG_HOME/csp-analyser` (defaults to `~/.config/csp-analyser`) |
+| macOS | `~/Library/Application Support/csp-analyser` |
+| Windows | `%LOCALAPPDATA%\csp-analyser` |
 
 ```
-.csp-analyser/
-  csp-analyser.db    # SQLite database (sessions, violations, policies)
+csp-analyser/
+  data.db     # SQLite database (sessions, violations, policies)
+  certs/      # MITM proxy CA certificates (if using --mode mitm)
 ```
 
-::: warning
-Add `.csp-analyser/` to your `.gitignore`. It contains local session data that should not be committed.
-:::
+The directory is created automatically on first run.
 
 ## Verify the installation
 

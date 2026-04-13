@@ -32,7 +32,9 @@ const DEFAULT_CRAWL_CONFIG: CrawlConfig = {
   settlementDelay: 500,
 };
 
-const DEFAULT_DATA_DIR = '.csp-analyser';
+import { getDataDir } from './utils/file-utils.js';
+
+const DEFAULT_DATA_DIR = getDataDir();
 
 // ── Public types ─────────────────────────────────────────────────────────
 

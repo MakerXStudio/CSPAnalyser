@@ -1,5 +1,40 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+
+const APP_NAME = 'csp-analyser';
+
+/**
+ * Returns the platform-appropriate data directory for csp-analyser.
+ *
+ * - Linux:   $XDG_CONFIG_HOME/csp-analyser  (defaults to ~/.config/csp-analyser)
+ * - macOS:   ~/Library/Application Support/csp-analyser
+ * - Windows: %LOCALAPPDATA%\csp-analyser
+ *
+ * Falls back to ~/.csp-analyser if none of the above resolve.
+ */
+export function getDataDir(): string {
+  const platform = process.platform;
+
+  if (platform === 'win32') {
+    const localAppData = process.env['LOCALAPPDATA'];
+    if (localAppData) {
+      return path.join(localAppData, APP_NAME);
+    }
+    return path.join(os.homedir(), APP_NAME);
+  }
+
+  if (platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', APP_NAME);
+  }
+
+  // Linux and other Unix-like systems: follow XDG Base Directory spec
+  const xdgConfigHome = process.env['XDG_CONFIG_HOME'];
+  if (xdgConfigHome) {
+    return path.join(xdgConfigHome, APP_NAME);
+  }
+  return path.join(os.homedir(), '.config', APP_NAME);
+}
 
 /**
  * Resolves a path through symlinks where possible.
