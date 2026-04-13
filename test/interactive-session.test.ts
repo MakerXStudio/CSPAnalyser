@@ -87,6 +87,7 @@ function createTestDeps(overrides?: Partial<SessionDeps>): SessionDeps {
     setupCspInjection: vi.fn().mockResolvedValue(vi.fn()),
     setupViolationListener: vi.fn().mockResolvedValue(undefined),
     extractInlineHashes: vi.fn().mockResolvedValue(0),
+    setupInlineContentObserver: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -120,6 +121,7 @@ function createAutoDisconnectDeps(overrides?: Partial<SessionDeps>): SessionDeps
     setupCspInjection: vi.fn().mockResolvedValue(vi.fn()),
     setupViolationListener: vi.fn().mockResolvedValue(undefined),
     extractInlineHashes: vi.fn().mockResolvedValue(0),
+    setupInlineContentObserver: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

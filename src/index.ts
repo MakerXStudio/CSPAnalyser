@@ -86,6 +86,10 @@ export { setupViolationListener, generateInitScript } from './violation-listener
 
 // ── Inline Content Extraction ───────────────────────────────────────────
 export { extractInlineHashes } from './inline-content-extractor.js';
+export {
+  setupInlineContentObserver,
+  generateObserverInitScript,
+} from './inline-content-observer.js';
 
 // ── Crawler ──────────────────────────────────────────────────────────────
 export { crawl } from './crawler.js';

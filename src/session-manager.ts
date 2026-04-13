@@ -20,6 +20,7 @@ import { crawl, type CrawlCallbacks } from './crawler.js';
 import { extractOrigin } from './utils/url-utils.js';
 import { createAuthenticatedContext, type AuthOptions } from './auth.js';
 import { extractInlineHashes } from './inline-content-extractor.js';
+import { setupInlineContentObserver } from './inline-content-observer.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -70,6 +71,7 @@ export interface SessionDeps {
   setupCspInjection: typeof setupCspInjection;
   setupViolationListener: typeof setupViolationListener;
   extractInlineHashes: typeof extractInlineHashes;
+  setupInlineContentObserver: typeof setupInlineContentObserver;
 }
 
 // ── Main orchestrator ────────────────────────────────────────────────────
@@ -105,6 +107,8 @@ export async function runSession(
   const _setupCspInjection = deps?.setupCspInjection ?? setupCspInjection;
   const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
   const _extractInlineHashes = deps?.extractInlineHashes ?? extractInlineHashes;
+  const _setupInlineContentObserver =
+    deps?.setupInlineContentObserver ?? setupInlineContentObserver;
 
   // 1. Create session
   const session = createSession(db, config);
@@ -186,6 +190,7 @@ export async function runSession(
           onPermissionsPolicy(captured, reqUrl, pageId);
         }, targetOrigin);
         await _setupViolationListener(page, db, sessionId, pageId);
+        await _setupInlineContentObserver(page, db, sessionId, pageId);
       },
       onPageLoaded: async (page: Page, url: string, pageId: string) => {
         progress(`Visited: ${url}`);
@@ -287,6 +292,8 @@ export async function runInteractiveSession(
   const _setupCspInjection = deps?.setupCspInjection ?? setupCspInjection;
   const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
   const _extractInlineHashes = deps?.extractInlineHashes ?? extractInlineHashes;
+  const _setupInlineContentObserver =
+    deps?.setupInlineContentObserver ?? setupInlineContentObserver;
 
   // 1. Create session
   const session = createSession(db, config);
@@ -350,6 +357,7 @@ export async function runInteractiveSession(
         }
       }, targetOrigin);
       await _setupViolationListener(page, db, sessionId, null);
+      await _setupInlineContentObserver(page, db, sessionId, null);
 
       // Track page navigations as page records and extract inline hashes
       page.on('load', () => {

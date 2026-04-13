@@ -671,6 +671,7 @@ describe('session-manager onPageLoaded callback', () => {
       setupCspInjection: vi.fn().mockResolvedValue(vi.fn()),
       setupViolationListener: vi.fn().mockResolvedValue(undefined),
       extractInlineHashes: vi.fn().mockResolvedValue(0),
+      setupInlineContentObserver: vi.fn().mockResolvedValue(undefined),
     };
 
     const result = await runSession(
