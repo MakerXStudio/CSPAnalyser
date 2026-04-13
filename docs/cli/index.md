@@ -11,12 +11,12 @@ Usage:
   csp-analyser setup                     Install Playwright browser + dependencies
   csp-analyser crawl <url>               Headless auto-crawl
   csp-analyser interactive <url>         Headed manual browsing
-  csp-analyser generate <session-id>     Regenerate policy from session
-  csp-analyser export <session-id>       Export policy in a format
+  csp-analyser generate [session-id]     Regenerate policy (defaults to latest session)
+  csp-analyser export [session-id]       Export policy in a format (defaults to latest)
   csp-analyser diff <id-a> <id-b>        Compare two sessions
-  csp-analyser score <session-id>        Score policy against best practices
+  csp-analyser score [session-id]        Score policy (defaults to latest session)
   csp-analyser sessions                  List all analysis sessions
-  csp-analyser permissions <session-id>  Show Permissions-Policy headers
+  csp-analyser permissions [session-id]  Show Permissions-Policy headers (defaults to latest)
 
 Options:
   --depth <n>            Crawl depth (default: 1, crawl only)
@@ -40,12 +40,12 @@ Options:
 | [`setup`](./setup) | -- | Install the Playwright browser and verify it launches |
 | [`crawl`](./crawl) | `<url>` | Headlessly crawl a site and generate a CSP policy |
 | [`interactive`](./interactive) | `<url>` | Open a headed browser for manual navigation |
-| [`generate`](./generate) | `<session-id>` | Regenerate a policy from an existing session |
-| [`export`](./export) | `<session-id>` | Export a policy in a specific format |
+| [`generate`](./generate) | `[session-id]` | Regenerate a policy from an existing session |
+| [`export`](./export) | `[session-id]` | Export a policy in a specific format |
 | [`diff`](./diff) | `<id-a> <id-b>` | Compare policies and violations between two sessions |
-| [`score`](./score) | `<session-id>` | Score a policy against security best practices |
+| [`score`](./score) | `[session-id]` | Score a policy against security best practices |
 | [`sessions`](./sessions) | -- | List all analysis sessions with ID, status, timestamp, and violation count |
-| [`permissions`](./permissions) | `<session-id>` | Show Permissions-Policy headers captured during crawling |
+| [`permissions`](./permissions) | `[session-id]` | Show Permissions-Policy headers captured during crawling |
 
 ## Global options
 

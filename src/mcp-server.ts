@@ -18,7 +18,7 @@ import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy, directivesToString } from './policy-formatter.js';
 import { createLogger } from './utils/logger.js';
 import { validateTargetUrl } from './utils/url-utils.js';
-import { getDataDir } from './utils/file-utils.js';
+import { getDataDir, detectProjectName } from './utils/file-utils.js';
 // Lazy import type for session-manager (dynamic import requires inline type annotation)
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 type SessionManagerModule = { runSession: (typeof import('./session-manager.js'))['runSession'] };
@@ -113,6 +113,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           },
           storageStatePath: args.storageStatePath,
           violationLimit: args.violationLimit,
+          project: detectProjectName() ?? undefined,
         });
 
         return toolResult({
@@ -160,6 +161,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             maxPages: 1,
           },
           storageStatePath: args.storageStatePath,
+          project: detectProjectName() ?? undefined,
         });
 
         return toolResult({

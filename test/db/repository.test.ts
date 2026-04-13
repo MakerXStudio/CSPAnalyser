@@ -9,6 +9,7 @@ import {
   getSession,
   updateSession,
   listSessions,
+  getLatestSession,
   insertPage,
   getPages,
   insertViolation,
@@ -186,6 +187,86 @@ describe('Session CRUD', () => {
     const session = createSession(db, TEST_CONFIG);
     expect(session.config.cookies).toBeUndefined();
     expect(session.config.targetUrl).toBe('https://example.com');
+  });
+
+  it('createSession stores project when provided', () => {
+    const session = createSession(db, { ...TEST_CONFIG, project: 'my-app' });
+    expect(session.project).toBe('my-app');
+
+    const fetched = getSession(db, session.id)!;
+    expect(fetched.project).toBe('my-app');
+  });
+
+  it('createSession stores null project when not provided', () => {
+    const session = createSession(db, TEST_CONFIG);
+    expect(session.project).toBeNull();
+  });
+});
+
+describe('getLatestSession', () => {
+  let db: ReturnType<typeof createDatabase>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  it('returns null when no sessions exist', () => {
+    expect(getLatestSession(db)).toBeNull();
+  });
+
+  it('returns null when no completed sessions exist', () => {
+    createSession(db, TEST_CONFIG);
+    expect(getLatestSession(db)).toBeNull();
+  });
+
+  it('returns the most recent completed session', () => {
+    const s1 = createSession(db, TEST_CONFIG);
+    updateSession(db, s1.id, { status: 'complete' });
+    // Set s1 to an older timestamp so s2 is definitively newer
+    db.prepare("UPDATE sessions SET created_at = datetime('now', '-1 minute') WHERE id = ?").run(s1.id);
+
+    const s2 = createSession(db, { ...TEST_CONFIG, targetUrl: 'https://other.com' });
+    updateSession(db, s2.id, { status: 'complete' });
+
+    const latest = getLatestSession(db);
+    expect(latest).not.toBeNull();
+    expect(latest!.id).toBe(s2.id);
+  });
+
+  it('ignores failed sessions', () => {
+    const s1 = createSession(db, TEST_CONFIG);
+    updateSession(db, s1.id, { status: 'complete' });
+    const s2 = createSession(db, TEST_CONFIG);
+    updateSession(db, s2.id, { status: 'failed' });
+
+    const latest = getLatestSession(db);
+    expect(latest!.id).toBe(s1.id);
+  });
+
+  it('scopes to project when provided', () => {
+    const s1 = createSession(db, { ...TEST_CONFIG, project: 'app-a' });
+    updateSession(db, s1.id, { status: 'complete' });
+    const s2 = createSession(db, { ...TEST_CONFIG, project: 'app-b' });
+    updateSession(db, s2.id, { status: 'complete' });
+
+    const latest = getLatestSession(db, 'app-a');
+    expect(latest!.id).toBe(s1.id);
+  });
+
+  it('falls back to any project when scoped project has no sessions', () => {
+    const s1 = createSession(db, { ...TEST_CONFIG, project: 'app-a' });
+    updateSession(db, s1.id, { status: 'complete' });
+
+    const latest = getLatestSession(db, 'app-b');
+    expect(latest!.id).toBe(s1.id);
+  });
+
+  it('returns null project fallback when no completed sessions exist anywhere', () => {
+    createSession(db, { ...TEST_CONFIG, project: 'app-a' });
+    expect(getLatestSession(db, 'app-b')).toBeNull();
   });
 });
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { validateDbPath, ensureDataDirectory, setSecureFilePermissions } from '../../src/utils/file-utils.js';
+import { validateDbPath, ensureDataDirectory, setSecureFilePermissions, detectProjectName } from '../../src/utils/file-utils.js';
 
 describe('validateDbPath', () => {
   it('allows :memory: paths', () => {
@@ -102,5 +102,57 @@ describe('setSecureFilePermissions', () => {
   it('does nothing for non-existent file', () => {
     const filePath = path.join(tmpDir, 'nonexistent.db');
     expect(() => setSecureFilePermissions(filePath)).not.toThrow();
+  });
+});
+
+describe('detectProjectName', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csp-detect-project-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns name from package.json in the given directory', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'my-app' }));
+    expect(detectProjectName(tmpDir)).toBe('my-app');
+  });
+
+  it('walks up to find package.json in parent directory', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'root-app' }));
+    const nested = path.join(tmpDir, 'src', 'components');
+    fs.mkdirSync(nested, { recursive: true });
+    expect(detectProjectName(nested)).toBe('root-app');
+  });
+
+  it('returns null when no package.json exists', () => {
+    // tmpDir has no package.json and we stop at filesystem root
+    expect(detectProjectName(tmpDir)).toBeNull();
+  });
+
+  it('returns null when package.json has no name field', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ version: '1.0.0' }));
+    expect(detectProjectName(tmpDir)).toBeNull();
+  });
+
+  it('returns null when package.json has empty name', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: '' }));
+    expect(detectProjectName(tmpDir)).toBeNull();
+  });
+
+  it('returns null when package.json is invalid JSON', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), 'not json');
+    expect(detectProjectName(tmpDir)).toBeNull();
+  });
+
+  it('finds nearest package.json (child over parent)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'parent' }));
+    const child = path.join(tmpDir, 'packages', 'child');
+    fs.mkdirSync(child, { recursive: true });
+    fs.writeFileSync(path.join(child, 'package.json'), JSON.stringify({ name: 'child' }));
+    expect(detectProjectName(child)).toBe('child');
   });
 });

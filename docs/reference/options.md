@@ -12,11 +12,11 @@ description: Complete reference of all CLI flags and commands
 | `setup` | `csp-analyser setup` | Install Playwright Chromium browser and verify system dependencies |
 | `crawl` | `csp-analyser crawl <url>` | Headless auto-crawl with violation capture |
 | `interactive` | `csp-analyser interactive <url>` | Headed manual browsing with violation capture |
-| `generate` | `csp-analyser generate <session-id>` | Regenerate policy from an existing session |
-| `export` | `csp-analyser export <session-id>` | Export policy in a deployment-ready format |
+| `generate` | `csp-analyser generate [session-id]` | Regenerate policy from an existing session |
+| `export` | `csp-analyser export [session-id]` | Export policy in a deployment-ready format |
 | `diff` | `csp-analyser diff <id-a> <id-b>` | Compare policies from two sessions |
-| `score` | `csp-analyser score <session-id>` | Score policy against best practices |
-| `permissions` | `csp-analyser permissions <session-id>` | Show captured Permissions-Policy headers |
+| `score` | `csp-analyser score [session-id]` | Score policy against best practices |
+| `permissions` | `csp-analyser permissions [session-id]` | Show captured Permissions-Policy headers |
 
 ## Options
 
@@ -47,5 +47,5 @@ This means you can pipe policy output directly:
 csp-analyser crawl https://example.com --format nginx > csp.conf
 
 # Pipe JSON to jq
-csp-analyser export <session-id> --format json | jq '.directives'
+csp-analyser export --format json | jq '.directives'
 ```

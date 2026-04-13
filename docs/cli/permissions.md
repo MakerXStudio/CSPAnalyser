@@ -5,8 +5,10 @@ Display the Permissions-Policy (and legacy Feature-Policy) headers captured duri
 ## Usage
 
 ```bash
-csp-analyser permissions <session-id>
+csp-analyser permissions [session-id]
 ```
+
+When `session-id` is omitted, the most recent completed session is used automatically.
 
 This command takes no additional options.
 

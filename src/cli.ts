@@ -9,6 +9,7 @@ import { validateTargetUrl } from './utils/url-utils.js';
 import {
   createDatabase,
   getSession,
+  getLatestSession,
   listSessions,
   getViolations,
   getViolationSummary,
@@ -27,7 +28,7 @@ import {
   formatSummaryTable,
 } from './utils/terminal.js';
 
-import { getDataDir } from './utils/file-utils.js';
+import { getDataDir, detectProjectName } from './utils/file-utils.js';
 import { compareSessions, formatDiff } from './policy-diff.js';
 import { scoreCspPolicy, formatScore } from './policy-scorer.js';
 import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
@@ -97,12 +98,12 @@ Usage:
   csp-analyser setup                     Install Playwright browser + dependencies
   csp-analyser crawl <url>               Headless auto-crawl
   csp-analyser interactive <url>         Headed manual browsing
-  csp-analyser generate <session-id>     Regenerate policy from session
-  csp-analyser export <session-id>       Export policy in a format
+  csp-analyser generate [session-id]     Regenerate policy (defaults to latest session)
+  csp-analyser export [session-id]       Export policy in a format (defaults to latest)
   csp-analyser diff <id-a> <id-b>        Compare two sessions
-  csp-analyser score <session-id>        Score policy against best practices
+  csp-analyser score [session-id]        Score policy (defaults to latest session)
   csp-analyser sessions                  List all analysis sessions
-  csp-analyser permissions <session-id>  Show Permissions-Policy headers
+  csp-analyser permissions [session-id]  Show Permissions-Policy headers (defaults to latest)
 
 Options:
   --depth <n>            Crawl depth (default: 1, crawl only)
@@ -207,11 +208,17 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   }
 
   const positionalArg = positionals[1] as string | undefined;
-  if (!positionalArg) {
-    throw new Error(`Missing argument for "${command}". Run with --help for usage.`);
+
+  // crawl and interactive always require a URL
+  if ((command === 'crawl' || command === 'interactive') && !positionalArg) {
+    throw new Error(`Missing URL for "${command}". Run with --help for usage.`);
   }
 
+  // diff requires both session IDs
   if (command === 'diff') {
+    if (!positionalArg) {
+      throw new Error('Missing session IDs for "diff". Usage: diff <session-id-a> <session-id-b>');
+    }
     const positionalArgB = positionals[2] as string | undefined;
     if (!positionalArgB) {
       throw new Error(
@@ -219,6 +226,9 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       );
     }
   }
+
+  // Other session commands (generate, export, score, permissions) allow optional session ID
+  // — they auto-resolve to the latest session when omitted
 
   // Validate options
   const depth =
@@ -253,7 +263,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     nonce: ((values.nonce as boolean | undefined) ?? false) || ((values['strict-dynamic'] as boolean | undefined) ?? false),
   };
 
-  if (command === 'crawl' || command === 'interactive') {
+  if ((command === 'crawl' || command === 'interactive') && positionalArg) {
     validateTargetUrl(positionalArg);
     parsed.url = positionalArg;
   } else if (command === 'diff') {
@@ -304,6 +314,34 @@ function initDb(): ReturnType<typeof createDatabase> {
   return createDatabase(dbPath);
 }
 
+/**
+ * Resolves a session ID: returns the explicit ID if provided, otherwise
+ * finds the most recent completed session (scoped to the current project).
+ */
+function resolveSessionId(
+  db: ReturnType<typeof createDatabase>,
+  explicitId: string | undefined,
+): string {
+  if (explicitId) return explicitId;
+
+  const project = detectProjectName();
+  const latest = getLatestSession(db, project);
+
+  if (latest) {
+    process.stderr.write(
+      cyan(`Using latest session: ${latest.id}`) +
+        (latest.project ? ` (project: ${latest.project})` : '') +
+        '\n',
+    );
+    return latest.id;
+  }
+
+  throw new Error(
+    'No session ID provided and no completed sessions found. ' +
+      'Run "csp-analyser crawl <url>" or "csp-analyser interactive <url>" first.',
+  );
+}
+
 function generateAndFormat(
   db: ReturnType<typeof createDatabase>,
   sessionId: string,
@@ -329,11 +367,13 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
   }
   const db = initDb();
   try {
+    const project = detectProjectName() ?? undefined;
     const config: SessionConfig = {
       targetUrl: args.url,
       crawlConfig: { depth: args.depth, maxPages: args.maxPages },
       storageStatePath: args.storageState,
       violationLimit: args.violationLimit,
+      project,
     };
 
     const startTime = Date.now();
@@ -399,10 +439,12 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
   }
   const db = initDb();
   try {
+    const project = detectProjectName() ?? undefined;
     const config: SessionConfig = {
       targetUrl: args.url,
       storageStatePath: args.storageState,
       violationLimit: args.violationLimit,
+      project,
     };
 
     const startTime = Date.now();
@@ -460,13 +502,11 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runGenerateCommand(args: ParsedArgs): Promise<void> {
-  if (!args.sessionId) {
-    throw new Error('Session ID is required for the generate command');
-  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId);
-    const output = generateAndFormat(db, args.sessionId, args, session?.targetUrl);
+    const sessionId = resolveSessionId(db, args.sessionId);
+    const session = getSession(db, sessionId);
+    const output = generateAndFormat(db, sessionId, args, session?.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -474,13 +514,11 @@ async function runGenerateCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runExportCommand(args: ParsedArgs): Promise<void> {
-  if (!args.sessionId) {
-    throw new Error('Session ID is required for the export command');
-  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId);
-    const output = generateAndFormat(db, args.sessionId, args, session?.targetUrl);
+    const sessionId = resolveSessionId(db, args.sessionId);
+    const session = getSession(db, sessionId);
+    const output = generateAndFormat(db, sessionId, args, session?.targetUrl);
     process.stdout.write(output + '\n');
   } finally {
     db.close();
@@ -488,11 +526,8 @@ async function runExportCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runDiffCommand(args: ParsedArgs): Promise<void> {
-  if (!args.sessionId) {
-    throw new Error('Session ID is required for the diff command');
-  }
-  if (!args.sessionIdB) {
-    throw new Error('Second session ID (--session-id-b) is required for the diff command');
+  if (!args.sessionId || !args.sessionIdB) {
+    throw new Error('Both session IDs are required for the diff command');
   }
   const db = initDb();
   try {
@@ -504,13 +539,11 @@ async function runDiffCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runScoreCommand(args: ParsedArgs): Promise<void> {
-  if (!args.sessionId) {
-    throw new Error('Session ID is required for the score command');
-  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId);
-    const directives = generatePolicy(db, args.sessionId, {
+    const sessionId = resolveSessionId(db, args.sessionId);
+    const session = getSession(db, sessionId);
+    const directives = generatePolicy(db, sessionId, {
       strictness: args.strictness,
       includeHashes: false,
     });
@@ -526,19 +559,17 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
-  if (!args.sessionId) {
-    throw new Error('Session ID is required for the permissions command');
-  }
   const db = initDb();
   try {
-    const session = getSession(db, args.sessionId);
+    const sessionId = resolveSessionId(db, args.sessionId);
+    const session = getSession(db, sessionId);
     if (!session) {
-      process.stderr.write(`${red('Error:')} Session not found: ${args.sessionId}\n`);
+      process.stderr.write(`${red('Error:')} Session not found: ${sessionId}\n`);
       process.exitCode = 1;
       return;
     }
 
-    const policies = getPermissionsPolicies(db, args.sessionId);
+    const policies = getPermissionsPolicies(db, sessionId);
     if (policies.length === 0) {
       process.stderr.write('No Permissions-Policy headers captured for this session.\n');
       return;
@@ -555,7 +586,7 @@ async function runPermissionsCommand(args: ParsedArgs): Promise<void> {
       byDirective.set(p.directive, existing);
     }
 
-    const lines: string[] = [`Permissions-Policy for session ${args.sessionId}`, ''];
+    const lines: string[] = [`Permissions-Policy for session ${sessionId}`, ''];
     for (const [directive, entries] of [...byDirective.entries()].sort((a, b) =>
       a[0].localeCompare(b[0]),
     )) {
@@ -792,33 +823,39 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     return;
   }
 
-  switch (args.command) {
-    case 'help':
-      process.stdout.write(HELP_TEXT);
-      return;
-    case 'version':
-      process.stdout.write(`csp-analyser ${getVersion()}\n`);
-      return;
-    case 'setup':
-      return runSetupCommand();
-    case 'crawl':
-      await ensureBrowserInstalled();
-      return runCrawlCommand(args);
-    case 'interactive':
-      await ensureBrowserInstalled();
-      return runInteractiveCommand(args);
-    case 'generate':
-      return runGenerateCommand(args);
-    case 'export':
-      return runExportCommand(args);
-    case 'diff':
-      return runDiffCommand(args);
-    case 'score':
-      return runScoreCommand(args);
-    case 'sessions':
-      return runSessionsCommand();
-    case 'permissions':
-      return runPermissionsCommand(args);
+  try {
+    switch (args.command) {
+      case 'help':
+        process.stdout.write(HELP_TEXT);
+        return;
+      case 'version':
+        process.stdout.write(`csp-analyser ${getVersion()}\n`);
+        return;
+      case 'setup':
+        return await runSetupCommand();
+      case 'crawl':
+        await ensureBrowserInstalled();
+        return await runCrawlCommand(args);
+      case 'interactive':
+        await ensureBrowserInstalled();
+        return await runInteractiveCommand(args);
+      case 'generate':
+        return await runGenerateCommand(args);
+      case 'export':
+        return await runExportCommand(args);
+      case 'diff':
+        return await runDiffCommand(args);
+      case 'score':
+        return await runScoreCommand(args);
+      case 'sessions':
+        return await runSessionsCommand();
+      case 'permissions':
+        return await runPermissionsCommand(args);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`${red('Error:')} ${message}\n`);
+    process.exitCode = 1;
   }
 }
 

@@ -44,6 +44,8 @@ export interface SessionConfig {
   cookies?: CookieParam[];
   /** Maximum violations to accept per session (default: 10,000). Set to 0 for unlimited. */
   violationLimit?: number;
+  /** Project identifier (from nearest package.json name field) for scoping sessions */
+  project?: string;
 }
 
 export interface CookieParam {
@@ -64,6 +66,7 @@ export interface Session {
   status: SessionStatus;
   mode: SessionMode;
   config: SessionConfig;
+  project: string | null;
   reportServerPort: number | null;
   proxyPort: number | null;
   createdAt: string;
@@ -114,6 +117,7 @@ export interface SessionRow {
   status: SessionStatus;
   mode: SessionMode;
   config: string; // JSON-serialized SessionConfig
+  project: string | null;
   report_server_port: number | null;
   proxy_port: number | null;
   created_at: string;

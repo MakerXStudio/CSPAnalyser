@@ -5,8 +5,10 @@ Regenerate a CSP policy from an existing session's violation data, without re-cr
 ## Usage
 
 ```bash
-csp-analyser generate <session-id> [options]
+csp-analyser generate [session-id] [options]
 ```
+
+When `session-id` is omitted, the most recent completed session is used automatically. Sessions are scoped to the current project (detected from the nearest `package.json`).
 
 ## Options
 

@@ -55,14 +55,25 @@ vi.mock('../src/policy-scorer.js', () => ({
 const mockGetPermissionsPolicies = vi.fn().mockReturnValue([]);
 const mockListSessions = vi.fn().mockReturnValue([]);
 const mockGetViolations = vi.fn().mockReturnValue([]);
+const mockGetLatestSession = vi.fn().mockReturnValue(null);
 vi.mock('../src/db/repository.js', () => ({
   createDatabase: (...args: unknown[]) => mockCreateDatabase(...args),
   getSession: (...args: unknown[]) => mockGetSession(...args),
+  getLatestSession: (...args: unknown[]) => mockGetLatestSession(...args),
   getViolations: (...args: unknown[]) => mockGetViolations(...args),
   getViolationSummary: (...args: unknown[]) => mockGetViolationSummary(...args),
   getPermissionsPolicies: (...args: unknown[]) => mockGetPermissionsPolicies(...args),
   listSessions: (...args: unknown[]) => mockListSessions(...args),
 }));
+
+const mockDetectProjectName = vi.fn().mockReturnValue(null);
+vi.mock('../src/utils/file-utils.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/utils/file-utils.js')>();
+  return {
+    ...original,
+    detectProjectName: (...args: unknown[]) => mockDetectProjectName(...args),
+  };
+});
 
 
 // ── parseCliArgs ────────────────────────────────────────────────────────
@@ -245,11 +256,13 @@ describe('parseCliArgs', () => {
     });
 
     it('throws on missing url for crawl', () => {
-      expect(() => parseCliArgs(['crawl'])).toThrow('Missing argument');
+      expect(() => parseCliArgs(['crawl'])).toThrow('Missing URL');
     });
 
-    it('throws on missing session-id for generate', () => {
-      expect(() => parseCliArgs(['generate'])).toThrow('Missing argument');
+    it('allows missing session-id for generate (auto-resolves at runtime)', () => {
+      const args = parseCliArgs(['generate']);
+      expect(args.command).toBe('generate');
+      expect(args.sessionId).toBeUndefined();
     });
 
     it('throws on invalid strictness', () => {
@@ -344,10 +357,10 @@ describe('main', () => {
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Unknown command'));
   });
 
-  it('prints error for missing arg', async () => {
+  it('prints error for missing url', async () => {
     await main(['crawl']);
     expect(process.exitCode).toBe(1);
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Missing argument'));
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Missing URL'));
   });
 
   it('runs crawl command and outputs policy', async () => {
@@ -625,5 +638,112 @@ describe('save-storage-state flag', () => {
 
     stdoutWrite.mockRestore();
     stderrWrite.mockRestore();
+  });
+});
+
+// ── session auto-resolve ──────────────────────────────────────────────────
+
+describe('session auto-resolve', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  let stderrWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    stderrWrite = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    process.exitCode = undefined;
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    stderrWrite.mockRestore();
+    process.exitCode = undefined;
+    mockGetLatestSession.mockReturnValue(null);
+    mockDetectProjectName.mockReturnValue(null);
+  });
+
+  it('auto-resolves generate to latest session when no ID given', async () => {
+    mockGetLatestSession.mockReturnValue({
+      id: 'auto-session',
+      targetUrl: 'https://example.com',
+      status: 'complete',
+      project: 'my-app',
+    });
+    mockDetectProjectName.mockReturnValue('my-app');
+
+    await main(['generate']);
+
+    expect(mockGetLatestSession).toHaveBeenCalledWith(expect.anything(), 'my-app');
+    expect(mockGeneratePolicy).toHaveBeenCalledWith(
+      expect.anything(),
+      'auto-session',
+      expect.anything(),
+    );
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Using latest session'));
+  });
+
+  it('auto-resolves score to latest session when no ID given', async () => {
+    mockGetLatestSession.mockReturnValue({
+      id: 'auto-session',
+      targetUrl: 'https://example.com',
+      status: 'complete',
+      project: null,
+    });
+
+    await main(['score']);
+
+    expect(mockGeneratePolicy).toHaveBeenCalledWith(
+      expect.anything(),
+      'auto-session',
+      expect.anything(),
+    );
+  });
+
+  it('errors when no session ID and no completed sessions exist', async () => {
+    mockGetLatestSession.mockReturnValue(null);
+
+    await main(['generate']);
+
+    expect(process.exitCode).toBe(1);
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('No session ID provided'),
+    );
+  });
+
+  it('uses explicit session ID over auto-resolve', async () => {
+    mockGetLatestSession.mockReturnValue({
+      id: 'auto-session',
+      targetUrl: 'https://example.com',
+      status: 'complete',
+      project: null,
+    });
+    mockGetLatestSession.mockClear();
+
+    await main(['generate', 'explicit-session']);
+
+    expect(mockGeneratePolicy).toHaveBeenCalledWith(
+      expect.anything(),
+      'explicit-session',
+      expect.anything(),
+    );
+    // getLatestSession should not be called when explicit ID is given
+    expect(mockGetLatestSession).not.toHaveBeenCalled();
+  });
+
+  it('passes project to session config during crawl', async () => {
+    mockDetectProjectName.mockReturnValue('my-project');
+    mockRunSession.mockResolvedValue({
+      session: { id: 'sid' },
+      pagesVisited: 1,
+      violationsFound: 0,
+      errors: [],
+    });
+
+    await main(['crawl', 'https://example.com']);
+
+    expect(mockRunSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ project: 'my-project' }),
+      expect.anything(),
+    );
   });
 });

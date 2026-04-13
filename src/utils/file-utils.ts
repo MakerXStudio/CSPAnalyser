@@ -116,3 +116,31 @@ export function setSecureFilePermissions(filePath: string): void {
     fs.chmodSync(filePath, 0o600);
   }
 }
+
+/**
+ * Walks up from startDir looking for the nearest package.json with a `name` field.
+ * Returns the name if found, or null if no package.json exists in any ancestor.
+ */
+export function detectProjectName(startDir: string = process.cwd()): string | null {
+  let dir = path.resolve(startDir);
+  const root = path.parse(dir).root;
+
+  for (;;) {
+    const pkgPath = path.join(dir, 'package.json');
+    try {
+      const content = fs.readFileSync(pkgPath, 'utf-8');
+      const pkg = JSON.parse(content) as Record<string, unknown>;
+      if (typeof pkg.name === 'string' && pkg.name.length > 0) {
+        return pkg.name;
+      }
+    } catch {
+      // No package.json here or invalid JSON — continue walking up
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir || dir === root) break;
+    dir = parent;
+  }
+
+  return null;
+}

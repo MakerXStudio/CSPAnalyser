@@ -373,11 +373,24 @@ export async function runInteractiveSession(
     progress('Browser open — browse freely, close the browser when done');
     await initialPage.goto(config.targetUrl, { waitUntil: 'load' });
 
-    // 8. Wait for browser to disconnect (user closes browser)
-    // Local const needed for TypeScript closure narrowing (browser is non-null here)
+    // 8. Wait for browser to close (user closes window or browser process exits)
     const launchedBrowser = browser;
+    const launchedContext = context;
     await new Promise<void>((resolve) => {
+      // Browser process exited
       launchedBrowser.on('disconnected', () => resolve());
+      // All pages/tabs closed (user closed the window but process may linger)
+      const checkAllClosed = () => {
+        if (launchedContext.pages().length === 0) resolve();
+      };
+      launchedContext.on('close', () => resolve());
+      launchedContext.on('page', (page: Page) => {
+        page.on('close', () => checkAllClosed());
+      });
+      // Also watch the initial page
+      for (const page of launchedContext.pages()) {
+        page.on('close', () => checkAllClosed());
+      }
     });
 
     // 9. Export storage state if requested (before context closes)

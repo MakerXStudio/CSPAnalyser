@@ -77,11 +77,13 @@ All nine formats: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare
 
 ## Step 4: Score the policy
 
-Every crawl creates a session. Use the session ID printed in the output to score the generated policy against security best practices:
+Every crawl creates a session. Score the generated policy against security best practices:
 
 ```bash
-csp-analyser score <session-id>
+csp-analyser score
 ```
+
+This automatically uses the most recent session. You can also pass a specific session ID if needed (`csp-analyser score <session-id>`).
 
 The scorer evaluates the policy on criteria such as whether `default-src` is set, whether `unsafe-inline` or `unsafe-eval` appear, and whether the policy uses report-only mode. You get a numeric score and a breakdown of passed and failed checks.
 

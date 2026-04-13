@@ -33,6 +33,7 @@ function createMockPage() {
 
 function createMockContext() {
   const mockPage = createMockPage();
+  const pages = [mockPage];
   const eventHandlers = new Map<string, EventHandler[]>();
   return {
     _mockPage: mockPage,
@@ -40,6 +41,7 @@ function createMockContext() {
     addCookies: vi.fn().mockResolvedValue(undefined),
     storageState: vi.fn().mockResolvedValue({ cookies: [] }),
     close: vi.fn().mockResolvedValue(undefined),
+    pages: vi.fn().mockImplementation(() => pages),
     on: vi.fn().mockImplementation((event: string, handler: EventHandler) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);

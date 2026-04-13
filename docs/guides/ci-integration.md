@@ -60,16 +60,11 @@ Fail the build if the CSP score drops below a threshold:
       - name: Analyse CSP
         id: csp
         run: |
-          # Crawl and capture session ID from JSON output
-          OUTPUT=$(npx @makerx/csp-analyser crawl http://localhost:3000 --format json)
-          echo "$OUTPUT" > csp-policy.json
+          npx @makerx/csp-analyser crawl http://localhost:3000 --format json > csp-policy.json
 
-          # Extract session ID from the database and score
-          SESSION_ID=$(echo "$OUTPUT" | jq -r '.sessionId // empty')
-          if [ -n "$SESSION_ID" ]; then
-            npx @makerx/csp-analyser score "$SESSION_ID" > csp-score.txt
-            cat csp-score.txt
-          fi
+          # Score automatically uses the most recent session
+          npx @makerx/csp-analyser score > csp-score.txt
+          cat csp-score.txt
 
       - name: Check score threshold
         run: |

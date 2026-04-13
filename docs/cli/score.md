@@ -5,8 +5,10 @@ Score a session's generated CSP policy against security best practices.
 ## Usage
 
 ```bash
-csp-analyser score <session-id> [options]
+csp-analyser score [session-id] [options]
 ```
+
+When `session-id` is omitted, the most recent completed session is used automatically.
 
 ## Options
 

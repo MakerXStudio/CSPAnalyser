@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   status TEXT NOT NULL DEFAULT 'created',
   mode TEXT NOT NULL DEFAULT 'local',
   config TEXT,
+  project TEXT,
   report_server_port INTEGER,
   proxy_port INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -68,4 +69,12 @@ export function initializeDatabase(db: Database.Database): void {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA_SQL);
+
+  // Add project column to existing databases created before this column existed.
+  // Safe to call repeatedly: SQLite throws if the column already exists.
+  try {
+    db.exec('ALTER TABLE sessions ADD COLUMN project TEXT');
+  } catch {
+    // Column already exists — ignore
+  }
 }

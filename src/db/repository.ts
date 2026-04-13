@@ -49,6 +49,7 @@ function toSession(row: SessionRow): Session {
     status: row.status,
     mode: row.mode,
     config: safeJsonParse<SessionConfig>(row.config, {} as SessionConfig, 'sessions.config'),
+    project: row.project,
     reportServerPort: row.report_server_port,
     proxyPort: row.proxy_port,
     createdAt: row.created_at,
@@ -142,10 +143,10 @@ export function createSession(db: Database.Database, config: SessionConfig): Ses
   }
 
   const stmt = db.prepare(`
-    INSERT INTO sessions (id, target_url, status, mode, config)
-    VALUES (?, ?, 'created', ?, ?)
+    INSERT INTO sessions (id, target_url, status, mode, config, project)
+    VALUES (?, ?, 'created', ?, ?, ?)
   `);
-  stmt.run(id, config.targetUrl, 'local', JSON.stringify(persistConfig));
+  stmt.run(id, config.targetUrl, 'local', JSON.stringify(persistConfig), config.project ?? null);
   const session = getSession(db, id);
   if (!session) {
     throw new Error(`Failed to retrieve session after insert: ${id}`);
@@ -186,6 +187,35 @@ export function getSession(db: Database.Database, id: string): Session | null {
 export function listSessions(db: Database.Database): Session[] {
   const rows = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC').all() as SessionRow[];
   return rows.map(toSession);
+}
+
+/**
+ * Returns the most recent completed session, optionally scoped to a project.
+ * When project is provided, only sessions for that project are considered.
+ * Falls back to the most recent completed session across all projects.
+ */
+export function getLatestSession(
+  db: Database.Database,
+  project?: string | null,
+): Session | null {
+  if (project) {
+    const row = db
+      .prepare(
+        `SELECT * FROM sessions WHERE project = ? AND status = 'complete'
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(project) as SessionRow | undefined;
+    if (row) return toSession(row);
+  }
+
+  // Fallback: most recent completed session regardless of project
+  const row = db
+    .prepare(
+      `SELECT * FROM sessions WHERE status = 'complete'
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get() as SessionRow | undefined;
+  return row ? toSession(row) : null;
 }
 
 // ── Page repository ───────────────────────────────────────────────────────

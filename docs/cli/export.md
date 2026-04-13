@@ -5,8 +5,10 @@ Export a session's CSP policy in a deployment-ready format.
 ## Usage
 
 ```bash
-csp-analyser export <session-id> [options]
+csp-analyser export [session-id] [options]
 ```
+
+When `session-id` is omitted, the most recent completed session is used automatically.
 
 ## Options
 
