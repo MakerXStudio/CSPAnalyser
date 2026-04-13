@@ -3,7 +3,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import Database from 'better-sqlite3';
-import { initializeDatabase } from '../../src/db/schema.js';
 import {
   createDatabase,
   createSession,
@@ -54,7 +53,8 @@ describe('createDatabase', () => {
     // WAL is set via pragma in initializeDatabase; verify it was called
     const db = createTestDb();
     // For in-memory DBs, WAL degrades to 'memory'; just verify the DB is functional
-    const { journal_mode } = db.pragma('journal_mode', { simple: false })[0] as { journal_mode: string };
+    const rows = db.pragma('journal_mode', { simple: false }) as Array<{ journal_mode: string }>;
+    const { journal_mode } = rows[0];
     expect(['wal', 'memory']).toContain(journal_mode);
     db.close();
   });
