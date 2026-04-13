@@ -23,6 +23,12 @@ export interface PlaywrightBrowserContext {
 export interface PlaywrightBrowser {
   newContext(options?: {
     storageState?: string | StorageStateObject;
+    /**
+     * Viewport size override. `null` disables the fixed viewport so the page
+     * follows the browser window size — used in headed/interactive mode so
+     * that resizing the window reflows the site.
+     */
+    viewport?: { width: number; height: number } | null;
   }): Promise<PlaywrightBrowserContext>;
   newPage(): Promise<PlaywrightBrowserPage>;
 }
@@ -142,16 +148,24 @@ export async function createAuthenticatedContext(
   targetUrl: string,
   auth?: AuthOptions,
 ): Promise<{ context: PlaywrightBrowserContext; storageState?: string | StorageStateObject }> {
+  // In headed/interactive mode, set viewport to null so the page follows the
+  // browser window size — otherwise Playwright pins the viewport to 1280x720
+  // and the site doesn't reflow when the user resizes the window.
+  const baseContextOptions = auth?.headless === false ? { viewport: null as null } : {};
+
   if (!auth || (!auth.storageStatePath && !auth.cookies && !auth.manualLogin)) {
     logger.info('Creating unauthenticated browser context');
-    const context = await browser.newContext();
+    const context = await browser.newContext(baseContextOptions);
     return { context };
   }
 
   if (auth.storageStatePath) {
     const resolvedPath = validateStorageStatePath(auth.storageStatePath);
     logger.info('Creating context from storage state', { path: resolvedPath });
-    const context = await browser.newContext({ storageState: resolvedPath });
+    const context = await browser.newContext({
+      ...baseContextOptions,
+      storageState: resolvedPath,
+    });
     return { context, storageState: resolvedPath };
   }
 
@@ -160,7 +174,7 @@ export async function createAuthenticatedContext(
     for (const cookie of auth.cookies) {
       validateCookieParam(cookie);
     }
-    const context = await browser.newContext();
+    const context = await browser.newContext(baseContextOptions);
     const hostname = extractHostname(targetUrl);
     const playwrightCookies = mapCookies(auth.cookies, hostname);
     await context.addCookies(playwrightCookies);
@@ -175,7 +189,7 @@ export async function createAuthenticatedContext(
   }
   logger.info('Manual login requested — waiting for user interaction');
   const storageState = await performManualLogin(browser, targetUrl);
-  const context = await browser.newContext({ storageState });
+  const context = await browser.newContext({ ...baseContextOptions, storageState });
   return { context, storageState };
 }
 

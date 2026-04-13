@@ -246,7 +246,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl);
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(result.context).toBe(ctx);
     expect(result.storageState).toBeUndefined();
   });
@@ -257,7 +257,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, undefined);
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(result.context).toBe(ctx);
   });
 
@@ -267,8 +267,17 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, {});
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(result.context).toBe(ctx);
+  });
+
+  it('passes viewport: null in headed mode so the page follows the window size', async () => {
+    const ctx = createMockContext();
+    const browser = createMockBrowser(ctx);
+
+    await createAuthenticatedContext(browser, targetUrl, { headless: false });
+
+    expect(browser.newContext).toHaveBeenCalledWith({ viewport: null });
   });
 
   it('uses storageStatePath when provided', async () => {
@@ -295,7 +304,7 @@ describe('createAuthenticatedContext', () => {
 
     const result = await createAuthenticatedContext(browser, targetUrl, { cookies });
 
-    expect(browser.newContext).toHaveBeenCalledWith();
+    expect(browser.newContext).toHaveBeenCalledWith({});
     expect(ctx.addCookies).toHaveBeenCalledWith([
       { name: 'session', value: 'abc', domain: 'example.com', path: '/', httpOnly: undefined, secure: undefined, sameSite: undefined },
       { name: 'token', value: 'xyz', domain: '.custom.com', path: '/', httpOnly: undefined, secure: undefined, sameSite: undefined },
@@ -357,7 +366,7 @@ describe('createAuthenticatedContext', () => {
     // Should have opened a new page
     expect(browser.newPage).toHaveBeenCalled();
     // Should have created a context from the exported storage state object
-    expect(browser.newContext).toHaveBeenCalledWith({ storageState: storageStateObj });
+    expect(browser.newContext).toHaveBeenCalledWith({ viewport: null, storageState: storageStateObj });
     expect(result.storageState).toBe(storageStateObj);
   });
 
