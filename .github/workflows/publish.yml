@@ -14,7 +14,7 @@ jobs:
     uses: makerxstudio/shared-config/.github/workflows/node-ci.yml@main
     with:
       compile-script: npm run typecheck
-      pre-test-script: npm run cli setup
+      pre-test-script: npx playwright install --with-deps chromium
       test-script: npm run test:coverage
       audit-script: npm run audit
 
