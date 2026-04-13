@@ -38,7 +38,7 @@ Through the MCP tools, an AI agent can:
 - **Inspect session details** including pages visited and violation summaries
 - **Review Permissions-Policy** headers captured during analysis
 
-See the [tools reference](/mcp/tools) for complete documentation of all 10 tools.
+See the [tools reference](/mcp/tools) for complete documentation of the MCP tools.
 
 ## Quick start
 
@@ -46,4 +46,4 @@ See the [tools reference](/mcp/tools) for complete documentation of all 10 tools
 2. Ask your agent: *"Analyse https://mysite.com for CSP violations and generate a policy"*
 3. The agent will call `start_session`, then `generate_policy` or `export_policy`
 
-The MCP server stores all data in a local SQLite database at `.csp-analyser/data.db`, so sessions persist across agent conversations.
+The MCP server stores all data in a local SQLite database in your platform-appropriate user-data directory (`~/.config/csp-analyser/data.db` on Linux, `~/Library/Application Support/csp-analyser/data.db` on macOS, `%LOCALAPPDATA%\csp-analyser\data.db` on Windows), so sessions persist across agent conversations and across projects. Each session is tagged with its originating project so downstream commands auto-resolve to the right one.

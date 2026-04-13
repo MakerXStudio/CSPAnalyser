@@ -75,6 +75,13 @@ vi.mock('../src/utils/file-utils.js', async (importOriginal) => {
   };
 });
 
+// The `start` command lazy-imports the MCP server. Mock its entry point so we
+// can assert dispatch without actually bringing up an MCP server over stdio.
+const mockMcpServerMain = vi.fn().mockResolvedValue(undefined);
+vi.mock('../src/mcp-server.js', () => ({
+  main: (...args: unknown[]) => mockMcpServerMain(...args),
+}));
+
 
 // ── parseCliArgs ────────────────────────────────────────────────────────
 
@@ -250,6 +257,25 @@ describe('parseCliArgs', () => {
     });
   });
 
+  describe('start command', () => {
+    it('parses the start command with no positional args', () => {
+      const result = parseCliArgs(['start']);
+      expect(result.command).toBe('start');
+      expect(result.url).toBeUndefined();
+      expect(result.sessionId).toBeUndefined();
+    });
+
+    it('ignores extra positional args', () => {
+      // start takes no positionals; additional values should not throw (they are just ignored)
+      const result = parseCliArgs(['start', 'unexpected']);
+      expect(result.command).toBe('start');
+    });
+
+    it('does not complain about missing URL', () => {
+      expect(() => parseCliArgs(['start'])).not.toThrow();
+    });
+  });
+
   describe('validation errors', () => {
     it('throws on unknown command', () => {
       expect(() => parseCliArgs(['unknown'])).toThrow('Unknown command: unknown');
@@ -310,6 +336,11 @@ describe('HELP_TEXT', () => {
     expect(HELP_TEXT).toContain('interactive');
     expect(HELP_TEXT).toContain('generate');
     expect(HELP_TEXT).toContain('export');
+    expect(HELP_TEXT).toContain('start');
+  });
+
+  it('documents start as the MCP server entry point', () => {
+    expect(HELP_TEXT).toMatch(/start\s+Run the MCP server/);
   });
 
   it('mentions key options', () => {
@@ -475,6 +506,30 @@ describe('main', () => {
     expect(mockScoreCspPolicy).toHaveBeenCalled();
     expect(mockFormatScore).toHaveBeenCalled();
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('CSP Score'));
+  });
+
+  it('runs start command by invoking the MCP server entry point', async () => {
+    mockMcpServerMain.mockClear();
+    mockRunSession.mockClear();
+    mockMcpServerMain.mockResolvedValueOnce(undefined);
+
+    await main(['start']);
+
+    expect(mockMcpServerMain).toHaveBeenCalledTimes(1);
+    // start must not touch the CLI's session pipeline — the MCP server owns its own DB lifecycle
+    expect(mockRunSession).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('surfaces errors from the MCP server as a non-zero exit', async () => {
+    mockMcpServerMain.mockClear();
+    mockMcpServerMain.mockRejectedValueOnce(new Error('MCP transport failed'));
+
+    await main(['start']);
+
+    expect(mockMcpServerMain).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(1);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('MCP transport failed'));
   });
 
   it('runs permissions command with policies', async () => {

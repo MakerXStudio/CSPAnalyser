@@ -56,6 +56,7 @@ export type Command =
   | 'permissions'
   | 'sessions'
   | 'setup'
+  | 'start'
   | 'help'
   | 'version';
 
@@ -98,6 +99,7 @@ export const HELP_TEXT = `csp-analyser — Generate Content Security Policy head
 
 Usage:
   csp-analyser setup                     Install Playwright browser + dependencies
+  csp-analyser start                     Run the MCP server over stdio (for AI agents)
   csp-analyser crawl <url>               Headless auto-crawl
   csp-analyser interactive <url>         Headed manual browsing
   csp-analyser generate [session-id]     Regenerate policy (defaults to latest session)
@@ -198,13 +200,14 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'permissions',
       'sessions',
       'setup',
+      'start',
     ].includes(command)
   ) {
     throw new Error(`Unknown command: ${command ?? '(none)'}. Run with --help for usage.`);
   }
 
-  // setup and sessions take no positional args
-  if (command === 'setup' || command === 'sessions') {
+  // setup, sessions, and start take no positional args
+  if (command === 'setup' || command === 'sessions' || command === 'start') {
     return {
       command: command as Command,
       depth: 1,
@@ -855,6 +858,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       case 'setup':
         await runSetupCommand();
         return;
+      case 'start': {
+        // Lazy-load the MCP server to avoid pulling the SDK on unrelated CLI invocations
+        const { main: runMcpServer } = await import('./mcp-server.js');
+        await runMcpServer();
+        return;
+      }
       case 'crawl':
         await ensureBrowserInstalled();
         await runCrawlCommand(args);
