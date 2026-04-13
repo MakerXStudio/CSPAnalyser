@@ -19,6 +19,7 @@ When `session-id` is omitted, the most recent completed session is used automati
 | `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
 | `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
 | `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
+| `--strip-unsafe-eval` | `false` | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it. |
 | `--report-only` | `false` | Generate a report-only header. |
 
 ## When to use

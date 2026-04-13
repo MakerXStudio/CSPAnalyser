@@ -424,3 +424,69 @@ describe('hash-based unsafe-inline removal', () => {
     expect(result['script-src']).toEqual(["'self'", "'sha256-abc123'"]);
   });
 });
+
+// ── Strip 'unsafe-eval' ─────────────────────────────────────────────────
+
+describe('stripUnsafeEval', () => {
+  it('removes unsafe-eval from script-src', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-eval'"] },
+      undefined,
+      { stripUnsafeEval: true },
+    );
+    expect(result['script-src']).not.toContain("'unsafe-eval'");
+    expect(result['script-src']).toContain("'self'");
+  });
+
+  it('removes unsafe-eval from default-src', () => {
+    const result = optimizePolicy(
+      { 'default-src': ["'self'", "'unsafe-eval'"] },
+      undefined,
+      { stripUnsafeEval: true },
+    );
+    expect(result['default-src']).not.toContain("'unsafe-eval'");
+  });
+
+  it('removes unsafe-eval from script-src-elem and script-src-attr', () => {
+    const result = optimizePolicy(
+      {
+        'script-src-elem': ["'unsafe-eval'"],
+        'script-src-attr': ["'unsafe-eval'"],
+      },
+      undefined,
+      { stripUnsafeEval: true },
+    );
+    expect(result['script-src-elem']).not.toContain("'unsafe-eval'");
+    expect(result['script-src-attr']).not.toContain("'unsafe-eval'");
+  });
+
+  it('does not modify when stripUnsafeEval is false', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-eval'"] },
+      undefined,
+      { stripUnsafeEval: false },
+    );
+    expect(result['script-src']).toContain("'unsafe-eval'");
+  });
+
+  it('does not affect other unsafe keywords', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'unsafe-inline'", "'unsafe-eval'"] },
+      undefined,
+      { stripUnsafeEval: true },
+    );
+    expect(result['script-src']).not.toContain("'unsafe-eval'");
+    expect(result['script-src']).toContain("'unsafe-inline'");
+  });
+
+  it('does not touch style-src directives (eval is script-only)', () => {
+    const result = optimizePolicy(
+      { 'style-src': ["'self'", "'unsafe-eval'"] },
+      undefined,
+      { stripUnsafeEval: true },
+    );
+    // unsafe-eval is only meaningful on script-src, but if captured on style-src
+    // for some reason we leave it — we target script directives explicitly
+    expect(result['style-src']).toContain("'unsafe-eval'");
+  });
+});

@@ -92,6 +92,7 @@ Generate an optimised CSP policy from violations captured in a session.
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
 | `includeHashes` | `boolean` | No | `false` | Include SHA-256 hashes for inline scripts/styles (from violation samples and full DOM extraction) |
 | `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`) |
+| `stripUnsafeEval` | `boolean` | No | `false` | Remove `'unsafe-eval'` from the generated policy |
 
 **Example:**
 
@@ -118,6 +119,7 @@ Export a CSP policy in a deployment-ready format.
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
 | `isReportOnly` | `boolean` | No | `false` | Use `Content-Security-Policy-Report-Only` header |
 | `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources |
+| `stripUnsafeEval` | `boolean` | No | `false` | Remove `'unsafe-eval'` from the generated policy |
 
 **Example:**
 

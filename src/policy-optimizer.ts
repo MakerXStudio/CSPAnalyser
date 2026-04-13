@@ -56,6 +56,13 @@ export interface OptimizePolicyOptions {
   useStrictDynamic?: boolean;
   /** Remove 'unsafe-inline' from directives that already contain hash sources (sha256/sha384/sha512) */
   useHashes?: boolean;
+  /**
+   * Remove 'unsafe-eval' from script-src directives and default-src, even when
+   * violations captured it. Useful for deploying a strict policy while eval()
+   * calls are being removed from the codebase — violations will surface the
+   * remaining offenders without allowing them.
+   */
+  stripUnsafeEval?: boolean;
 }
 
 /**
@@ -104,6 +111,26 @@ export function optimizePolicy(
   }
   if (!('form-action' in result)) {
     result['form-action'] = ["'self'"];
+  }
+
+  // Remove 'unsafe-eval' from script directives and default-src. Unlike
+  // 'unsafe-inline', CSP has no hash/nonce alternative for eval — the only
+  // way to eliminate it is to refactor the offending code. Stripping it from
+  // the policy while violations continue to be captured lets teams surface
+  // the remaining eval() callsites (via violation reports) without allowing
+  // them at runtime.
+  if (options?.stripUnsafeEval) {
+    const evalDirectives = [
+      'default-src',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+    ];
+    for (const directive of evalDirectives) {
+      if (directive in result) {
+        result[directive] = result[directive].filter((s) => s !== "'unsafe-eval'");
+      }
+    }
   }
 
   // Remove 'unsafe-inline' from directives that already have hash-based sources.

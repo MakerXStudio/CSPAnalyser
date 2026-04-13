@@ -21,6 +21,7 @@ csp-analyser crawl <url> [options]
 | `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders in script/style directives. |
 | `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces in script directives. Implies `--nonce`. |
 | `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
+| `--strip-unsafe-eval` | `false` | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it. |
 | `--report-only` | `false` | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one. |
 
 ## How crawling works

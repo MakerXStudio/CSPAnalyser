@@ -14,6 +14,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 - Nonce generation replacing `unsafe-inline` with `nonce-` placeholders
 - Full inline content hash extraction (scripts, styles, event handlers, style attributes)
 - Hash-based `unsafe-inline` removal using SHA-256/384/512 hashes
+- `unsafe-eval` stripping for iterative hardening
 - `strict-dynamic` support for script loading
 - Session diffing to compare policy changes over time
 - Policy scoring and security grading
@@ -85,6 +86,7 @@ csp-analyser interactive https://example.com --save-storage-state auth.json
 --nonce                 Replace unsafe-inline with nonce placeholders
 --strict-dynamic        Add strict-dynamic alongside nonces (implies --nonce)
 --hash                  Remove unsafe-inline when hash sources are available
+--strip-unsafe-eval     Remove unsafe-eval from the generated policy
 --storage-state <path>  Playwright storage state file for auth
 --cookies <json>        Raw cookies as JSON string
 --manual-login          Open browser for manual login before crawl

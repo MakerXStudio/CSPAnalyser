@@ -30,6 +30,7 @@ Options:
   --nonce                Replace 'unsafe-inline' with nonce placeholders
   --strict-dynamic       Add 'strict-dynamic' with nonces (implies --nonce)
   --hash                 Remove 'unsafe-inline' when hash sources are available
+  --strip-unsafe-eval    Remove 'unsafe-eval' from the generated policy
   --report-only          Generate report-only policy
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help

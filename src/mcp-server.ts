@@ -247,6 +247,10 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Remove 'unsafe-inline' from directives that have hash sources (implies includeHashes, default: false)"),
+        stripUnsafeEval: z
+          .boolean()
+          .optional()
+          .describe("Remove 'unsafe-eval' from the generated policy (default: false)"),
       },
     },
     async (args) => {
@@ -263,6 +267,7 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
+          stripUnsafeEval: args.stripUnsafeEval,
         });
         const policyString = directivesToString(optimized);
 
@@ -302,6 +307,10 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Remove 'unsafe-inline' from directives that have hash sources (default: false)"),
+        stripUnsafeEval: z
+          .boolean()
+          .optional()
+          .describe("Remove 'unsafe-eval' from the generated policy (default: false)"),
       },
     },
     async (args) => {
@@ -318,6 +327,7 @@ export function createMcpServer(db: Database.Database): McpServer {
 
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
+          stripUnsafeEval: args.stripUnsafeEval,
         });
         const formatted = formatPolicy(optimized, args.format, args.isReportOnly ?? false);
 

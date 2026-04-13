@@ -80,10 +80,24 @@ Findings are sorted by severity (most impactful first). The icons indicate sever
 
 Your site or a dependency uses `eval()`, `new Function()`, or similar dynamic code execution. This is one of the most dangerous CSP bypasses.
 
+Unlike `'unsafe-inline'`, CSP has no hash or nonce equivalent for `'unsafe-eval'` — the only way to eliminate it is to find and remove the `eval()` calls.
+
 **How to fix:**
 1. Identify the source using the violation details (`sourceFile`, `lineNumber`)
 2. Refactor the code to avoid `eval()`. Most uses can be replaced with JSON parsing, template literals, or static function references.
 3. If a third-party library requires it and cannot be replaced, isolate it in a sandboxed iframe with its own restrictive policy
+4. To deploy a strict policy while you're fixing the remaining call sites, run with `--strip-unsafe-eval`. This removes `'unsafe-eval'` from the generated policy. Deploy it in report-only mode (`--report-only`) first, then promote to enforcing once the remaining violations have been addressed.
+
+**Common culprits:**
+
+| Pattern | Replacement |
+|---------|-------------|
+| `eval(jsonString)` | `JSON.parse(jsonString)` |
+| `new Function('return ' + expr)()` | Lookup table or switch statement |
+| `setTimeout("fn()", 100)` | `setTimeout(fn, 100)` (pass reference, not string) |
+| Vue runtime compiler (`template: "..."`) | Build-time compilation via single-file components |
+| Older AngularJS `$eval`/`$parse` | Enable strict DI and avoid these with untrusted input |
+| Webpack dev `eval` sourcemaps | Use `devtool: 'source-map'` instead of `eval` or `eval-source-map` |
 
 ### `'unsafe-inline'` allows inline script execution
 
