@@ -20,6 +20,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 - Policy scoring and security grading
 - Permissions-Policy header capture
 - Export to 9 formats: HTTP header, `<meta>` tag, nginx, Apache, Cloudflare Workers, Cloudflare Pages, Azure Front Door (Bicep), Helmet.js, JSON
+- Browserless static-site mode (`hash-static`): scan built HTML files on disk and inject the policy directly — no Playwright, CI-friendly
 
 ## Install
 
@@ -61,12 +62,20 @@ Save your auth session for later headless crawls:
 csp-analyser interactive https://example.com --save-storage-state auth.json
 ```
 
+Have a static-site build on disk? Generate the policy from HTML files without launching a browser:
+
+```bash
+npm run build                             # your framework's build (VitePress, Next.js static export, Astro, etc.)
+csp-analyser hash-static dist/ --inject   # hashes inline content and writes <meta> into every <head>
+```
+
 ## CLI commands
 
 | Command | Description |
 |---------|-------------|
 | `crawl <url>` | Headless crawl and generate policy |
 | `interactive <url>` | Manual browsing with violation capture |
+| `hash-static <path>...` | Hash inline content in built HTML files, no browser required |
 | `generate <session-id>` | Regenerate policy from a previous session |
 | `export <session-id>` | Export policy in a specific format |
 | `diff <id1> <id2>` | Compare policies between two sessions |
@@ -74,6 +83,7 @@ csp-analyser interactive https://example.com --save-storage-state auth.json
 | `permissions <session-id>` | Show captured Permissions-Policy headers |
 | `sessions` | List all sessions |
 | `setup` | Install browser and check dependencies |
+| `start` | Run the MCP server over stdio (for AI agents) |
 
 ### Common flags
 
@@ -116,6 +126,32 @@ Add to your MCP client config (e.g. Claude Code `mcp.json`):
 ```
 
 The MCP server provides tools for starting sessions, crawling URLs, generating policies, exporting in various formats, diffing sessions, and scoring policies.
+
+## Static sites (no browser)
+
+For statically-built sites where all inline content is emitted at build time, `hash-static` avoids the Playwright crawl entirely. It scans HTML files on disk, hashes every inline `<script>`, `<style>`, `style=""` attribute, and `on*=""` event handler (including empty-string values, which browsers still evaluate against CSP), and either emits the policy or writes it directly into each `<head>` as a `<meta>` tag.
+
+```bash
+csp-analyser hash-static docs/.vitepress/dist --inject
+```
+
+Typical `package.json` usage:
+
+```json
+{
+  "scripts": {
+    "build": "vitepress build docs && csp-analyser hash-static docs/.vitepress/dist --inject"
+  }
+}
+```
+
+For content that framework JS injects at runtime (not present in the built HTML), capture those hashes once via `crawl` and feed them back:
+
+```bash
+csp-analyser hash-static dist/ --inject \
+  --extra-style-elem 'sha256-runtimeInjectedStyleHash=' \
+  --extra-script-elem 'sha256-runtimeInjectedScriptHash='
+```
 
 ## Export formats
 
