@@ -1,6 +1,6 @@
 {
   "name": "@makerx/csp-analyser",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Headlessly browse websites with a deny-all report-only CSP, capture violations, and generate production-ready CSP policies",
   "license": "MIT",

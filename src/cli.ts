@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs as nodeParseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLogger } from './utils/logger.js';
@@ -825,7 +825,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 // Run when executed directly
 const __cli_url = new URL(import.meta.url).pathname;
 const isDirectExecution =
-  process.argv[1] && __cli_url === new URL(`file://${process.argv[1]}`).pathname;
+  process.argv[1] &&
+  __cli_url === new URL(`file://${realpathSync(process.argv[1])}`).pathname;
 
 if (isDirectExecution) {
   main().catch((err: unknown) => {
