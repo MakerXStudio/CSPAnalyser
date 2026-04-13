@@ -134,11 +134,11 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' https:
 Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.example.com"
 ```
 
-**Cloudflare Workers, Cloudflare Pages, Azure Front Door (Bicep), Helmet.js, `<meta>` tag, JSON** are also supported. See the [docs](https://makerxstudio.github.io/CSPAnalyser/) for examples.
+**Cloudflare Workers, Cloudflare Pages, Azure Front Door (Bicep), Helmet.js, `<meta>` tag, JSON** are also supported. See the [docs](https://cspanalyser.com/) for examples.
 
 ## Documentation
 
-Full documentation is available at [makerxstudio.github.io/CSPAnalyser](https://makerxstudio.github.io/CSPAnalyser/).
+Full documentation is available at [cspanalyser.com](https://cspanalyser.com/).
 
 ## Development
 

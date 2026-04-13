@@ -5,7 +5,7 @@ export default defineConfig({
   description:
     'Generate production-ready Content Security Policy headers by crawling websites',
 
-  base: '/CSPAnalyser/',
+  base: '/',
   ignoreDeadLinks: true,
 
   head: [
