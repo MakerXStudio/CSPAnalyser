@@ -57,23 +57,23 @@ jobs:
 Fail the build if the CSP score drops below a threshold:
 
 ```yaml
-      - name: Analyse CSP
-        id: csp
-        run: |
-          npx @makerx/csp-analyser crawl http://localhost:3000 --format json > csp-policy.json
+- name: Analyse CSP
+  id: csp
+  run: |
+    npx @makerx/csp-analyser crawl http://localhost:3000 --format json > csp-policy.json
 
-          # Score automatically uses the most recent session
-          npx @makerx/csp-analyser score > csp-score.txt
-          cat csp-score.txt
+    # Score automatically uses the most recent session
+    npx @makerx/csp-analyser score > csp-score.txt
+    cat csp-score.txt
 
-      - name: Check score threshold
-        run: |
-          SCORE=$(head -1 csp-score.txt | grep -oP '\d+(?=/100)')
-          echo "CSP Score: $SCORE"
-          if [ "$SCORE" -lt 75 ]; then
-            echo "::error::CSP score $SCORE is below threshold of 75"
-            exit 1
-          fi
+- name: Check score threshold
+  run: |
+    SCORE=$(head -1 csp-score.txt | grep -oP '\d+(?=/100)')
+    echo "CSP Score: $SCORE"
+    if [ "$SCORE" -lt 75 ]; then
+      echo "::error::CSP score $SCORE is below threshold of 75"
+      exit 1
+    fi
 ```
 
 ## JSON format for programmatic parsing
@@ -112,14 +112,14 @@ cat csp-report.json | jq -r '.policyString'
 Compare the current analysis against a previous session to detect policy changes:
 
 ```yaml
-      - name: Detect regressions
-        run: |
-          # Assume BASELINE_SESSION is stored from a previous run
-          CURRENT=$(npx @makerx/csp-analyser crawl http://localhost:3000 --format json | jq -r '.sessionId')
+- name: Detect regressions
+  run: |
+    # Assume BASELINE_SESSION is stored from a previous run
+    CURRENT=$(npx @makerx/csp-analyser crawl http://localhost:3000 --format json | jq -r '.sessionId')
 
-          if [ -n "$BASELINE_SESSION" ]; then
-            npx @makerx/csp-analyser diff "$BASELINE_SESSION" "$CURRENT"
-          fi
+    if [ -n "$BASELINE_SESSION" ]; then
+      npx @makerx/csp-analyser diff "$BASELINE_SESSION" "$CURRENT"
+    fi
 ```
 
 The `diff` command shows:
@@ -135,22 +135,22 @@ This is useful for pull request reviews: if a PR introduces a new third-party sc
 The CSP Analyser database is stored at `.csp-analyser/data.db`. To persist baselines across CI runs:
 
 ```yaml
-      - name: Cache CSP database
-        uses: actions/cache@v4
-        with:
-          path: .csp-analyser
-          key: csp-baseline-${{ github.ref }}
-          restore-keys: |
-            csp-baseline-refs/heads/main
+- name: Cache CSP database
+  uses: actions/cache@v4
+  with:
+    path: .csp-analyser
+    key: csp-baseline-${{ github.ref }}
+    restore-keys: |
+      csp-baseline-refs/heads/main
 ```
 
 ## Score as a quality gate
 
-| Threshold | Use case |
-|:---------:|----------|
-| 90+ (A) | Security-critical applications, compliance requirements |
-| 75+ (B) | Standard web applications |
-| 55+ (C) | Legacy applications being gradually hardened |
+| Threshold | Use case                                                |
+| :-------: | ------------------------------------------------------- |
+|  90+ (A)  | Security-critical applications, compliance requirements |
+|  75+ (B)  | Standard web applications                               |
+|  55+ (C)  | Legacy applications being gradually hardened            |
 
 ::: tip
 Start with a lower threshold and raise it over time. A failing CI gate that nobody fixes is worse than no gate at all.
@@ -176,3 +176,20 @@ CI environments are headless by default. The `crawl` command runs in headless mo
 ### Network access
 
 The crawled site must be reachable from the CI runner. For local development servers, start the server in the background and wait for it to be ready before crawling. For remote sites, ensure the CI runner has network access and consider using `--storage-state` for authentication.
+
+### Project name in CI
+
+Sessions are scoped to a project name, auto-detected from `package.json`. In CI environments where the working directory may not have a `package.json` (e.g., Docker containers, monorepo root), set the `CSP_ANALYSER_PROJECT` environment variable to ensure consistent project scoping:
+
+```yaml
+- name: Analyse CSP
+  run: npx @makerx/csp-analyser crawl http://localhost:3000
+  env:
+    CSP_ANALYSER_PROJECT: my-app
+```
+
+Alternatively, use the `--project` flag:
+
+```bash
+npx @makerx/csp-analyser crawl http://localhost:3000 --project my-app
+```

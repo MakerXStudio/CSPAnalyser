@@ -8,19 +8,20 @@ Regenerate a CSP policy from an existing session's violation data, without re-cr
 csp-analyser generate [session-id] [options]
 ```
 
-When `session-id` is omitted, the most recent completed session is used automatically. Sessions are scoped to the current project (detected from the nearest `package.json`).
+When `session-id` is omitted, the most recent completed session for the current project is used automatically. The project is auto-detected from the nearest `package.json`, falling back to the directory name. Override with `--project` or the `CSP_ANALYSER_PROJECT` environment variable.
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
-| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
-| `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
-| `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
-| `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
-| `--strip-unsafe-eval` | `false` | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it. |
-| `--report-only` | `false` | Generate a report-only header. |
+| Option                 | Default       | Description                                                                                                                   |
+| ---------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--strictness <level>` | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                                          |
+| `--format <fmt>`       | `header`      | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
+| `--nonce`              | `false`       | Replace `'unsafe-inline'` with nonce placeholders.                                                                            |
+| `--strict-dynamic`     | `false`       | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`.                                                                   |
+| `--hash`               | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.            |
+| `--strip-unsafe-eval`  | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                     |
+| `--report-only`        | `false`       | Generate a report-only header.                                                                                                |
+| `--project <name>`     | auto-detected | Override auto-detected project name for session lookup.                                                                       |
 
 ## When to use
 

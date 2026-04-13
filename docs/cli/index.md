@@ -16,7 +16,7 @@ Usage:
   csp-analyser export [session-id]       Export policy in a format (defaults to latest)
   csp-analyser diff <id-a> <id-b>        Compare two sessions
   csp-analyser score [session-id]        Score policy (defaults to latest session)
-  csp-analyser sessions                  List all analysis sessions
+  csp-analyser sessions                  List sessions for the current project
   csp-analyser permissions [session-id]  Show Permissions-Policy headers (defaults to latest)
   csp-analyser hash-static <path>...     Hash inline content in static HTML files
                                          and emit a CSP (no browser required)
@@ -35,6 +35,8 @@ Options:
   --hash                 Remove 'unsafe-inline' when hash sources are available
   --strip-unsafe-eval    Remove 'unsafe-eval' from the generated policy
   --report-only          Generate report-only policy
+  --project <name>       Override auto-detected project name
+  --all                  Show sessions from all projects (sessions command)
   --no-color             Disable colored output (also respects NO_COLOR env)
   --help, -h             Show this help
   --version, -v          Show version
@@ -42,27 +44,29 @@ Options:
 
 ## Commands
 
-| Command | Argument | Description |
-|---|---|---|
-| [`setup`](./setup) | -- | Install the Playwright browser and verify it launches |
-| [`start`](./start) | -- | Run the MCP server over stdio (for AI coding agents) |
-| [`crawl`](./crawl) | `<url>` | Headlessly crawl a site and generate a CSP policy |
-| [`interactive`](./interactive) | `<url>` | Open a headed browser for manual navigation |
-| [`generate`](./generate) | `[session-id]` | Regenerate a policy from an existing session |
-| [`export`](./export) | `[session-id]` | Export a policy in a specific format |
-| [`diff`](./diff) | `<id-a> <id-b>` | Compare policies and violations between two sessions |
-| [`score`](./score) | `[session-id]` | Score a policy against security best practices |
-| [`sessions`](./sessions) | -- | List all analysis sessions with ID, status, timestamp, and violation count |
-| [`permissions`](./permissions) | `[session-id]` | Show Permissions-Policy headers captured during crawling |
-| [`hash-static`](./hash-static) | `<path>...` | Hash inline content in static HTML files and emit or inject a CSP (no browser required) |
+| Command                        | Argument        | Description                                                                             |
+| ------------------------------ | --------------- | --------------------------------------------------------------------------------------- |
+| [`setup`](./setup)             | --              | Install the Playwright browser and verify it launches                                   |
+| [`start`](./start)             | --              | Run the MCP server over stdio (for AI coding agents)                                    |
+| [`crawl`](./crawl)             | `<url>`         | Headlessly crawl a site and generate a CSP policy                                       |
+| [`interactive`](./interactive) | `<url>`         | Open a headed browser for manual navigation                                             |
+| [`generate`](./generate)       | `[session-id]`  | Regenerate a policy from an existing session                                            |
+| [`export`](./export)           | `[session-id]`  | Export a policy in a specific format                                                    |
+| [`diff`](./diff)               | `<id-a> <id-b>` | Compare policies and violations between two sessions                                    |
+| [`score`](./score)             | `[session-id]`  | Score a policy against security best practices                                          |
+| [`sessions`](./sessions)       | --              | List analysis sessions for the current project (use `--all` for all projects)           |
+| [`permissions`](./permissions) | `[session-id]`  | Show Permissions-Policy headers captured during crawling                                |
+| [`hash-static`](./hash-static) | `<path>...`     | Hash inline content in static HTML files and emit or inject a CSP (no browser required) |
 
 ## Global options
 
-| Option | Description |
-|---|---|
-| `--no-color` | Disable colored terminal output. Also respects the `NO_COLOR` environment variable. |
-| `--help`, `-h` | Show the help text and exit. |
-| `--version`, `-v` | Print the version number and exit. |
+| Option             | Description                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `--project <name>` | Override auto-detected project name. Also settable via `CSP_ANALYSER_PROJECT` env var. |
+| `--all`            | Show sessions from all projects (`sessions` command only).                             |
+| `--no-color`       | Disable colored terminal output. Also respects the `NO_COLOR` environment variable.    |
+| `--help`, `-h`     | Show the help text and exit.                                                           |
+| `--version`, `-v`  | Print the version number and exit.                                                     |
 
 ## Output design: stdout vs stderr
 

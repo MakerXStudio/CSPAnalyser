@@ -47,6 +47,7 @@ To crawl deeper, pass `--depth` and `--max-pages`:
 ```bash
 csp-analyser crawl https://example.com --depth 2 --max-pages 25
 ```
+
 :::
 
 ## Step 3: Try different export formats
@@ -83,7 +84,7 @@ Every crawl creates a session. Score the generated policy against security best 
 csp-analyser score
 ```
 
-This automatically uses the most recent session. You can also pass a specific session ID if needed (`csp-analyser score <session-id>`).
+This automatically uses the most recent session for the current project. You can also pass a specific session ID if needed (`csp-analyser score <session-id>`).
 
 The scorer evaluates the policy on criteria such as whether `default-src` is set, whether `unsafe-inline` or `unsafe-eval` appear, and whether the policy uses report-only mode. You get a numeric score and a breakdown of passed and failed checks.
 

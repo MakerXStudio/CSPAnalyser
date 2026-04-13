@@ -8,19 +8,20 @@ Export a session's CSP policy in a deployment-ready format.
 csp-analyser export [session-id] [options]
 ```
 
-When `session-id` is omitted, the most recent completed session is used automatically.
+When `session-id` is omitted, the most recent completed session for the current project is used automatically. Override the project with `--project` or the `CSP_ANALYSER_PROJECT` environment variable.
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
-| `--format <fmt>` | `header` | Output format (see below). |
-| `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
-| `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
-| `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
-| `--strip-unsafe-eval` | `false` | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it. |
-| `--report-only` | `false` | Generate a report-only header. |
+| Option                 | Default       | Description                                                                                                        |
+| ---------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `--strictness <level>` | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                               |
+| `--format <fmt>`       | `header`      | Output format (see below).                                                                                         |
+| `--nonce`              | `false`       | Replace `'unsafe-inline'` with nonce placeholders.                                                                 |
+| `--strict-dynamic`     | `false`       | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`.                                                        |
+| `--hash`               | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
+| `--strip-unsafe-eval`  | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                          |
+| `--report-only`        | `false`       | Generate a report-only header.                                                                                     |
+| `--project <name>`     | auto-detected | Override auto-detected project name for session lookup.                                                            |
 
 ## Formats
 
@@ -39,7 +40,10 @@ Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.examp
 An HTML `<meta>` tag for use in the document `<head>`. Directives not supported in `<meta>` tags (`report-uri`, `report-to`) are automatically stripped.
 
 ```html
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' 'unsafe-inline'">
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' 'unsafe-inline'"
+/>
 ```
 
 ### `nginx`
@@ -69,7 +73,7 @@ export default {
     const newResponse = new Response(response.body, response);
     newResponse.headers.set('Content-Security-Policy', '...');
     return newResponse;
-  }
+  },
 };
 ```
 
@@ -112,6 +116,7 @@ csp-analyser export abc123 --format header --report-only
 ```
 
 Output:
+
 ```
 Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://cdn.example.com
 ```

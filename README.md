@@ -71,19 +71,19 @@ csp-analyser hash-static dist/ --inject   # hashes inline content and writes <me
 
 ## CLI commands
 
-| Command | Description |
-|---------|-------------|
-| `crawl <url>` | Headless crawl and generate policy |
-| `interactive <url>` | Manual browsing with violation capture |
-| `hash-static <path>...` | Hash inline content in built HTML files, no browser required |
-| `generate <session-id>` | Regenerate policy from a previous session |
-| `export <session-id>` | Export policy in a specific format |
-| `diff <id1> <id2>` | Compare policies between two sessions |
-| `score <session-id>` | Score a generated policy |
-| `permissions <session-id>` | Show captured Permissions-Policy headers |
-| `sessions` | List all sessions |
-| `setup` | Install browser and check dependencies |
-| `start` | Run the MCP server over stdio (for AI agents) |
+| Command                    | Description                                                  |
+| -------------------------- | ------------------------------------------------------------ |
+| `crawl <url>`              | Headless crawl and generate policy                           |
+| `interactive <url>`        | Manual browsing with violation capture                       |
+| `hash-static <path>...`    | Hash inline content in built HTML files, no browser required |
+| `generate <session-id>`    | Regenerate policy from a previous session                    |
+| `export <session-id>`      | Export policy in a specific format                           |
+| `diff <id1> <id2>`         | Compare policies between two sessions                        |
+| `score <session-id>`       | Score a generated policy                                     |
+| `permissions <session-id>` | Show captured Permissions-Policy headers                     |
+| `sessions`                 | List sessions for the current project                        |
+| `setup`                    | Install browser and check dependencies                       |
+| `start`                    | Run the MCP server over stdio (for AI agents)                |
 
 ### Common flags
 
@@ -101,6 +101,8 @@ csp-analyser hash-static dist/ --inject   # hashes inline content and writes <me
 --cookies <json>        Raw cookies as JSON string
 --manual-login          Open browser for manual login before crawl
 --report-only           Generate report-only header
+--project <name>        Override auto-detected project name
+--all                   Show sessions from all projects (sessions command)
 --no-color              Disable colored output
 ```
 
@@ -156,16 +158,19 @@ csp-analyser hash-static dist/ --inject \
 ## Export formats
 
 **HTTP header:**
+
 ```
 Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com
 ```
 
 **nginx:**
+
 ```nginx
 add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.example.com" always;
 ```
 
 **Apache:**
+
 ```apache
 Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.example.com"
 ```

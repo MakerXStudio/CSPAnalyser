@@ -124,12 +124,14 @@ Session not found: a1b2c3d4-...
 **Fix:** List available sessions:
 
 ```bash
-# Via MCP
-# Use the list_sessions tool
-
-# The database is stored at .csp-analyser/data.db relative to the working directory
+csp-analyser sessions
 ```
 
+If the session was created from a different working directory (different project), use `--all` to see sessions across all projects:
+
+```bash
+csp-analyser sessions --all
+```
 
 ## Database locked
 

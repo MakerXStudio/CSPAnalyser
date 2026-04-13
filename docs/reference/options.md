@@ -7,32 +7,37 @@ description: Complete reference of all CLI flags and commands
 
 ## Commands
 
-| Command | Syntax | Description |
-|---------|--------|-------------|
-| `setup` | `csp-analyser setup` | Install Playwright Chromium browser and verify system dependencies |
-| `crawl` | `csp-analyser crawl <url>` | Headless auto-crawl with violation capture |
-| `interactive` | `csp-analyser interactive <url>` | Headed manual browsing with violation capture |
-| `generate` | `csp-analyser generate [session-id]` | Regenerate policy from an existing session |
-| `export` | `csp-analyser export [session-id]` | Export policy in a deployment-ready format |
-| `diff` | `csp-analyser diff <id-a> <id-b>` | Compare policies from two sessions |
-| `score` | `csp-analyser score [session-id]` | Score policy against best practices |
-| `permissions` | `csp-analyser permissions [session-id]` | Show captured Permissions-Policy headers |
+| Command       | Syntax                                  | Description                                                        |
+| ------------- | --------------------------------------- | ------------------------------------------------------------------ |
+| `setup`       | `csp-analyser setup`                    | Install Playwright Chromium browser and verify system dependencies |
+| `crawl`       | `csp-analyser crawl <url>`              | Headless auto-crawl with violation capture                         |
+| `interactive` | `csp-analyser interactive <url>`        | Headed manual browsing with violation capture                      |
+| `generate`    | `csp-analyser generate [session-id]`    | Regenerate policy from an existing session                         |
+| `export`      | `csp-analyser export [session-id]`      | Export policy in a deployment-ready format                         |
+| `diff`        | `csp-analyser diff <id-a> <id-b>`       | Compare policies from two sessions                                 |
+| `score`       | `csp-analyser score [session-id]`       | Score policy against best practices                                |
+| `permissions` | `csp-analyser permissions [session-id]` | Show captured Permissions-Policy headers                           |
+| `sessions`    | `csp-analyser sessions`                 | List analysis sessions for the current project                     |
+| `start`       | `csp-analyser start`                    | Run the MCP server over stdio (for AI agents)                      |
+| `hash-static` | `csp-analyser hash-static <path>...`    | Hash inline content in static HTML files (no browser)              |
 
 ## Options
 
-| Flag | Type | Default | Commands | Description |
-|------|------|---------|----------|-------------|
-| `--depth <n>` | integer (0+) | `1` | `crawl` | Crawl depth. `0` = single page, `1` = target + linked pages, etc. |
-| `--max-pages <n>` | integer (1+) | `10` | `crawl` | Maximum number of pages to visit during crawl |
-| `--strictness <level>` | `strict` \| `moderate` \| `permissive` | `moderate` | `crawl`, `generate`, `export`, `diff`, `score` | Controls how specific source expressions are. See [strictness levels](/guides/strictness). |
-| `--format <fmt>` | `header` \| `meta` \| `nginx` \| `apache` \| `cloudflare` \| `cloudflare-pages` \| `azure-frontdoor` \| `helmet` \| `json` | `header` | `crawl`, `generate`, `export` | Output format for the generated policy. See [export formats](/guides/export-formats). |
-| `--storage-state <path>` | string (file path) | -- | `crawl`, `interactive` | Path to a Playwright storage state JSON file for authenticated sessions. Must have `.json` extension. |
-| `--save-storage-state <path>` | string (file path) | -- | `interactive` | Export browser cookies and storage state to a JSON file when the session ends. See [authentication guide](/guides/authentication). |
-| `--violation-limit <n>` | integer (0+) | `10000` | `crawl`, `interactive` | Maximum violations to accept per session. `0` for unlimited. |
-| `--report-only` | boolean | `false` | `crawl`, `generate`, `export` | Generate `Content-Security-Policy-Report-Only` instead of `Content-Security-Policy` |
-| `--no-color` | boolean | `false` | all | Disable coloured terminal output. Also respects the `NO_COLOR` environment variable. |
-| `--help`, `-h` | -- | -- | all | Show help text |
-| `--version`, `-v` | -- | -- | all | Show version number |
+| Flag                          | Type                                                                                                                       | Default       | Commands                                                                         | Description                                                                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `--depth <n>`                 | integer (0+)                                                                                                               | `1`           | `crawl`                                                                          | Crawl depth. `0` = single page, `1` = target + linked pages, etc.                                                                  |
+| `--max-pages <n>`             | integer (1+)                                                                                                               | `10`          | `crawl`                                                                          | Maximum number of pages to visit during crawl                                                                                      |
+| `--strictness <level>`        | `strict` \| `moderate` \| `permissive`                                                                                     | `moderate`    | `crawl`, `generate`, `export`, `diff`, `score`                                   | Controls how specific source expressions are. See [strictness levels](/guides/strictness).                                         |
+| `--format <fmt>`              | `header` \| `meta` \| `nginx` \| `apache` \| `cloudflare` \| `cloudflare-pages` \| `azure-frontdoor` \| `helmet` \| `json` | `header`      | `crawl`, `generate`, `export`                                                    | Output format for the generated policy. See [export formats](/guides/export-formats).                                              |
+| `--storage-state <path>`      | string (file path)                                                                                                         | --            | `crawl`, `interactive`                                                           | Path to a Playwright storage state JSON file for authenticated sessions. Must have `.json` extension.                              |
+| `--save-storage-state <path>` | string (file path)                                                                                                         | --            | `interactive`                                                                    | Export browser cookies and storage state to a JSON file when the session ends. See [authentication guide](/guides/authentication). |
+| `--violation-limit <n>`       | integer (0+)                                                                                                               | `10000`       | `crawl`, `interactive`                                                           | Maximum violations to accept per session. `0` for unlimited.                                                                       |
+| `--report-only`               | boolean                                                                                                                    | `false`       | `crawl`, `generate`, `export`                                                    | Generate `Content-Security-Policy-Report-Only` instead of `Content-Security-Policy`                                                |
+| `--project <name>`            | string                                                                                                                     | auto-detected | `crawl`, `interactive`, `generate`, `export`, `score`, `permissions`, `sessions` | Override auto-detected project name. Also settable via `CSP_ANALYSER_PROJECT` env var.                                             |
+| `--all`                       | boolean                                                                                                                    | `false`       | `sessions`                                                                       | Show sessions from all projects instead of only the current one                                                                    |
+| `--no-color`                  | boolean                                                                                                                    | `false`       | all                                                                              | Disable coloured terminal output. Also respects the `NO_COLOR` environment variable.                                               |
+| `--help`, `-h`                | --                                                                                                                         | --            | all                                                                              | Show help text                                                                                                                     |
+| `--version`, `-v`             | --                                                                                                                         | --            | all                                                                              | Show version number                                                                                                                |
 
 ## Output behaviour
 
@@ -49,3 +54,11 @@ csp-analyser crawl https://example.com --format nginx > csp.conf
 # Pipe JSON to jq
 csp-analyser export --format json | jq '.directives'
 ```
+
+## Environment variables
+
+| Variable               | Description                                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CSP_ANALYSER_PROJECT` | Override auto-detected project name. Equivalent to `--project <name>` but useful in CI or Docker where the working directory may not have a `package.json`. The `--project` flag takes precedence if both are set. |
+| `NO_COLOR`             | When set (to any value), disables coloured terminal output. Equivalent to `--no-color`.                                                                                                                            |
+| `LOG_LEVEL`            | Set logging verbosity: `debug`, `info`, `warn`, `error`. Defaults to `info`.                                                                                                                                       |

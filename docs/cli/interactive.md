@@ -10,18 +10,19 @@ csp-analyser interactive <url> [options]
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `--strictness <level>` | `moderate` | Policy generation strictness: `strict`, `moderate`, or `permissive`. |
-| `--format <fmt>` | `header` | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
-| `--storage-state <path>` | -- | Path to a Playwright storage state JSON file for pre-authenticated sessions. |
-| `--save-storage-state <path>` | -- | Export cookies and storage state to a JSON file when the browser closes. |
-| `--violation-limit <n>` | `10000` | Maximum violations to capture. Set to `0` for unlimited. |
-| `--nonce` | `false` | Replace `'unsafe-inline'` with nonce placeholders. |
-| `--strict-dynamic` | `false` | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`. |
-| `--hash` | `false` | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources. |
-| `--strip-unsafe-eval` | `false` | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it. |
-| `--report-only` | `false` | Generate a report-only header. |
+| Option                        | Default       | Description                                                                                                                   |
+| ----------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--strictness <level>`        | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                                          |
+| `--format <fmt>`              | `header`      | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
+| `--storage-state <path>`      | --            | Path to a Playwright storage state JSON file for pre-authenticated sessions.                                                  |
+| `--save-storage-state <path>` | --            | Export cookies and storage state to a JSON file when the browser closes.                                                      |
+| `--violation-limit <n>`       | `10000`       | Maximum violations to capture. Set to `0` for unlimited.                                                                      |
+| `--nonce`                     | `false`       | Replace `'unsafe-inline'` with nonce placeholders.                                                                            |
+| `--strict-dynamic`            | `false`       | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`.                                                                   |
+| `--hash`                      | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.            |
+| `--strip-unsafe-eval`         | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                     |
+| `--report-only`               | `false`       | Generate a report-only header.                                                                                                |
+| `--project <name>`            | auto-detected | Override auto-detected project name. Sessions are tagged with this name.                                                      |
 
 ::: info
 The `--depth` and `--max-pages` options do not apply to interactive mode. You control which pages are visited by navigating manually.

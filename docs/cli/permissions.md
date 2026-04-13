@@ -8,9 +8,13 @@ Display the Permissions-Policy (and legacy Feature-Policy) headers captured duri
 csp-analyser permissions [session-id]
 ```
 
-When `session-id` is omitted, the most recent completed session is used automatically.
+When `session-id` is omitted, the most recent completed session for the current project is used automatically. Override the project with `--project` or the `CSP_ANALYSER_PROJECT` environment variable.
 
-This command takes no additional options.
+## Options
+
+| Option             | Default       | Description                                             |
+| ------------------ | ------------- | ------------------------------------------------------- |
+| `--project <name>` | auto-detected | Override auto-detected project name for session lookup. |
 
 ## What it shows
 

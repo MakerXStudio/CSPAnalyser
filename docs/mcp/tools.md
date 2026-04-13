@@ -11,15 +11,15 @@ CSP Analyser exposes 10 tools through its MCP server. This page documents each t
 
 Start a new CSP analysis session: crawl a website with a deny-all report-only CSP and capture all violations.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `targetUrl` | `string` (URL) | Yes | -- | The URL to analyse |
-| `depth` | `integer` (0-10) | No | 1 | Crawl depth |
-| `maxPages` | `integer` (1-1000) | No | 10 | Maximum pages to crawl |
-| `settlementDelay` | `integer` (0-10000) | No | 2000 | Milliseconds to wait after page load for late violations |
-| `storageStatePath` | `string` | No | -- | Path to Playwright storageState JSON for authenticated sessions |
-| `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness level |
-| `violationLimit` | `integer` (0+) | No | 10000 | Maximum violations to accept per session (0 for unlimited) |
+| Parameter          | Type                                     | Required | Default      | Description                                                     |
+| ------------------ | ---------------------------------------- | :------: | ------------ | --------------------------------------------------------------- |
+| `targetUrl`        | `string` (URL)                           |   Yes    | --           | The URL to analyse                                              |
+| `depth`            | `integer` (0-10)                         |    No    | 1            | Crawl depth                                                     |
+| `maxPages`         | `integer` (1-1000)                       |    No    | 10           | Maximum pages to crawl                                          |
+| `settlementDelay`  | `integer` (0-10000)                      |    No    | 2000         | Milliseconds to wait after page load for late violations        |
+| `storageStatePath` | `string`                                 |    No    | --           | Path to Playwright storageState JSON for authenticated sessions |
+| `strictness`       | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness level                                         |
+| `violationLimit`   | `integer` (0+)                           |    No    | 10000        | Maximum violations to accept per session (0 for unlimited)      |
 
 **Example:**
 
@@ -40,11 +40,11 @@ Start a new CSP analysis session: crawl a website with a deny-all report-only CS
 
 Analyse a single page for CSP violations. Convenience wrapper that sets `depth=0` and `maxPages=1`.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `url` | `string` (URL) | Yes | -- | The URL to analyse |
-| `storageStatePath` | `string` | No | -- | Path to Playwright storageState JSON |
-| `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness level |
+| Parameter          | Type                                     | Required | Default      | Description                          |
+| ------------------ | ---------------------------------------- | :------: | ------------ | ------------------------------------ |
+| `url`              | `string` (URL)                           |   Yes    | --           | The URL to analyse                   |
+| `storageStatePath` | `string`                                 |    No    | --           | Path to Playwright storageState JSON |
+| `strictness`       | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness level              |
 
 **Example:**
 
@@ -62,12 +62,12 @@ Analyse a single page for CSP violations. Convenience wrapper that sets `depth=0
 
 Get CSP violations captured during a session, optionally filtered by directive, page URL, or origin.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionId` | `string` (UUID) | Yes | -- | The session ID |
-| `directive` | `string` | No | -- | Filter by CSP directive (e.g., `script-src`) |
-| `pageUrl` | `string` | No | -- | Filter by page URL |
-| `origin` | `string` | No | -- | Filter by blocked resource origin |
+| Parameter   | Type            | Required | Default | Description                                  |
+| ----------- | --------------- | :------: | ------- | -------------------------------------------- |
+| `sessionId` | `string` (UUID) |   Yes    | --      | The session ID                               |
+| `directive` | `string`        |    No    | --      | Filter by CSP directive (e.g., `script-src`) |
+| `pageUrl`   | `string`        |    No    | --      | Filter by page URL                           |
+| `origin`    | `string`        |    No    | --      | Filter by blocked resource origin            |
 
 **Example:**
 
@@ -86,13 +86,13 @@ Get CSP violations captured during a session, optionally filtered by directive, 
 
 Generate an optimised CSP policy from violations captured in a session.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionId` | `string` (UUID) | Yes | -- | The session ID |
-| `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
-| `includeHashes` | `boolean` | No | `false` | Include SHA-256 hashes for inline scripts/styles (from violation samples and full DOM extraction) |
-| `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`) |
-| `stripUnsafeEval` | `boolean` | No | `false` | Remove `'unsafe-eval'` from the generated policy |
+| Parameter         | Type                                     | Required | Default      | Description                                                                                       |
+| ----------------- | ---------------------------------------- | :------: | ------------ | ------------------------------------------------------------------------------------------------- |
+| `sessionId`       | `string` (UUID)                          |   Yes    | --           | The session ID                                                                                    |
+| `strictness`      | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness                                                                                 |
+| `includeHashes`   | `boolean`                                |    No    | `false`      | Include SHA-256 hashes for inline scripts/styles (from violation samples and full DOM extraction) |
+| `useHashes`       | `boolean`                                |    No    | `false`      | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`)         |
+| `stripUnsafeEval` | `boolean`                                |    No    | `false`      | Remove `'unsafe-eval'` from the generated policy                                                  |
 
 **Example:**
 
@@ -112,14 +112,14 @@ Generate an optimised CSP policy from violations captured in a session.
 
 Export a CSP policy in a deployment-ready format.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionId` | `string` (UUID) | Yes | -- | The session ID |
-| `format` | `"header" \| "meta" \| "nginx" \| "apache" \| "cloudflare" \| "cloudflare-pages" \| "azure-frontdoor" \| "helmet" \| "json"` | Yes | -- | Output format |
-| `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
-| `isReportOnly` | `boolean` | No | `false` | Use `Content-Security-Policy-Report-Only` header |
-| `useHashes` | `boolean` | No | `false` | Remove `'unsafe-inline'` from directives that have hash sources |
-| `stripUnsafeEval` | `boolean` | No | `false` | Remove `'unsafe-eval'` from the generated policy |
+| Parameter         | Type                                                                                                                         | Required | Default      | Description                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- | :------: | ------------ | --------------------------------------------------------------- |
+| `sessionId`       | `string` (UUID)                                                                                                              |   Yes    | --           | The session ID                                                  |
+| `format`          | `"header" \| "meta" \| "nginx" \| "apache" \| "cloudflare" \| "cloudflare-pages" \| "azure-frontdoor" \| "helmet" \| "json"` |   Yes    | --           | Output format                                                   |
+| `strictness`      | `"strict" \| "moderate" \| "permissive"`                                                                                     |    No    | `"moderate"` | Policy strictness                                               |
+| `isReportOnly`    | `boolean`                                                                                                                    |    No    | `false`      | Use `Content-Security-Policy-Report-Only` header                |
+| `useHashes`       | `boolean`                                                                                                                    |    No    | `false`      | Remove `'unsafe-inline'` from directives that have hash sources |
+| `stripUnsafeEval` | `boolean`                                                                                                                    |    No    | `false`      | Remove `'unsafe-eval'` from the generated policy                |
 
 **Example:**
 
@@ -139,10 +139,10 @@ Export a CSP policy in a deployment-ready format.
 
 Score a CSP policy against best practices on a 0-100 scale with A-F grading.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionId` | `string` (UUID) | Yes | -- | The session ID |
-| `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
+| Parameter    | Type                                     | Required | Default      | Description       |
+| ------------ | ---------------------------------------- | :------: | ------------ | ----------------- |
+| `sessionId`  | `string` (UUID)                          |   Yes    | --           | The session ID    |
+| `strictness` | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness |
 
 **Example:**
 
@@ -160,11 +160,11 @@ Score a CSP policy against best practices on a 0-100 scale with A-F grading.
 
 Compare two CSP analysis sessions and show policy/violation differences.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionIdA` | `string` (UUID) | Yes | -- | First session ID (baseline) |
-| `sessionIdB` | `string` (UUID) | Yes | -- | Second session ID (comparison) |
-| `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness |
+| Parameter    | Type                                     | Required | Default      | Description                    |
+| ------------ | ---------------------------------------- | :------: | ------------ | ------------------------------ |
+| `sessionIdA` | `string` (UUID)                          |   Yes    | --           | First session ID (baseline)    |
+| `sessionIdB` | `string` (UUID)                          |   Yes    | --           | Second session ID (comparison) |
+| `strictness` | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness              |
 
 **Example:**
 
@@ -184,9 +184,9 @@ Compare two CSP analysis sessions and show policy/violation differences.
 
 Get details and violation summary for a CSP analysis session.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionId` | `string` (UUID) | Yes | -- | The session ID |
+| Parameter   | Type            | Required | Default | Description    |
+| ----------- | --------------- | :------: | ------- | -------------- |
+| `sessionId` | `string` (UUID) |   Yes    | --      | The session ID |
 
 **Example:**
 
@@ -202,12 +202,18 @@ Get details and violation summary for a CSP analysis session.
 
 ## list_sessions
 
-List all CSP analysis sessions. Takes no parameters.
+List CSP analysis sessions. By default, only sessions for the current project are returned.
+
+| Parameter     | Type      | Required | Default | Description                                                       |
+| ------------- | --------- | :------: | ------- | ----------------------------------------------------------------- |
+| `allProjects` | `boolean` |    No    | `false` | Return sessions from all projects instead of only the current one |
 
 **Example:**
 
 ```json
-{}
+{
+  "allProjects": true
+}
 ```
 
 **Response includes:** `count`, `sessions` (array of id, targetUrl, status, mode, createdAt)
@@ -218,10 +224,10 @@ List all CSP analysis sessions. Takes no parameters.
 
 Get Permissions-Policy and Feature-Policy headers captured during a session.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|:--------:|---------|-------------|
-| `sessionId` | `string` (UUID) | Yes | -- | The session ID |
-| `directive` | `string` | No | -- | Filter by directive name (e.g., `camera`, `geolocation`) |
+| Parameter   | Type            | Required | Default | Description                                              |
+| ----------- | --------------- | :------: | ------- | -------------------------------------------------------- |
+| `sessionId` | `string` (UUID) |   Yes    | --      | The session ID                                           |
+| `directive` | `string`        |    No    | --      | Filter by directive name (e.g., `camera`, `geolocation`) |
 
 **Example:**
 
