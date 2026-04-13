@@ -16,7 +16,7 @@ Start a new CSP analysis session: crawl a website with a deny-all report-only CS
 | `targetUrl` | `string` (URL) | Yes | -- | The URL to analyse |
 | `depth` | `integer` (0-10) | No | 1 | Crawl depth |
 | `maxPages` | `integer` (1-1000) | No | 10 | Maximum pages to crawl |
-| `settlementDelay` | `integer` (0-10000) | No | 500 | Milliseconds to wait after page load for late violations |
+| `settlementDelay` | `integer` (0-10000) | No | 2000 | Milliseconds to wait after page load for late violations |
 | `storageStatePath` | `string` | No | -- | Path to Playwright storageState JSON for authenticated sessions |
 | `strictness` | `"strict" \| "moderate" \| "permissive"` | No | `"moderate"` | Policy strictness level |
 | `violationLimit` | `integer` (0+) | No | 10000 | Maximum violations to accept per session (0 for unlimited) |

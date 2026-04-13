@@ -188,7 +188,7 @@ describe('runSession', () => {
       db,
       expect.any(String), // sessionId
       'http://localhost:3000',
-      expect.objectContaining({ depth: 5, maxPages: 100, waitStrategy: 'load', settlementDelay: 500 }),
+      expect.objectContaining({ depth: 5, maxPages: 100, waitStrategy: 'load', settlementDelay: 2000 }),
       expect.any(Object), // callbacks
     );
   });
@@ -204,7 +204,7 @@ describe('runSession', () => {
       db,
       expect.any(String),
       'http://localhost:3000',
-      { depth: 2, maxPages: 50, waitStrategy: 'load', settlementDelay: 500 },
+      { depth: 2, maxPages: 50, waitStrategy: 'load', settlementDelay: 2000 },
       expect.any(Object),
     );
   });

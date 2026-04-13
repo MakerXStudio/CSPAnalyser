@@ -33,7 +33,7 @@ export interface CrawlConfig {
   depth: number;
   maxPages: number;
   waitStrategy: WaitStrategy;
-  /** Milliseconds to wait after page load before closing, allowing late violations to fire (default: 500) */
+  /** Milliseconds to wait after page load before closing, allowing late violations to fire (default: 2000) */
   settlementDelay: number;
 }
 

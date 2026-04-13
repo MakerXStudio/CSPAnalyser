@@ -81,7 +81,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           .min(0)
           .max(10000)
           .optional()
-          .describe('Milliseconds to wait after page load for late violations (default: 500)'),
+          .describe('Milliseconds to wait after page load for late violations (default: 2000)'),
         storageStatePath: z
           .string()
           .optional()

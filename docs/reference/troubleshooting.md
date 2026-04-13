@@ -92,19 +92,19 @@ csp-analyser crawl https://app.example.com --storage-state auth.json
 
 ### Settlement delay too short
 
-Some violations fire after dynamic content loads (e.g., lazy-loaded images, deferred scripts). The default 500ms settlement delay may not be enough:
+Some violations fire after dynamic content loads (e.g., lazy-loaded images, deferred scripts, frameworks that inject inline `<style>` blocks on route navigation). The default 2000ms settlement delay is tuned for typical SPA frameworks (Vue/Vite, React) but apps with heavy lazy-loading may need more:
 
 ```json
 // MCP: increase settlementDelay
 {
   "tool": "start_session",
   "targetUrl": "https://example.com",
-  "settlementDelay": 3000
+  "settlementDelay": 5000
 }
 ```
 
 ::: tip
-The `settlementDelay` option is available through the MCP `start_session` tool. For the CLI, the default is 500ms.
+The `settlementDelay` option is available through the MCP `start_session` tool. For the CLI, the default is 2000ms.
 :::
 
 ## Session not found

@@ -29,7 +29,7 @@ const DEFAULT_CRAWL_CONFIG: CrawlConfig = {
   depth: 2,
   maxPages: 50,
   waitStrategy: 'load',
-  settlementDelay: 500,
+  settlementDelay: 2000,
 };
 
 // ── Public types ─────────────────────────────────────────────────────────
