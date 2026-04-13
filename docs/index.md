@@ -13,7 +13,7 @@ hero:
       link: /cli/
     - theme: alt
       text: View on GitHub
-      link: https://github.com/MakerX/csp-analyser
+      link: https://github.com/MakerXStudio/CSPAnalyser
 
 features:
   - title: Headless Crawling

@@ -7,7 +7,7 @@ Generate a production-ready CSP policy in five minutes.
 If you have not already, install CSP Analyser and download the browser:
 
 ```bash
-npm install -g csp-analyser
+npm install -g @makerx/csp-analyser
 csp-analyser setup
 ```
 

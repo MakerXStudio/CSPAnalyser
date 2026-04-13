@@ -93,12 +93,12 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/MakerX/csp-analyser' },
+      { icon: 'github', link: 'https://github.com/MakerXStudio/CSPAnalyser' },
     ],
 
     editLink: {
       pattern:
-        'https://github.com/MakerX/csp-analyser/edit/main/docs/:path',
+        'https://github.com/MakerXStudio/CSPAnalyser/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
 

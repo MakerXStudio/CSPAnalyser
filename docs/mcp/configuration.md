@@ -14,7 +14,7 @@ Add a `.mcp.json` file to your project root:
   "mcpServers": {
     "csp-analyser": {
       "command": "node",
-      "args": ["node_modules/csp-analyser/dist/mcp-server.js"],
+      "args": ["node_modules/@makerx/csp-analyser/dist/mcp-server.js"],
       "env": {}
     }
   }
@@ -46,7 +46,7 @@ Add to your VS Code settings (`.vscode/settings.json`):
     "servers": {
       "csp-analyser": {
         "command": "node",
-        "args": ["node_modules/csp-analyser/dist/mcp-server.js"]
+        "args": ["node_modules/@makerx/csp-analyser/dist/mcp-server.js"]
       }
     }
   }
@@ -62,7 +62,7 @@ Add to your Gemini CLI MCP settings:
   "mcpServers": {
     "csp-analyser": {
       "command": "node",
-      "args": ["node_modules/csp-analyser/dist/mcp-server.js"]
+      "args": ["node_modules/@makerx/csp-analyser/dist/mcp-server.js"]
     }
   }
 }
@@ -77,7 +77,7 @@ Configure in your Codex agent's tool configuration:
   "mcp_servers": {
     "csp-analyser": {
       "command": "node",
-      "args": ["node_modules/csp-analyser/dist/mcp-server.js"]
+      "args": ["node_modules/@makerx/csp-analyser/dist/mcp-server.js"]
     }
   }
 }

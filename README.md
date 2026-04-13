@@ -21,7 +21,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 ## Install
 
 ```bash
-npm install -g csp-analyser
+npm install -g @makerx/csp-analyser
 ```
 
 Then install the browser dependency:

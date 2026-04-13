@@ -12,7 +12,7 @@
 Install once and use `csp-analyser` from any directory:
 
 ```bash
-npm install -g csp-analyser
+npm install -g @makerx/csp-analyser
 ```
 
 ### Local install as a dev dependency
@@ -20,13 +20,13 @@ npm install -g csp-analyser
 If you prefer to pin the version per-project:
 
 ```bash
-npm install -D csp-analyser
+npm install -D @makerx/csp-analyser
 ```
 
 Then run via `npx`:
 
 ```bash
-npx csp-analyser crawl https://example.com
+npx @makerx/csp-analyser crawl https://example.com
 ```
 
 ## Run setup
@@ -97,7 +97,7 @@ The directory is created automatically on first run.
 csp-analyser --version
 ```
 
-You should see the installed version number (e.g. `0.1.0`). If you installed locally, use `npx csp-analyser --version`.
+You should see the installed version number (e.g. `0.1.0`). If you installed locally, use `npx @makerx/csp-analyser --version`.
 
 ## Next steps
 

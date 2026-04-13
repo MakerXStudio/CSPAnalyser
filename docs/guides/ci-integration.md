@@ -32,7 +32,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browser
-        run: npx csp-analyser setup
+        run: npx @makerx/csp-analyser setup
 
       - name: Start dev server
         run: npm run dev &
@@ -43,7 +43,7 @@ jobs:
         run: npx wait-on http://localhost:3000
 
       - name: Analyse CSP
-        run: npx csp-analyser crawl http://localhost:3000 --format json > csp-report.json
+        run: npx @makerx/csp-analyser crawl http://localhost:3000 --format json > csp-report.json
 
       - name: Upload report
         uses: actions/upload-artifact@v4
@@ -61,13 +61,13 @@ Fail the build if the CSP score drops below a threshold:
         id: csp
         run: |
           # Crawl and capture session ID from JSON output
-          OUTPUT=$(npx csp-analyser crawl http://localhost:3000 --format json)
+          OUTPUT=$(npx @makerx/csp-analyser crawl http://localhost:3000 --format json)
           echo "$OUTPUT" > csp-policy.json
 
           # Extract session ID from the database and score
           SESSION_ID=$(echo "$OUTPUT" | jq -r '.sessionId // empty')
           if [ -n "$SESSION_ID" ]; then
-            npx csp-analyser score "$SESSION_ID" > csp-score.txt
+            npx @makerx/csp-analyser score "$SESSION_ID" > csp-score.txt
             cat csp-score.txt
           fi
 
@@ -120,10 +120,10 @@ Compare the current analysis against a previous session to detect policy changes
       - name: Detect regressions
         run: |
           # Assume BASELINE_SESSION is stored from a previous run
-          CURRENT=$(npx csp-analyser crawl http://localhost:3000 --format json | jq -r '.sessionId')
+          CURRENT=$(npx @makerx/csp-analyser crawl http://localhost:3000 --format json | jq -r '.sessionId')
 
           if [ -n "$BASELINE_SESSION" ]; then
-            npx csp-analyser diff "$BASELINE_SESSION" "$CURRENT"
+            npx @makerx/csp-analyser diff "$BASELINE_SESSION" "$CURRENT"
           fi
 ```
 
@@ -169,7 +169,7 @@ Playwright's Chromium browser must be installed in CI. The `csp-analyser setup` 
 
 ```yaml
 - name: Install Playwright browser
-  run: npx csp-analyser setup
+  run: npx @makerx/csp-analyser setup
 ```
 
 On Ubuntu runners, system dependencies are installed automatically. For other environments, see the [troubleshooting guide](/reference/troubleshooting).
