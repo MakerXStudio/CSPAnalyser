@@ -159,6 +159,31 @@ export async function scanHtmlFiles(
   return { result, files: allFiles };
 }
 
+// ── Source expression normalization ──────────────────────────────────────
+
+/**
+ * CSP requires hash and nonce source expressions to be wrapped in single
+ * quotes: `'sha256-…'`, `'nonce-…'`. Users frequently pass these values
+ * through shell commands where single quotes are stripped by the shell
+ * before the CLI sees them. If the resulting unquoted token is written to
+ * the policy as-is, browsers parse it as a host expression and the hash
+ * silently stops matching — with the hash prefix being lowercased and
+ * prefixed with `https://`. This normaliser re-adds the CSP quotes when it
+ * detects a bare hash/nonce token, so both quoted and unquoted forms work.
+ *
+ * Non-hash, non-nonce tokens (plain origins, keywords like 'self') are
+ * returned unchanged.
+ */
+export function normalizeSourceExpression(source: string): string {
+  const trimmed = source.trim();
+  if (trimmed.length === 0) return trimmed;
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed;
+  if (/^(?:sha256-|sha384-|sha512-|nonce-)/i.test(trimmed)) {
+    return `'${trimmed}'`;
+  }
+  return trimmed;
+}
+
 // ── Policy building ──────────────────────────────────────────────────────
 
 /**
@@ -172,19 +197,27 @@ export function buildStaticPolicy(
   options: BuildPolicyOptions = {},
 ): Record<string, string[]> {
   const dedupeSort = (items: Iterable<string>): string[] => [...new Set(items)].sort();
+  const normalizeAll = (sources: readonly string[] | undefined): string[] =>
+    (sources ?? []).map(normalizeSourceExpression);
 
   const scriptElem = dedupeSort([
     "'self'",
-    ...(options.extraScriptElem ?? []),
+    ...normalizeAll(options.extraScriptElem),
     ...hashes.scriptElem,
   ]);
   const styleElem = dedupeSort([
     "'self'",
-    ...(options.extraStyleElem ?? []),
+    ...normalizeAll(options.extraStyleElem),
     ...hashes.styleElem,
   ]);
-  const styleAttr = dedupeSort([...(options.extraStyleAttr ?? []), ...hashes.styleAttr]);
-  const scriptAttr = dedupeSort([...(options.extraScriptAttr ?? []), ...hashes.scriptAttr]);
+  const styleAttr = dedupeSort([
+    ...normalizeAll(options.extraStyleAttr),
+    ...hashes.styleAttr,
+  ]);
+  const scriptAttr = dedupeSort([
+    ...normalizeAll(options.extraScriptAttr),
+    ...hashes.scriptAttr,
+  ]);
 
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],

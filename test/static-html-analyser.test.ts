@@ -9,6 +9,7 @@ import {
   buildStaticPolicy,
   injectCspMeta,
   walkHtmlFiles,
+  normalizeSourceExpression,
 } from '../src/static-html-analyser.js';
 
 function sha256(content: string): string {
@@ -147,7 +148,61 @@ describe('walkHtmlFiles', () => {
   });
 });
 
+describe('normalizeSourceExpression', () => {
+  it('wraps bare sha256 hashes in CSP single quotes', () => {
+    expect(normalizeSourceExpression('sha256-abc=')).toBe("'sha256-abc='");
+  });
+
+  it('wraps bare sha384 / sha512 hashes', () => {
+    expect(normalizeSourceExpression('sha384-x')).toBe("'sha384-x'");
+    expect(normalizeSourceExpression('sha512-y')).toBe("'sha512-y'");
+  });
+
+  it('wraps bare nonces', () => {
+    expect(normalizeSourceExpression('nonce-abc123')).toBe("'nonce-abc123'");
+  });
+
+  it('leaves already-quoted hashes untouched', () => {
+    expect(normalizeSourceExpression("'sha256-abc='")).toBe("'sha256-abc='");
+  });
+
+  it('leaves origin sources untouched', () => {
+    expect(normalizeSourceExpression('https://cdn.example.com')).toBe(
+      'https://cdn.example.com',
+    );
+  });
+
+  it("leaves keyword sources like 'self' untouched", () => {
+    expect(normalizeSourceExpression("'self'")).toBe("'self'");
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(normalizeSourceExpression('  sha256-abc=  ')).toBe("'sha256-abc='");
+  });
+});
+
 describe('buildStaticPolicy', () => {
+  it('auto-wraps unquoted hash values passed as extra sources', () => {
+    // Shells strip single quotes; users frequently pass bare hashes via CLI
+    // args. The policy must still come out quoted.
+    const hashes = {
+      scriptElem: new Set<string>(),
+      styleElem: new Set<string>(),
+      styleAttr: new Set<string>(),
+      scriptAttr: new Set<string>(),
+    };
+    const directives = buildStaticPolicy(hashes, {
+      extraStyleElem: ['sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='],
+    });
+    expect(directives['style-src-elem']).toContain(
+      "'sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='",
+    );
+    // and never the bare form
+    expect(directives['style-src-elem']).not.toContain(
+      'sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y=',
+    );
+  });
+
   it('produces a secure baseline with no discovered hashes', () => {
     const hashes = {
       scriptElem: new Set<string>(),
