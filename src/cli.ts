@@ -314,7 +314,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (command === 'hash-static') {
     // Positional args are file/directory paths to scan. Require at least one.
-    const inputs = positionals.slice(1) as string[];
+    const inputs = positionals.slice(1);
     if (inputs.length === 0) {
       throw new Error(
         'Missing path argument for "hash-static". Usage: hash-static <path> [<path>...] [--inject]',

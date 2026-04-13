@@ -111,18 +111,18 @@ export function extractHashesFromHtml(html: string): StaticHashResult {
     styleElem.add(`'sha256-${sha256b64(content)}'`);
   }
 
-  // style="..." attributes — include empty strings.
-  const styleAttrRe = /\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  // style="..." attributes — include empty strings. The backreference \2
+  // requires the closing quote to match the opening, which avoids false
+  // matches across unrelated adjacent attributes.
+  const styleAttrRe = /\sstyle\s*=\s*(["'])((?:(?!\1).)*)\1/gi;
   for (const m of html.matchAll(styleAttrRe)) {
-    const value = m[1] !== undefined ? m[1] : m[2];
-    styleAttr.add(`'sha256-${sha256b64(decodeHtmlEntities(value))}'`);
+    styleAttr.add(`'sha256-${sha256b64(decodeHtmlEntities(m[2]))}'`);
   }
 
   // on*="..." event handler attributes — include empty strings.
-  const onAttrRe = /\son[a-z]+\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  const onAttrRe = /\son[a-z]+\s*=\s*(["'])((?:(?!\1).)*)\1/gi;
   for (const m of html.matchAll(onAttrRe)) {
-    const value = m[1] !== undefined ? m[1] : m[2];
-    scriptAttr.add(`'sha256-${sha256b64(decodeHtmlEntities(value))}'`);
+    scriptAttr.add(`'sha256-${sha256b64(decodeHtmlEntities(m[2]))}'`);
   }
 
   return { scriptElem, styleElem, styleAttr, scriptAttr };

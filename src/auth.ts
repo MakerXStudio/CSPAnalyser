@@ -151,7 +151,8 @@ export async function createAuthenticatedContext(
   // In headed/interactive mode, set viewport to null so the page follows the
   // browser window size — otherwise Playwright pins the viewport to 1280x720
   // and the site doesn't reflow when the user resizes the window.
-  const baseContextOptions = auth?.headless === false ? { viewport: null as null } : {};
+  const baseContextOptions: { viewport?: null } =
+    auth?.headless === false ? { viewport: null } : {};
 
   if (!auth || (!auth.storageStatePath && !auth.cookies && !auth.manualLogin)) {
     logger.info('Creating unauthenticated browser context');
