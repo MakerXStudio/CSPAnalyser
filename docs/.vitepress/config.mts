@@ -52,6 +52,7 @@ export default defineConfig({
             { text: 'Overview', link: '/cli/' },
             { text: 'crawl', link: '/cli/crawl' },
             { text: 'interactive', link: '/cli/interactive' },
+            { text: 'audit', link: '/cli/audit' },
             { text: 'generate', link: '/cli/generate' },
             { text: 'export', link: '/cli/export' },
             { text: 'diff', link: '/cli/diff' },

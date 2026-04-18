@@ -78,6 +78,8 @@ While moderate would produce the exact origin `https://unpkg.com` (only 2 labels
 
 All levels produce `'unsafe-inline'` for inline content. Use `--hash` to replace it with SHA-256 hashes computed from the full inline content extracted during crawling, or `--nonce` to replace it with nonce placeholders.
 
+In **audit mode** (`csp-analyser audit`), strict goes further: `'unsafe-inline'` is unconditionally stripped from the existing policy and replaced with extracted inline hashes. This makes `audit --strictness strict` the path for migrating an `'unsafe-inline'`-based CSP to a hash-based one.
+
 ## When to use each
 
 ### Use `strict` when

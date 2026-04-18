@@ -12,6 +12,7 @@ Usage:
   csp-analyser start                     Run the MCP server over stdio (for AI agents)
   csp-analyser crawl <url>               Headless auto-crawl
   csp-analyser interactive <url>         Headed manual browsing
+  csp-analyser audit <url>               Audit existing CSP (diff + merged policy)
   csp-analyser generate [session-id]     Regenerate policy (defaults to latest session)
   csp-analyser export [session-id]       Export policy in a format (defaults to latest)
   csp-analyser diff <id-a> <id-b>        Compare two sessions
@@ -50,6 +51,7 @@ Options:
 | [`start`](./start)             | --              | Run the MCP server over stdio (for AI coding agents)                                    |
 | [`crawl`](./crawl)             | `<url>`         | Headlessly crawl a site and generate a CSP policy                                       |
 | [`interactive`](./interactive) | `<url>`         | Open a headed browser for manual navigation                                             |
+| [`audit`](./audit)             | `<url>`         | Audit an existing CSP: diff + updated policy for enforced and report-only headers       |
 | [`generate`](./generate)       | `[session-id]`  | Regenerate a policy from an existing session                                            |
 | [`export`](./export)           | `[session-id]`  | Export a policy in a specific format                                                    |
 | [`diff`](./diff)               | `<id-a> <id-b>` | Compare policies and violations between two sessions                                    |

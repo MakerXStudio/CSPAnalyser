@@ -5,7 +5,7 @@ description: Complete reference for all CSP Analyser MCP tools
 
 # MCP Tools
 
-CSP Analyser exposes 10 tools through its MCP server. This page documents each tool with its parameters, types, and example usage.
+CSP Analyser exposes 11 tools through its MCP server. This page documents each tool with its parameters, types, and example usage.
 
 ## start_session
 
@@ -239,6 +239,34 @@ Get Permissions-Policy and Feature-Policy headers captured during a session.
 ```
 
 **Response includes:** `sessionId`, `count`, `policies` (array of id, directive, allowlist, headerType, sourceUrl)
+
+## audit_policy
+
+Audit an existing CSP: crawl a website preserving its current CSP, capture violations, and produce a diff plus merged policy. In strict mode, `'unsafe-inline'` is stripped and replaced with hashes.
+
+| Parameter          | Type                                     | Required | Default      | Description                                                                                     |
+| ------------------ | ---------------------------------------- | :------: | ------------ | ----------------------------------------------------------------------------------------------- |
+| `targetUrl`        | `string` (URL)                           |   Yes    | --           | The URL to audit                                                                                |
+| `depth`            | `integer` (0-10)                         |    No    | 1            | Crawl depth                                                                                     |
+| `maxPages`         | `integer` (1-1000)                       |    No    | 10           | Maximum pages to crawl                                                                          |
+| `settlementDelay`  | `integer` (0-10000)                      |    No    | 2000         | Milliseconds to wait after page load for late violations                                        |
+| `storageStatePath` | `string`                                 |    No    | --           | Path to Playwright storageState JSON for authenticated sessions                                 |
+| `strictness`       | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness. Strict mode strips `'unsafe-inline'` and generates hashes.                   |
+| `violationLimit`   | `integer` (0+)                           |    No    | 10000        | Maximum violations to accept per session (0 for unlimited)                                      |
+
+**Example:**
+
+```json
+{
+  "targetUrl": "https://example.com",
+  "depth": 2,
+  "strictness": "strict"
+}
+```
+
+**Response includes:** `sessionId`, `pagesVisited`, `violationsFound`, `enforced` (existing + merged directives, diff, violation count), `reportOnly` (same structure), `formatted` (human-readable summary). `enforced` and `reportOnly` are `null` when the site has no corresponding CSP header.
+
+---
 
 ## Error handling
 
