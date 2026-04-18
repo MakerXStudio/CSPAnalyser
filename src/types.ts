@@ -46,6 +46,8 @@ export interface SessionConfig {
   violationLimit?: number;
   /** Project identifier (from nearest package.json name field) for scoping sessions */
   project?: string;
+  /** When true, preserve the site's existing CSP instead of injecting deny-all */
+  audit?: boolean;
 }
 
 export interface CookieParam {
@@ -203,6 +205,30 @@ export interface InlineHashRow {
   directive: string;
   hash: string;
   content_length: number;
+  created_at: string;
+}
+
+// ── Existing CSP header types ─────────────────────────────────────────
+
+export type ExistingCspHeaderType = 'enforced' | 'report-only';
+
+export interface ExistingCspHeader {
+  id: string;
+  sessionId: string;
+  pageId: string | null;
+  headerType: ExistingCspHeaderType;
+  headerValue: string;
+  sourceUrl: string;
+  createdAt: string;
+}
+
+export interface ExistingCspHeaderRow {
+  id: number;
+  session_id: string;
+  page_id: number | null;
+  header_type: ExistingCspHeaderType;
+  header_value: string;
+  source_url: string;
   created_at: string;
 }
 

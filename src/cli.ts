@@ -16,7 +16,7 @@ import {
   getViolationSummary,
   getPermissionsPolicies,
 } from './db/repository.js';
-import { runSession, runInteractiveSession } from './session-manager.js';
+import { runSession, runInteractiveSession, runAuditSession } from './session-manager.js';
 import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy } from './policy-formatter.js';
@@ -31,6 +31,7 @@ import {
 
 import { getDataDir, resolveProjectName } from './utils/file-utils.js';
 import { compareSessions, formatDiff } from './policy-diff.js';
+import { generateAuditResult, formatAuditResult } from './audit.js';
 import { scoreCspPolicy, formatScore } from './policy-scorer.js';
 import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
 
@@ -50,6 +51,7 @@ function getVersion(): string {
 export type Command =
   | 'crawl'
   | 'interactive'
+  | 'audit'
   | 'generate'
   | 'export'
   | 'diff'
@@ -117,6 +119,7 @@ Usage:
   csp-analyser start                     Run the MCP server over stdio (for AI agents)
   csp-analyser crawl <url>               Headless auto-crawl
   csp-analyser interactive <url>         Headed manual browsing
+  csp-analyser audit <url>               Audit existing CSP (diff + merged policy)
   csp-analyser generate [session-id]     Regenerate policy (defaults to latest session)
   csp-analyser export [session-id]       Export policy in a format (defaults to latest)
   csp-analyser diff <id-a> <id-b>        Compare two sessions
@@ -231,6 +234,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ![
       'crawl',
       'interactive',
+      'audit',
       'generate',
       'export',
       'diff',
@@ -266,8 +270,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
 
   const positionalArg = positionals[1] as string | undefined;
 
-  // crawl and interactive always require a URL
-  if ((command === 'crawl' || command === 'interactive') && !positionalArg) {
+  // crawl, interactive, and audit always require a URL
+  if ((command === 'crawl' || command === 'interactive' || command === 'audit') && !positionalArg) {
     throw new Error(`Missing URL for "${command}". Run with --help for usage.`);
   }
 
@@ -346,7 +350,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     if (eStyle) parsed.extraStyleElem = eStyle;
     if (eStyleAttr) parsed.extraStyleAttr = eStyleAttr;
     if (eScriptAttr) parsed.extraScriptAttr = eScriptAttr;
-  } else if ((command === 'crawl' || command === 'interactive') && positionalArg) {
+  } else if ((command === 'crawl' || command === 'interactive' || command === 'audit') && positionalArg) {
     validateTargetUrl(positionalArg, { allowLocalNetwork: true });
     parsed.url = positionalArg;
   } else if (command === 'diff') {
@@ -585,6 +589,51 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
+  } finally {
+    db.close();
+  }
+}
+
+async function runAuditCommand(args: ParsedArgs): Promise<void> {
+  if (!args.url) {
+    throw new Error('URL is required for the audit command');
+  }
+  const db = initDb();
+  try {
+    const project = resolveProjectName(args.project);
+    const config: SessionConfig = {
+      targetUrl: args.url,
+      crawlConfig: { depth: args.depth, maxPages: args.maxPages },
+      storageStatePath: args.storageState,
+      violationLimit: args.violationLimit,
+      project,
+    };
+
+    const startTime = Date.now();
+    let pageCount = 0;
+
+    const result = await runAuditSession(db, config, {
+      headless: true,
+      onProgress: (msg) => {
+        if (msg.startsWith('Audited: ')) {
+          pageCount++;
+          const url = msg.slice('Audited: '.length);
+          process.stderr.write(formatCrawlProgress(pageCount, args.maxPages, url) + '\n');
+        } else {
+          process.stderr.write(cyan(msg) + '\n');
+        }
+      },
+    });
+
+    const elapsed = formatElapsed(Date.now() - startTime);
+    process.stderr.write(
+      cyan(`Audit complete: ${result.pagesVisited} pages, ${result.violationsFound} violations, ${elapsed}`) + '\n',
+    );
+
+    const auditResult = generateAuditResult(db, result.session.id, {
+      strictness: args.strictness,
+    });
+    process.stdout.write(formatAuditResult(auditResult) + '\n');
   } finally {
     db.close();
   }
@@ -980,6 +1029,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       case 'interactive':
         await ensureBrowserInstalled();
         await runInteractiveCommand(args);
+        return;
+      case 'audit':
+        await ensureBrowserInstalled();
+        await runAuditCommand(args);
         return;
       case 'generate':
         await runGenerateCommand(args);

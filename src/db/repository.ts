@@ -24,6 +24,9 @@ import type {
   PermissionsPolicyRow,
   InlineHash,
   InlineHashRow,
+  ExistingCspHeader,
+  ExistingCspHeaderRow,
+  ExistingCspHeaderType,
 } from '../types.js';
 
 const logger = createLogger();
@@ -317,6 +320,7 @@ export interface ViolationFilters {
   directive?: string;
   pageUrl?: string;
   origin?: string;
+  disposition?: 'enforce' | 'report';
 }
 
 export function getViolations(
@@ -339,6 +343,10 @@ export function getViolations(
     conditions.push("v.blocked_uri LIKE ? ESCAPE '\\'");
     const escapedOrigin = escapeLikePattern(filters.origin);
     params.push(`${escapedOrigin}%`);
+  }
+  if (filters?.disposition) {
+    conditions.push('v.disposition = ?');
+    params.push(filters.disposition);
   }
 
   const needsJoin = filters?.pageUrl != null;
@@ -539,4 +547,70 @@ export function getInlineHashes(db: Database.Database, sessionId: string): Inlin
     .prepare('SELECT * FROM inline_hashes WHERE session_id = ? ORDER BY directive, hash')
     .all(sessionId) as InlineHashRow[];
   return rows.map(toInlineHash);
+}
+
+// ── Existing CSP header repository ──────────────────────────────────────
+
+function toExistingCspHeader(row: ExistingCspHeaderRow): ExistingCspHeader {
+  return {
+    id: String(row.id),
+    sessionId: row.session_id,
+    pageId: row.page_id != null ? String(row.page_id) : null,
+    headerType: row.header_type,
+    headerValue: row.header_value,
+    sourceUrl: row.source_url,
+    createdAt: row.created_at,
+  };
+}
+
+export interface InsertExistingCspHeaderParams {
+  sessionId: string;
+  pageId: string | null;
+  headerType: ExistingCspHeaderType;
+  headerValue: string;
+  sourceUrl: string;
+}
+
+export function insertExistingCspHeader(
+  db: Database.Database,
+  p: InsertExistingCspHeaderParams,
+): ExistingCspHeader | null {
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO existing_csp_headers
+      (session_id, page_id, header_type, header_value, source_url)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const result = stmt.run(
+    p.sessionId,
+    p.pageId != null ? Number(p.pageId) : null,
+    p.headerType,
+    p.headerValue,
+    p.sourceUrl,
+  );
+  if (result.changes === 0) return null;
+
+  const row = db
+    .prepare('SELECT * FROM existing_csp_headers WHERE id = ?')
+    .get(result.lastInsertRowid) as ExistingCspHeaderRow;
+  return toExistingCspHeader(row);
+}
+
+export function getExistingCspHeaders(
+  db: Database.Database,
+  sessionId: string,
+  headerType?: ExistingCspHeaderType,
+): ExistingCspHeader[] {
+  if (headerType) {
+    const rows = db
+      .prepare(
+        'SELECT * FROM existing_csp_headers WHERE session_id = ? AND header_type = ? ORDER BY created_at',
+      )
+      .all(sessionId, headerType) as ExistingCspHeaderRow[];
+    return rows.map(toExistingCspHeader);
+  }
+
+  const rows = db
+    .prepare('SELECT * FROM existing_csp_headers WHERE session_id = ? ORDER BY created_at')
+    .all(sessionId) as ExistingCspHeaderRow[];
+  return rows.map(toExistingCspHeader);
 }

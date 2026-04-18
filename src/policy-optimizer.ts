@@ -63,6 +63,13 @@ export interface OptimizePolicyOptions {
    * remaining offenders without allowing them.
    */
   stripUnsafeEval?: boolean;
+  /**
+   * Unconditionally remove 'unsafe-inline' from all script/style directives
+   * and default-src. Used in strict audit mode to enforce hash-based inline
+   * content control. Inline hashes should be included in the policy before
+   * this option is applied.
+   */
+  stripUnsafeInline?: boolean;
 }
 
 /**
@@ -129,6 +136,23 @@ export function optimizePolicy(
     for (const directive of evalDirectives) {
       if (directive in result) {
         result[directive] = result[directive].filter((s) => s !== "'unsafe-eval'");
+      }
+    }
+  }
+
+  // Unconditionally remove 'unsafe-inline' from script/style directives and default-src.
+  // Used in strict audit mode — hashes should already be present in the policy to
+  // cover inline content. Any inline content without a hash will be blocked, surfacing
+  // what still needs to be addressed.
+  if (options?.stripUnsafeInline) {
+    const inlineDirectives = [
+      'default-src',
+      'script-src', 'script-src-elem', 'script-src-attr',
+      'style-src', 'style-src-elem', 'style-src-attr',
+    ];
+    for (const directive of inlineDirectives) {
+      if (directive in result) {
+        result[directive] = result[directive].filter((s) => s !== "'unsafe-inline'");
       }
     }
   }

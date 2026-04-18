@@ -542,3 +542,82 @@ describe('stripUnsafeEval', () => {
     expect(result['style-src']).toContain("'unsafe-eval'");
   });
 });
+
+// ── Strip 'unsafe-inline' (audit strict mode) ──────────────────────────
+
+describe('stripUnsafeInline', () => {
+  it('removes unsafe-inline from script-src unconditionally', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+    expect(result['script-src']).toContain("'self'");
+  });
+
+  it('removes unsafe-inline from style-src unconditionally', () => {
+    const result = optimizePolicy(
+      { 'style-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    expect(result['style-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('removes unsafe-inline from default-src', () => {
+    const result = optimizePolicy(
+      { 'default-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    expect(result['default-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('removes unsafe-inline from sub-directives', () => {
+    const result = optimizePolicy(
+      {
+        'script-src-elem': ["'unsafe-inline'", "'sha256-abc'"],
+        'script-src-attr': ["'unsafe-inline'"],
+        'style-src-elem': ["'unsafe-inline'"],
+        'style-src-attr': ["'unsafe-inline'", "'sha256-def'"],
+      },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    expect(result['script-src-elem']).not.toContain("'unsafe-inline'");
+    expect(result['script-src-attr']).not.toContain("'unsafe-inline'");
+    expect(result['style-src-elem']).not.toContain("'unsafe-inline'");
+    expect(result['style-src-attr']).not.toContain("'unsafe-inline'");
+  });
+
+  it('does not remove unsafe-inline when option is false', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { stripUnsafeInline: false },
+    );
+    expect(result['script-src']).toContain("'unsafe-inline'");
+  });
+
+  it('removes unsafe-inline even without hashes present', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    // Unlike useHashes which only removes when hashes exist,
+    // stripUnsafeInline is unconditional
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+  });
+
+  it('does not affect unsafe-eval', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'unsafe-inline'", "'unsafe-eval'"] },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+    expect(result['script-src']).toContain("'unsafe-eval'");
+  });
+});

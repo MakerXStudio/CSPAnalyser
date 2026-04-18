@@ -11,9 +11,11 @@ import {
   insertPage,
   getPages,
   insertPermissionsPolicy,
+  insertExistingCspHeader,
 } from './db/repository.js';
 import { startReportServer } from './report-server.js';
 import { setupCspInjection, type CapturedPermissionsPolicy } from './csp-injector.js';
+import { setupCspPassthrough } from './csp-passthrough.js';
 import { parsePermissionsPolicyHeaders } from './permissions-policy.js';
 import { setupViolationListener } from './violation-listener.js';
 import { crawl, type CrawlCallbacks } from './crawler.js';
@@ -69,6 +71,7 @@ export interface SessionDeps {
   createAuthenticatedContext: typeof createAuthenticatedContext;
   crawl: typeof crawl;
   setupCspInjection: typeof setupCspInjection;
+  setupCspPassthrough: typeof setupCspPassthrough;
   setupViolationListener: typeof setupViolationListener;
   extractInlineHashes: typeof extractInlineHashes;
   setupInlineContentObserver: typeof setupInlineContentObserver;
@@ -514,5 +517,211 @@ export async function runInteractiveSession(
       }
     }
     logger.info('Interactive session cleanup complete', { sessionId });
+  }
+}
+
+// ── Audit session orchestrator ───────────────────────────────────────
+
+/**
+ * Runs an audit CSP analysis session.
+ *
+ * Unlike runSession, this preserves the site's existing CSP headers instead of
+ * injecting a deny-all policy. Only violations triggered by the existing CSP
+ * are captured. The existing CSP headers are stored in the database for later
+ * comparison and merging.
+ */
+export async function runAuditSession(
+  db: Database.Database,
+  config: SessionConfig,
+  options?: RunSessionOptions,
+  deps?: Partial<SessionDeps>,
+): Promise<SessionResult> {
+  const headless = options?.headless ?? true;
+  const progress = options?.onProgress ?? (() => {});
+
+  const _launchBrowser =
+    deps?.launchBrowser ??
+    (async (opts: { headless: boolean }) => {
+      const { chromium } = await import('playwright');
+      return chromium.launch({ headless: opts.headless });
+    });
+  const _startReportServer = deps?.startReportServer ?? startReportServer;
+  const _createAuthContext = deps?.createAuthenticatedContext ?? createAuthenticatedContext;
+  const _crawl = deps?.crawl ?? crawl;
+  const _setupCspPassthrough = deps?.setupCspPassthrough ?? setupCspPassthrough;
+  const _setupViolationListener = deps?.setupViolationListener ?? setupViolationListener;
+  const _extractInlineHashes = deps?.extractInlineHashes ?? extractInlineHashes;
+  const _setupInlineContentObserver =
+    deps?.setupInlineContentObserver ?? setupInlineContentObserver;
+
+  // 1. Create session (with audit flag)
+  const auditConfig: SessionConfig = { ...config, audit: true };
+  const session = createSession(db, auditConfig);
+  const sessionId = session.id;
+  progress(`Audit session created: ${sessionId}`);
+  logger.info('Audit session created', { sessionId, targetUrl: config.targetUrl });
+
+  let browser: Browser | null = null;
+  let reportServer: { port: number; token: string; close: () => Promise<void> } | null = null;
+  let context: BrowserContext | null = null;
+
+  try {
+    const targetOrigin = extractOrigin(config.targetUrl);
+
+    // 2. Start report server
+    progress('Starting report server...');
+    reportServer = await _startReportServer(db, sessionId, {
+      violationLimit: config.violationLimit,
+    });
+    const reportServerPort = reportServer.port;
+    const reportToken = reportServer.token;
+    updateSession(db, sessionId, { reportServerPort });
+    logger.info('Report server started', { port: reportServerPort });
+
+    // 3. Launch browser
+    progress('Launching browser...');
+    browser = await _launchBrowser({ headless });
+
+    // 4. Create authenticated context
+    progress('Setting up browser context...');
+    const authOptions: AuthOptions = {
+      storageStatePath: config.storageStatePath,
+      cookies: config.cookies,
+      headless,
+    };
+
+    const authResult = await _createAuthContext(
+      browser as unknown as Parameters<typeof createAuthenticatedContext>[0],
+      config.targetUrl,
+      authOptions,
+    );
+    context = authResult.context as unknown as BrowserContext;
+
+    // 5. Update status to crawling
+    updateSession(db, sessionId, { status: 'crawling' });
+    progress('Auditing existing CSP...');
+
+    // 6. Set up crawl callbacks
+    const crawlConfig: CrawlConfig = {
+      ...DEFAULT_CRAWL_CONFIG,
+      ...config.crawlConfig,
+    };
+
+    const onPermissionsPolicy = (
+      captured: CapturedPermissionsPolicy[],
+      requestUrl: string,
+      pageId: string,
+    ) => {
+      const headers: Record<string, string> = {};
+      for (const c of captured) {
+        headers[c.headerName] = c.headerValue;
+      }
+      const parsed = parsePermissionsPolicyHeaders(headers);
+      for (const p of parsed) {
+        insertPermissionsPolicy(db, {
+          sessionId,
+          pageId,
+          directive: p.directive,
+          allowlist: p.allowlist,
+          headerType: p.headerType,
+          sourceUrl: requestUrl,
+        });
+      }
+    };
+
+    const callbacks: CrawlCallbacks = {
+      onPageCreated: async (page: Page, _url: string, pageId: string) => {
+        // Use CSP passthrough instead of deny-all injection
+        await _setupCspPassthrough(
+          page,
+          reportServerPort,
+          reportToken,
+          (capturedHeaders, reqUrl) => {
+            for (const captured of capturedHeaders) {
+              insertExistingCspHeader(db, {
+                sessionId,
+                pageId,
+                headerType: captured.headerType,
+                headerValue: captured.headerValue,
+                sourceUrl: reqUrl,
+              });
+            }
+          },
+          (captured, reqUrl) => {
+            onPermissionsPolicy(captured, reqUrl, pageId);
+          },
+          targetOrigin,
+        );
+        await _setupViolationListener(page, db, sessionId, pageId);
+        await _setupInlineContentObserver(page, db, sessionId, pageId);
+      },
+      onPageLoaded: async (page: Page, url: string, pageId: string) => {
+        progress(`Audited: ${url}`);
+        await _extractInlineHashes(page, db, sessionId, pageId);
+      },
+    };
+
+    // 7. Crawl
+    const crawlResult = await _crawl(
+      context,
+      db,
+      sessionId,
+      config.targetUrl,
+      crawlConfig,
+      callbacks,
+    );
+
+    // 8. Update to analyzing then complete
+    updateSession(db, sessionId, { status: 'analyzing' });
+    progress('Analysis complete');
+    updateSession(db, sessionId, { status: 'complete' });
+
+    // 9. Build result
+    const violations = getViolations(db, sessionId);
+    const finalSession = getSession(db, sessionId);
+    if (!finalSession) {
+      throw new Error(`Session ${sessionId} not found after completion`);
+    }
+
+    return {
+      session: finalSession,
+      pagesVisited: crawlResult.pagesVisited,
+      violationsFound: violations.length,
+      errors: crawlResult.errors,
+    };
+  } catch (err) {
+    logger.error('Audit session failed', {
+      sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    try {
+      updateSession(db, sessionId, { status: 'failed' });
+    } catch {
+      // Best-effort
+    }
+    throw err;
+  } finally {
+    if (context) {
+      try {
+        await context.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (reportServer) {
+      try {
+        await reportServer.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    logger.info('Audit session cleanup complete', { sessionId });
   }
 }

@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS inline_hashes (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(session_id, directive, hash)
 );
+
+CREATE TABLE IF NOT EXISTS existing_csp_headers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+  header_type TEXT NOT NULL,
+  header_value TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(session_id, header_type, source_url)
+);
 `;
 
 export function initializeDatabase(db: Database.Database): void {

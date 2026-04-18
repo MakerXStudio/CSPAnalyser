@@ -71,7 +71,8 @@ describe('tool registration', () => {
     expect('get_session' in tools).toBe(true);
     expect('list_sessions' in tools).toBe(true);
     expect('get_permissions_policy' in tools).toBe(true);
-    expect(Object.keys(tools).length).toBe(10);
+    expect('audit_policy' in tools).toBe(true);
+    expect(Object.keys(tools).length).toBe(11);
   });
 });
 

@@ -21,8 +21,11 @@ import { createLogger } from './utils/logger.js';
 import { validateTargetUrl } from './utils/url-utils.js';
 import { getDataDir, resolveProjectName } from './utils/file-utils.js';
 // Lazy import type for session-manager (dynamic import requires inline type annotation)
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-type SessionManagerModule = { runSession: (typeof import('./session-manager.js'))['runSession'] };
+import type { runSession, runAuditSession } from './session-manager.js';
+type SessionManagerModule = {
+  runSession: typeof runSession;
+  runAuditSession: typeof runAuditSession;
+};
 
 const logger = createLogger();
 
@@ -602,6 +605,100 @@ export function createMcpServer(db: Database.Database): McpServer {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return toolError(`Failed to get permissions policies: ${message}`);
+      }
+    },
+  );
+
+  // ── audit_policy ─────────────────────────────────────────────────────
+
+  server.registerTool(
+    'audit_policy',
+    {
+      description:
+        'Audit an existing CSP: crawl a website preserving its current CSP, capture violations, and produce a diff plus merged policy. In strict mode, unsafe-inline is stripped and replaced with hashes.',
+      inputSchema: {
+        targetUrl: z.url().describe('The URL to audit'),
+        depth: z.number().int().min(0).max(10).optional().describe('Crawl depth (default: 1)'),
+        maxPages: z
+          .number()
+          .int()
+          .min(1)
+          .max(1000)
+          .optional()
+          .describe('Maximum pages to crawl (default: 10)'),
+        settlementDelay: z
+          .number()
+          .int()
+          .min(0)
+          .max(10000)
+          .optional()
+          .describe('Milliseconds to wait after page load for late violations (default: 2000)'),
+        storageStatePath: z
+          .string()
+          .optional()
+          .describe('Path to Playwright storageState JSON for authenticated sessions'),
+        strictness: z
+          .enum(['strict', 'moderate', 'permissive'])
+          .optional()
+          .describe(
+            'Policy strictness level (default: moderate). Strict mode strips unsafe-inline and generates hashes.',
+          ),
+        violationLimit: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Maximum violations to accept per session (default: 10000, 0 for unlimited)'),
+      },
+    },
+    async (args) => {
+      try {
+        validateTargetUrl(args.targetUrl);
+        const { runAuditSession } = (await import('./session-manager.js')) as SessionManagerModule;
+        const { generateAuditResult, formatAuditResult } = await import('./audit.js');
+
+        const strictness = args.strictness ?? 'moderate';
+
+        const result = await runAuditSession(db, {
+          targetUrl: args.targetUrl,
+          crawlConfig: {
+            depth: args.depth,
+            maxPages: args.maxPages,
+            settlementDelay: args.settlementDelay,
+          },
+          storageStatePath: args.storageStatePath,
+          violationLimit: args.violationLimit,
+          project: resolveProjectName(),
+        });
+
+        const auditResult = generateAuditResult(db, result.session.id, { strictness });
+
+        return toolResult({
+          sessionId: auditResult.sessionId,
+          pagesVisited: result.pagesVisited,
+          violationsFound: auditResult.violationsFound,
+          enforced: auditResult.enforced
+            ? {
+                existingDirectives: auditResult.enforced.existingDirectives,
+                mergedDirectives: auditResult.enforced.mergedDirectives,
+                diff: auditResult.enforced.diff,
+                violationCount: auditResult.enforced.violationCount,
+              }
+            : null,
+          reportOnly: auditResult.reportOnly
+            ? {
+                existingDirectives: auditResult.reportOnly.existingDirectives,
+                mergedDirectives: auditResult.reportOnly.mergedDirectives,
+                diff: auditResult.reportOnly.diff,
+                violationCount: auditResult.reportOnly.violationCount,
+              }
+            : null,
+          formatted: formatAuditResult(auditResult),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('audit_policy failed', { error: message });
+        return toolError(`Failed to audit policy: ${message}`);
       }
     },
   );
