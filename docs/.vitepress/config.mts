@@ -1,12 +1,20 @@
 import { defineConfig } from 'vitepress'
 
+const siteUrl = 'https://cspanalyser.com'
+
 export default defineConfig({
   title: 'CSP Analyser',
   description:
-    'Generate production-ready Content Security Policy headers by crawling websites',
+    'Automated Content Security Policy generator — crawl any website with Playwright, capture CSP violations, and export production-ready headers. Available as a CLI and MCP server.',
 
   base: '/',
   ignoreDeadLinks: true,
+  cleanUrls: true,
+  lastUpdated: true,
+
+  sitemap: {
+    hostname: siteUrl,
+  },
 
   // Note: the Content-Security-Policy meta tag is NOT declared here — it is
   // injected post-build by scripts/generate-csp.mjs, which hashes the actual
@@ -15,17 +23,49 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#5b7ee5' }],
-    ['meta', { name: 'og:type', content: 'website' }],
-    ['meta', { name: 'og:title', content: 'CSP Analyser' }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: 'CSP Analyser' }],
     [
       'meta',
       {
-        name: 'og:description',
+        property: 'og:description',
         content:
-          'Generate production-ready Content Security Policy headers by crawling websites',
+          'Automated Content Security Policy generator — crawl any website with Playwright, capture CSP violations, and export production-ready headers.',
       },
     ],
+    ['meta', { property: 'og:image', content: `${siteUrl}/social-card.png` }],
+    ['meta', { property: 'og:url', content: siteUrl }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: 'CSP Analyser' }],
+    [
+      'meta',
+      {
+        name: 'twitter:description',
+        content:
+          'Automated Content Security Policy generator — crawl any website with Playwright, capture CSP violations, and export production-ready headers.',
+      },
+    ],
+    ['meta', { name: 'twitter:image', content: `${siteUrl}/social-card.png` }],
   ],
+
+  transformHead({ pageData }) {
+    const canonicalUrl = `${siteUrl}/${pageData.relativePath}`
+      .replace(/index\.md$/, '')
+      .replace(/\.md$/, '')
+
+    const head: Array<[string, Record<string, string>]> = [
+      ['link', { rel: 'canonical', href: canonicalUrl }],
+    ]
+
+    if (pageData.frontmatter.ogImage) {
+      head.push([
+        'meta',
+        { property: 'og:image', content: `${siteUrl}${pageData.frontmatter.ogImage}` },
+      ])
+    }
+
+    return head
+  },
 
   themeConfig: {
     nav: [
