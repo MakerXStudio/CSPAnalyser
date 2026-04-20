@@ -1,3 +1,8 @@
+---
+title: csp-analyser sessions — List Analysis Sessions
+description: List CSP Analyser sessions stored in the local database, showing ID, status, timestamp, violation count, and target URL.
+---
+
 # sessions
 
 List analysis sessions stored in the local database, showing their ID, status, timestamp, violation count, and target URL.
@@ -73,3 +78,14 @@ csp-analyser sessions --project my-other-app
 - Check whether a previous crawl completed successfully
 - Review how many violations were captured across different runs
 - Use `--all` to find sessions created from a different working directory
+
+## When to use this command
+
+Use `sessions` to find session IDs for use with other commands like [`diff`](/cli/diff), [`export`](/cli/export), [`generate`](/cli/generate), and [`score`](/cli/score). It lists all sessions stored in your local database, filtered to the current project by default. Pass `--all` to see sessions across all projects.
+
+## Related commands
+
+- [`diff`](/cli/diff) — Compare two sessions from the list
+- [`export`](/cli/export) — Export a specific session's policy
+- [`score`](/cli/score) — Score a specific session's policy
+- [`generate`](/cli/generate) — Regenerate a policy from a session

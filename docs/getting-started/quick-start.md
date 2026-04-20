@@ -1,3 +1,8 @@
+---
+title: CSP Analyser Quick Start
+description: Generate your first Content Security Policy header in minutes using CSP Analyser with Playwright-powered crawling.
+---
+
 # Quick Start
 
 Generate a production-ready CSP policy in five minutes.

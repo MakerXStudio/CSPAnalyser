@@ -1,3 +1,8 @@
+---
+title: csp-analyser start — Run the MCP Server
+description: Run the CSP Analyser MCP server over stdio so AI coding agents like Claude Code and Cursor can generate CSP policies as a tool.
+---
+
 # start
 
 Run the CSP Analyser MCP server over stdio. This is how AI coding agents (Claude Code, Cursor, etc.) invoke CSP Analyser as a tool.
@@ -48,3 +53,12 @@ The `start` subcommand is a thin wrapper that calls `dist/mcp-server.js`, so bot
 - [MCP Server Overview](../mcp/) — what the server does and when to use it
 - [MCP Tools Reference](../mcp/tools) — the full list of tools exposed over the MCP transport
 - [MCP Configuration](../mcp/configuration) — client-specific setup
+
+## When to use this command
+
+Use `start` when you want AI coding agents to use CSP Analyser as a tool. Running `csp-analyser start` launches the MCP server over stdio, allowing agents like Claude Code and Cursor to invoke CSP analysis tools programmatically. You typically don't run this command directly — instead, configure it in your agent's MCP settings. See the [MCP Configuration](/mcp/configuration) guide for setup instructions.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — The CLI equivalent of the MCP `crawl_url` tool
+- [`setup`](/cli/setup) — Install the browser before starting the MCP server

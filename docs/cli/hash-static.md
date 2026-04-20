@@ -1,3 +1,8 @@
+---
+title: csp-analyser hash-static — CSP for Static HTML Sites
+description: Generate a Content Security Policy for static HTML by hashing inline scripts, styles, and event-handler attributes — no browser required.
+---
+
 # hash-static
 
 Generate a CSP policy by scanning static HTML files for inline content — no browser or crawl required.
@@ -103,3 +108,13 @@ csp-analyser hash-static dist/ --format cloudflare-pages > dist/_headers
 - **HTML parsing is regex-based**, tuned for compliant machine-generated output (VitePress, Next.js, Astro, etc.). Hand-written HTML with unusual quoting may not parse cleanly.
 - **Runs without a database** — it does not create a session and cannot be compared, scored, or diffed via the session-based commands.
 - If you want to both hash static content *and* capture runtime-injected hashes automatically, run `crawl` against a local preview instead.
+
+## When to use this command
+
+Use `hash-static` as a post-build step for static sites (VitePress, Hugo, Jekyll, Astro, etc.) where you control the HTML output. It scans your built HTML files, computes SHA-256 hashes for every inline `<script>`, `<style>`, `style="..."` attribute, and `on*="..."` event handler, and emits a Content Security Policy that allows exactly those inline resources. No browser or network access required — it works entirely from the filesystem. Choose this over [`crawl`](/cli/crawl) when your site is static and you want deterministic, hash-based CSP generation.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Generate a CSP by crawling a live site with Playwright
+- [`export`](/cli/export) — Export a policy in a specific deployment format
+- [`score`](/cli/score) — Score the generated policy

@@ -137,3 +137,21 @@ The report collector HTTP server (for capturing CSP violations from the browser)
 | `LOCALAPPDATA` | Override the Windows data directory root | Set by Windows |
 
 Logs are written to stderr to avoid interfering with the MCP JSON protocol on stdout.
+
+## FAQ
+
+### The MCP server starts but the agent can't find CSP tools — what's wrong?
+
+Make sure the agent is configured to use stdio transport and that `csp-analyser` is on the `PATH` of the shell the agent spawns. If you installed locally, use the full `npx csp-analyser start` command in your config.
+
+### Can multiple agents share the same MCP server instance?
+
+No. Each agent should start its own server process. The server uses stdio transport, which is inherently one-to-one. Multiple concurrent sessions to the same database are not supported (SQLite locking).
+
+### Do I need to run `setup` before starting the MCP server?
+
+Yes, if you plan to use browser-based tools like `crawl_url`. The `setup` command installs the Playwright Chromium binary. Tools that don't need a browser (like `score_policy` or `export_policy`) work without it.
+
+### Where does the MCP server store data?
+
+In your platform's user-data directory — not in the project directory. See [Database location](#database-location) above for the exact paths. Nothing is written to your repository.

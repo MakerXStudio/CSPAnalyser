@@ -1,3 +1,8 @@
+---
+title: csp-analyser crawl — Crawl a Site and Generate CSP
+description: Crawl a website with Playwright, capture Content Security Policy violations, and generate a production-ready CSP header.
+---
+
 # crawl
 
 Headlessly crawl a website, capture CSP violations, and generate a policy.
@@ -111,3 +116,15 @@ csp-analyser crawl https://large-site.com --violation-limit 0
 ```
 
 Disables the 10,000 violation cap. Useful for very large sites, but increases memory and database usage.
+
+## When to use this command
+
+Use `crawl` when you want to generate a Content Security Policy for a live website automatically. It's the primary command for most users — point it at a URL and get a CSP header back. Choose `crawl` over [`interactive`](/cli/interactive) when the site can be navigated by following links (traditional multi-page sites, server-rendered apps). For single-page applications or sites requiring manual interaction, use [`interactive`](/cli/interactive) instead. For static HTML files that don't need a browser, use [`hash-static`](/cli/hash-static).
+
+## Related commands
+
+- [`interactive`](/cli/interactive) — Manual browser navigation for SPAs and complex sites
+- [`audit`](/cli/audit) — Crawl while preserving the site's existing CSP headers
+- [`generate`](/cli/generate) — Regenerate a policy from an existing crawl session
+- [`export`](/cli/export) — Export the generated policy in a specific format
+- [`score`](/cli/score) — Score the generated policy against best practices

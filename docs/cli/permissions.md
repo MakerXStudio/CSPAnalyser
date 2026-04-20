@@ -1,3 +1,8 @@
+---
+title: csp-analyser permissions — View Permissions-Policy Headers
+description: Display the Permissions-Policy and Feature-Policy headers captured during a CSP Analyser crawl session.
+---
+
 # permissions
 
 Display the Permissions-Policy (and legacy Feature-Policy) headers captured during a crawl session.
@@ -63,3 +68,13 @@ If the target site does not send `Permissions-Policy` or `Feature-Policy` header
 ```
 No Permissions-Policy headers captured for this session.
 ```
+
+## When to use this command
+
+Use `permissions` to review the Permissions-Policy and Feature-Policy headers that a site sends alongside its Content Security Policy. While CSP controls which resources can load, Permissions-Policy controls which browser features (camera, microphone, geolocation, etc.) the page can access. Reviewing both together gives a more complete picture of a site's security posture.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Capture permissions headers during a crawl
+- [`audit`](/cli/audit) — Capture permissions headers during an audit
+- [`sessions`](/cli/sessions) — Find a session ID to inspect

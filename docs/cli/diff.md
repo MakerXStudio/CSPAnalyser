@@ -1,3 +1,8 @@
+---
+title: csp-analyser diff — Compare CSP Sessions
+description: Compare CSP sessions to see policy changes and new or resolved violations between crawl runs.
+---
+
 # diff
 
 Compare the policies and violations between two sessions to see what changed.
@@ -80,3 +85,14 @@ csp-analyser diff abc123 def456 --strictness permissive
 ### Track CSP drift over time
 
 Run periodic crawls and diff the most recent session against the previous one to detect new third-party resources or removed dependencies.
+
+## When to use this command
+
+Use `diff` after running multiple [`crawl`](/cli/crawl) or [`audit`](/cli/audit) sessions against the same site. It shows which CSP directives were added, removed, or changed between two sessions — useful for tracking how your policy evolves as you make changes to the site or tighten the policy. Use it in CI pipelines to catch unexpected policy regressions.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Generate the sessions to compare
+- [`audit`](/cli/audit) — Audit existing CSP and compare with a previous session
+- [`sessions`](/cli/sessions) — List available sessions and their IDs
+- [`score`](/cli/score) — Score individual sessions to understand quality changes

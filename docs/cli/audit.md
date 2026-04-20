@@ -1,3 +1,8 @@
+---
+title: csp-analyser audit — Audit an Existing CSP Deployment
+description: Audit an existing Content Security Policy deployment, capture violations against enforced and report-only headers, and generate an updated policy.
+---
+
 # audit
 
 Audit an existing CSP deployment: crawl a website preserving its current CSP headers, capture violations, and produce a diff plus an updated policy for both enforced and report-only headers.
@@ -126,3 +131,14 @@ csp-analyser audit https://example.com > audit-report.txt
 ```
 
 Progress appears in the terminal; the audit report goes to the file.
+
+## When to use this command
+
+Use `audit` when a site already has Content Security Policy headers deployed and you want to evaluate them. Unlike [`crawl`](/cli/crawl), which strips existing CSP headers and injects a deny-all policy, `audit` preserves the site's current headers and captures violations against them. This tells you what the existing policy is missing or what it allows unnecessarily. Use `audit` for security reviews, compliance checks, or before tightening an existing CSP.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Generate a CSP from scratch (strips existing headers)
+- [`score`](/cli/score) — Score the audited policy against best practices
+- [`diff`](/cli/diff) — Compare the audit session with a previous crawl
+- [`export`](/cli/export) — Export the updated policy in a deployment format

@@ -1,3 +1,8 @@
+---
+title: csp-analyser export — Export CSP in Any Format
+description: Export a generated Content Security Policy header for nginx, Apache, Cloudflare, HTML meta, Helmet, Azure Front Door, JSON, and more.
+---
+
 # export
 
 Export a session's CSP policy in a deployment-ready format.
@@ -132,3 +137,13 @@ csp-analyser export abc123 --format json | jq '.directives | keys'
 ```bash
 csp-analyser export abc123 --format cloudflare-pages > public/_headers
 ```
+
+## When to use this command
+
+Use `export` when you've already generated a policy via [`crawl`](/cli/crawl), [`audit`](/cli/audit), or [`generate`](/cli/generate) and need it in a specific deployment format. While `crawl` outputs a raw header by default, `export` lets you re-export any session's policy as nginx config, Apache config, Cloudflare headers, HTML meta tags, Helmet middleware config, or JSON — without re-running the analysis.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Generate a policy (also supports `--format` for inline export)
+- [`generate`](/cli/generate) — Regenerate a policy with different strictness settings
+- [`sessions`](/cli/sessions) — Find the session ID to export

@@ -122,3 +122,21 @@ Storage state files and cookies contain session secrets. Never commit them to ve
 - Storage state files can contain localStorage data, which may include tokens, user data, or API keys
 - The `--storage-state` path is resolved through symlinks using `fs.realpathSync()` to prevent symlink-based path traversal attacks
 - Cookie values are validated against RFC 6265 to prevent header injection
+
+## FAQ
+
+### How long does a storage state file stay valid?
+
+It depends on the site's session expiry. Most session cookies expire after hours or days. If a crawl fails with authentication errors, regenerate the storage state by logging in again with `csp-analyser interactive --save-storage-state auth.json`.
+
+### Can I use OAuth / SSO / MFA?
+
+Yes — use the [`interactive`](/cli/interactive) command to log in through any browser-based flow (OAuth redirects, SAML SSO, TOTP/MFA). Once logged in, save the session with `--save-storage-state` for reuse in headless crawls.
+
+### Does cookie injection work with the CLI?
+
+Cookie injection is currently only available through the [MCP tools](/mcp/tools). The CLI supports storage state files (`--storage-state`) and interactive login. For CLI workflows, generate a storage state file first, then pass it to `crawl` or `audit`.
+
+### Can I analyse multiple authenticated sites in one session?
+
+No. Each session targets a single URL origin. Run separate crawls for each site, each with its own storage state file or cookie set.

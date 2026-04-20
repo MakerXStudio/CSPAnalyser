@@ -1,3 +1,8 @@
+---
+title: csp-analyser setup — Install Playwright Browser
+description: Install the Playwright Chromium browser and verify it can launch on your system for CSP analysis.
+---
+
 # setup
 
 Install the Playwright Chromium browser and verify it can launch on your system.
@@ -63,3 +68,13 @@ Run `csp-analyser setup` again if:
 - You moved to a different machine or container
 
 The CLI also checks for a working browser before every `crawl` and `interactive` command. If the check fails, it prints a message directing you to run `setup`.
+
+## When to use this command
+
+Run `setup` once after installing CSP Analyser, or after upgrading to a new version that bumps the Playwright dependency. It downloads the Chromium browser binary that all browser-based commands ([`crawl`](/cli/crawl), [`interactive`](/cli/interactive), [`audit`](/cli/audit)) require. If you already have Playwright browsers from another project, `setup` detects and reuses them.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Uses the browser installed by `setup`
+- [`interactive`](/cli/interactive) — Uses the browser installed by `setup`
+- [`hash-static`](/cli/hash-static) — Does **not** require `setup` (no browser needed)

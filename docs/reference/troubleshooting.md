@@ -182,3 +182,21 @@ If none of the above solve your issue:
 1. Run with debug logging: `LOG_LEVEL=debug csp-analyser crawl <url>`
 2. Check the database: the `.csp-analyser/data.db` SQLite file can be inspected with any SQLite client
 3. File an issue with the debug output and your OS/Node.js version
+
+## FAQ
+
+### Why does my policy still show `unsafe-inline`?
+
+By default, CSP Analyser generates a policy that reflects what the browser observed. If your site uses inline scripts or styles without nonces or hashes, the generator includes `'unsafe-inline'` to avoid breaking the page. Use `--nonce`, `--hash`, or `--strict-dynamic` to replace `'unsafe-inline'` with safer alternatives.
+
+### Can I run CSP Analyser in Docker?
+
+Yes, but you need to install Chromium's system dependencies inside the container. Use `npx playwright install-deps chromium` in your Dockerfile after installing CSP Analyser. See the [Installation](/getting-started/) page for platform-specific notes.
+
+### How do I reset the database?
+
+Delete the SQLite database file from your [data directory](/getting-started/#data-directory). CSP Analyser recreates it automatically on the next run.
+
+### The crawl finishes instantly with 0 pages — what's wrong?
+
+The target URL is likely returning a redirect (e.g., to a login page) that CSP Analyser does not follow. Use the [`interactive`](/cli/interactive) command to log in manually, or pass a `--storage-state` file. See the [Authentication guide](/guides/authentication) for details.

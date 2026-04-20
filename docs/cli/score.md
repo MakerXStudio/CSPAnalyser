@@ -1,3 +1,8 @@
+---
+title: csp-analyser score — Score Your CSP Policy
+description: Score a generated Content Security Policy against security best practices and get a numeric grade with actionable feedback.
+---
+
 # score
 
 Score a session's generated CSP policy against security best practices.
@@ -113,3 +118,13 @@ for level in strict moderate permissive; do
   echo
 done
 ```
+
+## When to use this command
+
+Use `score` after any [`crawl`](/cli/crawl), [`audit`](/cli/audit), or [`generate`](/cli/generate) run to evaluate the quality of the generated Content Security Policy. The scorer checks for best practices like having a `default-src`, avoiding `unsafe-inline` and `unsafe-eval`, and using report-only mode appropriately. Use the score to decide whether to tighten your policy with a stricter [strictness level](/guides/strictness) or enable options like `--nonce` or `--hash`.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Generate a policy to score
+- [`generate`](/cli/generate) — Regenerate with stricter settings to improve the score
+- [`diff`](/cli/diff) — Compare scores between sessions

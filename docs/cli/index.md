@@ -1,3 +1,8 @@
+---
+title: CSP Analyser CLI Reference
+description: Reference for every CSP Analyser CLI command, option, and output mode for generating Content Security Policy headers.
+---
+
 # CLI Reference
 
 The `csp-analyser` CLI generates production-ready Content Security Policy headers by crawling websites, capturing violations, and building a minimal policy.

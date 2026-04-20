@@ -1,3 +1,8 @@
+---
+title: csp-analyser interactive — Manual Browser CSP Capture
+description: Open a headed Playwright browser for manual navigation to capture CSP violations and generate a policy for SPAs and complex sites.
+---
+
 # interactive
 
 Open a headed (visible) browser window for manual navigation. Violations are captured as you browse, and a policy is generated when you close the browser.
@@ -100,3 +105,14 @@ csp-analyser interactive https://example.com > policy.txt
 ```
 
 Progress messages appear in the terminal while you browse. The policy is written to the file after you close the browser.
+
+## When to use this command
+
+Use `interactive` for single-page applications, sites with complex client-side routing, or any page that requires manual interaction to trigger all resource loads. Unlike [`crawl`](/cli/crawl) which follows links automatically, `interactive` opens a visible browser window and lets you navigate manually — clicking buttons, filling forms, triggering modals, and exercising dynamic content. When you close the browser, CSP Analyser generates the policy from everything it observed. Not suitable for headless CI environments.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Automatic headless crawling for traditional multi-page sites
+- [`audit`](/cli/audit) — Audit an existing CSP with manual or automatic navigation
+- [`generate`](/cli/generate) — Regenerate the policy with different settings
+- [`export`](/cli/export) — Export the generated policy in a deployment format

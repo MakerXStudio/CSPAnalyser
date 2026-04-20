@@ -1,3 +1,8 @@
+---
+title: csp-analyser generate — Regenerate a CSP Policy
+description: Regenerate a Content Security Policy from an existing crawl session without re-running the Playwright analysis.
+---
+
 # generate
 
 Regenerate a CSP policy from an existing session's violation data, without re-crawling the site.
@@ -72,3 +77,14 @@ csp-analyser generate abc123 --report-only
 ```bash
 csp-analyser generate abc123 --format json | jq '.directives'
 ```
+
+## When to use this command
+
+Use `generate` when you want to rebuild a CSP policy from an existing session's violation data without re-crawling the site. This is useful when you want to try different [strictness levels](/guides/strictness), toggle nonce or hash options, or adjust other policy generation settings. It's much faster than running a new crawl since it reuses the already-captured violations.
+
+## Related commands
+
+- [`crawl`](/cli/crawl) — Run a new crawl to capture fresh violation data
+- [`export`](/cli/export) — Export the regenerated policy in a deployment format
+- [`score`](/cli/score) — Score the regenerated policy
+- [`diff`](/cli/diff) — Compare the regenerated policy with another session
