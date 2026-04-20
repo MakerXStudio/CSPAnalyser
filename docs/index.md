@@ -22,8 +22,8 @@ features:
     details: Automatically crawl your site with a deny-all report-only CSP, capturing every violation. Playwright-powered with configurable depth, page limits, and authentication support.
   - title: MCP Server for AI Agents
     details: Expose the full pipeline as an MCP server over stdio. AI coding agents can generate, score, and diff CSP policies without leaving their workflow.
-  - title: 7 Export Formats
-    details: Export your policy as a raw header, HTML meta tag, Nginx config, Apache config, Cloudflare Workers header, Cloudflare Pages header, or structured JSON.
+  - title: 9 Export Formats
+    details: Export your policy as a raw header, HTML meta tag, Nginx config, Apache config, Cloudflare Workers, Cloudflare Pages, Azure Front Door (Bicep), Helmet.js, or structured JSON.
 ---
 
 ## What is CSP Analyser?

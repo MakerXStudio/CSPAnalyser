@@ -10,7 +10,6 @@ export default defineConfig({
   base: '/',
   ignoreDeadLinks: true,
   cleanUrls: true,
-  lastUpdated: true,
 
   sitemap: {
     hostname: siteUrl,
@@ -24,27 +23,8 @@ export default defineConfig({
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#5b7ee5' }],
     ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:title', content: 'CSP Analyser' }],
-    [
-      'meta',
-      {
-        property: 'og:description',
-        content:
-          'Automated Content Security Policy generator — crawl any website with Playwright, capture CSP violations, and export production-ready headers.',
-      },
-    ],
     ['meta', { property: 'og:image', content: `${siteUrl}/social-card.png` }],
-    ['meta', { property: 'og:url', content: siteUrl }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    ['meta', { name: 'twitter:title', content: 'CSP Analyser' }],
-    [
-      'meta',
-      {
-        name: 'twitter:description',
-        content:
-          'Automated Content Security Policy generator — crawl any website with Playwright, capture CSP violations, and export production-ready headers.',
-      },
-    ],
     ['meta', { name: 'twitter:image', content: `${siteUrl}/social-card.png` }],
   ],
 
@@ -53,15 +33,32 @@ export default defineConfig({
       .replace(/index\.md$/, '')
       .replace(/\.md$/, '')
 
+    const pageTitle = pageData.frontmatter.title || pageData.title || 'CSP Analyser'
+    const pageDescription =
+      pageData.frontmatter.description || pageData.description || ''
+    const ogImage = pageData.frontmatter.ogImage
+      ? `${siteUrl}${pageData.frontmatter.ogImage}`
+      : `${siteUrl}/social-card.png`
+
     const head: Array<[string, Record<string, string>]> = [
       ['link', { rel: 'canonical', href: canonicalUrl }],
+      ['meta', { property: 'og:title', content: pageTitle }],
+      ['meta', { property: 'og:url', content: canonicalUrl }],
+      ['meta', { name: 'twitter:title', content: pageTitle }],
     ]
 
+    if (pageDescription) {
+      head.push(
+        ['meta', { property: 'og:description', content: pageDescription }],
+        ['meta', { name: 'twitter:description', content: pageDescription }],
+      )
+    }
+
     if (pageData.frontmatter.ogImage) {
-      head.push([
-        'meta',
-        { property: 'og:image', content: `${siteUrl}${pageData.frontmatter.ogImage}` },
-      ])
+      head.push(
+        ['meta', { property: 'og:image', content: ogImage }],
+        ['meta', { name: 'twitter:image', content: ogImage }],
+      )
     }
 
     return head
