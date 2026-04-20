@@ -10,6 +10,7 @@ const META_STRIPPED_DIRECTIVES = ['report-uri', 'report-to'];
  */
 export function directivesToString(directives: Record<string, string[]>): string {
   return Object.entries(directives)
+    .filter(([, sources]) => sources.length > 0)
     .map(([directive, sources]) => `${directive} ${sources.join(' ')}`)
     .join('; ');
 }
@@ -53,6 +54,12 @@ export function formatPolicy(
     }
 
     case 'meta': {
+      if (isReportOnly) {
+        throw new Error(
+          'Content-Security-Policy-Report-Only is not supported in <meta> tags. ' +
+            'Use the "header" format instead, or remove --report-only.',
+        );
+      }
       const filtered = stripMetaDirectives(directives);
       const policy = directivesToString(filtered);
       return `<meta http-equiv="${name}" content="${escapeHtmlAttr(policy)}">`;
@@ -82,7 +89,7 @@ export function formatPolicy(
 
     case 'cloudflare-pages': {
       const policy = directivesToString(directives);
-      return `/*\n  ${name}: ${policy}`;
+      return `/*\n  ${name}: ${policy}\n`;
     }
 
     case 'azure-frontdoor': {

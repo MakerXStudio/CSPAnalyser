@@ -201,7 +201,7 @@ describe('runInteractiveSession', () => {
       expect.anything(),
       db,
       expect.any(String),
-      null,
+      expect.any(Function),
     );
   });
 
@@ -555,14 +555,19 @@ describe('runInteractiveSession', () => {
 
     await new Promise((r) => setTimeout(r, 10));
 
-    // Get the initial page and find the 'load' event handler
+    // Get the initial page and find the event handlers
     const mockPage = mockBrowser._mockContext._mockPage;
+    const framenavHandlers = mockPage._eventHandlers.get('framenavigated');
     const loadHandlers = mockPage._eventHandlers.get('load');
+    expect(framenavHandlers).toBeDefined();
     expect(loadHandlers).toBeDefined();
-    expect(loadHandlers!.length).toBeGreaterThan(0);
 
-    // Simulate page navigation to a real URL
+    // Simulate page navigation to a real URL.
+    // framenavigated fires first (creates/looks up the page record),
+    // then load fires (triggers progress callback + inline hash extraction).
     mockPage.url.mockReturnValue('http://localhost:3000/dashboard');
+    const mainFrame = mockPage.mainFrame();
+    framenavHandlers![0]!(mainFrame);
     loadHandlers![0]!();
 
     // Verify the page was recorded in the DB
@@ -649,10 +654,13 @@ describe('runInteractiveSession', () => {
 
     await new Promise((r) => setTimeout(r, 10));
 
-    // Trigger a page load event
+    // Trigger framenavigated first (creates page record), then load
     const mockPage = mockBrowser._mockContext._mockPage;
+    const framenavHandlers = mockPage._eventHandlers.get('framenavigated');
     const loadHandlers = mockPage._eventHandlers.get('load');
     mockPage.url.mockReturnValue('http://localhost:3000/page');
+    const mainFrame = mockPage.mainFrame();
+    framenavHandlers![0]!(mainFrame);
     loadHandlers![0]!();
 
     // Allow the async extractor call to settle

@@ -70,9 +70,10 @@ describe('formatPolicy — meta', () => {
     expect(result).toContain("default-src 'self'");
   });
 
-  it('uses report-only http-equiv when isReportOnly is true', () => {
-    const result = formatPolicy({ 'default-src': ["'self'"] }, 'meta', true);
-    expect(result).toContain('Content-Security-Policy-Report-Only');
+  it('throws when isReportOnly is true for meta format', () => {
+    expect(() => formatPolicy({ 'default-src': ["'self'"] }, 'meta', true)).toThrow(
+      'Content-Security-Policy-Report-Only is not supported in <meta> tags',
+    );
   });
 
   it('HTML-escapes quotes, angle brackets, and ampersands in the content attribute', () => {
@@ -163,7 +164,7 @@ describe('formatPolicy — cloudflare', () => {
 describe('formatPolicy — cloudflare-pages', () => {
   it('produces a Cloudflare Pages _headers file snippet', () => {
     const result = formatPolicy({ 'default-src': ["'self'"] }, 'cloudflare-pages');
-    expect(result).toBe("/*\n  Content-Security-Policy: default-src 'self'");
+    expect(result).toBe("/*\n  Content-Security-Policy: default-src 'self'\n");
   });
 
   it('includes multiple directives on a single line', () => {
@@ -172,7 +173,7 @@ describe('formatPolicy — cloudflare-pages', () => {
       'cloudflare-pages',
     );
     expect(result).toBe(
-      "/*\n  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com",
+      "/*\n  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com\n",
     );
   });
 
@@ -184,7 +185,7 @@ describe('formatPolicy — cloudflare-pages', () => {
 
   it('handles empty directives', () => {
     const result = formatPolicy({}, 'cloudflare-pages');
-    expect(result).toBe('/*\n  Content-Security-Policy: ');
+    expect(result).toBe('/*\n  Content-Security-Policy: \n');
   });
 });
 

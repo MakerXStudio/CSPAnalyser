@@ -58,12 +58,15 @@ if(document.readyState!=='loading')scan();else document.addEventListener('DOMCon
  * the MutationObserver init script. The exposed function receives content
  * from the browser, computes SHA-256 hashes, and stores them in the
  * inline_hashes database table.
+ *
+ * @param pageId - Either a static page ID or a resolver function that returns
+ *   the current page ID (used in interactive mode where the page ID changes on navigation).
  */
 export async function setupInlineContentObserver(
   page: Page,
   db: Database.Database,
   sessionId: string,
-  pageId: string | null,
+  pageId: string | null | (() => string | null),
 ): Promise<void> {
   await page.exposeFunction('__cspInlineContentReport', (data: unknown) => {
     const report = parseReport(data);
@@ -76,10 +79,11 @@ export async function setupInlineContentObserver(
       return;
     }
 
+    const resolvedPageId = typeof pageId === 'function' ? pageId() : pageId;
     const hash = createHash('sha256').update(report.content).digest('base64');
     insertInlineHash(db, {
       sessionId,
-      pageId,
+      pageId: resolvedPageId,
       directive: report.directive,
       hash,
       contentLength: report.content.length,

@@ -244,6 +244,14 @@ export function optimizePolicy(
     }
   }
 
+  // Remove directives that ended up with no sources (e.g. after stripping
+  // unsafe-inline/unsafe-eval). An empty source list is not valid CSP.
+  for (const key of Object.keys(result)) {
+    if (result[key].length === 0) {
+      delete result[key];
+    }
+  }
+
   // Sort directives: default-src first, then alphabetical
   const sorted: Record<string, string[]> = {};
   const keys = Object.keys(result).sort((a, b) => {

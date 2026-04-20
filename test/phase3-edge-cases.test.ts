@@ -357,7 +357,7 @@ describe('policy-formatter edge cases', () => {
 
   it('all formats work with report-only flag', () => {
     const directives = { 'default-src': ["'self'"] };
-    for (const format of ['header', 'meta', 'nginx', 'apache', 'cloudflare', 'json'] as const) {
+    for (const format of ['header', 'nginx', 'apache', 'cloudflare', 'json'] as const) {
       const result = formatPolicy(directives, format, true);
       if (format === 'json') {
         expect(JSON.parse(result).isReportOnly).toBe(true);
@@ -365,5 +365,12 @@ describe('policy-formatter edge cases', () => {
         expect(result).toContain('Content-Security-Policy-Report-Only');
       }
     }
+  });
+
+  it('meta format throws when report-only is requested', () => {
+    const directives = { 'default-src': ["'self'"] };
+    expect(() => formatPolicy(directives, 'meta', true)).toThrow(
+      'Content-Security-Policy-Report-Only is not supported in <meta> tags',
+    );
   });
 });

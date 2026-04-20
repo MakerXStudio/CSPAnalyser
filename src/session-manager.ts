@@ -8,7 +8,7 @@ import {
   updateSession,
   getSession,
   getViolations,
-  insertPage,
+  getOrInsertPage,
   getPages,
   insertPermissionsPolicy,
   insertExistingCspHeader,
@@ -72,9 +72,19 @@ export interface SessionDeps {
   crawl: typeof crawl;
   setupCspInjection: typeof setupCspInjection;
   setupCspPassthrough: typeof setupCspPassthrough;
-  setupViolationListener: typeof setupViolationListener;
+  setupViolationListener: (
+    page: Page,
+    db: Database.Database,
+    sessionId: string,
+    pageId: string | null | (() => string | null),
+  ) => Promise<void>;
   extractInlineHashes: typeof extractInlineHashes;
-  setupInlineContentObserver: typeof setupInlineContentObserver;
+  setupInlineContentObserver: (
+    page: Page,
+    db: Database.Database,
+    sessionId: string,
+    pageId: string | null | (() => string | null),
+  ) => Promise<void>;
 }
 
 // ── Main orchestrator ────────────────────────────────────────────────────
@@ -346,13 +356,47 @@ export async function runInteractiveSession(
 
     updateSession(db, sessionId, { status: 'crawling' });
 
-    // 5. Helper: set up CSP injection + violation capture on a page
+    // 5. Helper: set up CSP injection + violation capture on a page.
+    //    We track the current pageId per tab so that violations/policies are
+    //    attributed correctly. The page record is created eagerly from two
+    //    sites to cover both the route-interception path (which fires before
+    //    the browser commits navigation) and the DOM event path:
+    //
+    //    - The Permissions-Policy callback creates the record from reqUrl
+    //      during response header interception (earliest possible moment).
+    //    - The framenavigated handler updates currentPageId for the DOM
+    //      event listeners that fire after navigation commits.
+    //
+    //    getOrInsertPage is idempotent, so both paths safely converge.
     const setupPage = async (page: Page): Promise<void> => {
+      let currentPageId: string | null = null;
+
+      // Resolve pageId from a URL, creating the page record if needed.
+      // Called from both route interception and navigation events.
+      const resolvePageId = (url: string): string | null => {
+        if (url === 'about:blank' || !url) return currentPageId;
+        const record = getOrInsertPage(db, sessionId, url, null);
+        currentPageId = record.id;
+        return currentPageId;
+      };
+
+      // Update currentPageId on navigation commit so that DOM event
+      // listeners (violations, inline observer) see the correct page.
+      page.on('framenavigated', (frame) => {
+        if (frame !== page.mainFrame()) return;
+        resolvePageId(page.url());
+      });
+
       await _setupCspInjection(
         page,
         reportServerPort,
         reportToken,
         (captured, reqUrl) => {
+          // Eagerly resolve the page record from the request URL so that
+          // Permissions-Policy headers captured during route interception
+          // (before framenavigated fires) are attributed correctly.
+          const pageId = resolvePageId(reqUrl);
+
           const headers: Record<string, string> = {};
           for (const c of captured) {
             headers[c.headerName] = c.headerValue;
@@ -361,7 +405,7 @@ export async function runInteractiveSession(
           for (const p of parsed) {
             insertPermissionsPolicy(db, {
               sessionId,
-              pageId: null,
+              pageId,
               directive: p.directive,
               allowlist: p.allowlist,
               headerType: p.headerType,
@@ -371,18 +415,15 @@ export async function runInteractiveSession(
         },
         targetOrigin,
       );
-      await _setupViolationListener(page, db, sessionId, null);
-      await _setupInlineContentObserver(page, db, sessionId, null);
+      await _setupViolationListener(page, db, sessionId, () => currentPageId);
+      await _setupInlineContentObserver(page, db, sessionId, () => currentPageId);
 
-      // Track page navigations as page records and extract inline hashes
+      // Extract inline hashes after page fully loads
       page.on('load', () => {
         const url = page.url();
         if (url === 'about:blank') return;
-        const record = insertPage(db, sessionId, url, null);
-        if (record) {
-          progress(`Visited: ${url}`);
-        }
-        _extractInlineHashes(page, db, sessionId, record?.id ?? null).catch((err: unknown) => {
+        progress(`Visited: ${url}`);
+        _extractInlineHashes(page, db, sessionId, currentPageId).catch((err: unknown) => {
           logger.warn('Failed to extract inline hashes in interactive mode', {
             error: err instanceof Error ? err.message : String(err),
           });

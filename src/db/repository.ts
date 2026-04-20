@@ -209,21 +209,22 @@ export function listSessionsByProject(db: Database.Database, project: string): S
 
 /**
  * Returns the most recent completed session, optionally scoped to a project.
- * When project is provided, only sessions for that project are considered.
- * Falls back to the most recent completed session across all projects.
+ * When project is provided, only sessions for that project (or sessions with
+ * no project set) are considered. Does NOT fall back across projects — this
+ * prevents silently exporting or scoring the wrong session.
  */
 export function getLatestSession(db: Database.Database, project?: string | null): Session | null {
   if (project) {
     const row = db
       .prepare(
-        `SELECT * FROM sessions WHERE project = ? AND status = 'complete'
+        `SELECT * FROM sessions WHERE (project = ? OR project IS NULL) AND status = 'complete'
          ORDER BY created_at DESC LIMIT 1`,
       )
       .get(project) as SessionRow | undefined;
-    if (row) return toSession(row);
+    return row ? toSession(row) : null;
   }
 
-  // Fallback: most recent completed session regardless of project
+  // No project context — return the most recent completed session
   const row = db
     .prepare(
       `SELECT * FROM sessions WHERE status = 'complete'
@@ -249,6 +250,26 @@ export function insertPage(
   if (result.changes === 0) return null;
 
   const row = db.prepare('SELECT * FROM pages WHERE id = ?').get(result.lastInsertRowid) as PageRow;
+  return toPage(row);
+}
+
+/**
+ * Returns an existing page record for the given session+URL, or inserts a new one.
+ * Unlike insertPage, this never returns null — it always provides a page ID.
+ */
+export function getOrInsertPage(
+  db: Database.Database,
+  sessionId: string,
+  url: string,
+  statusCode: number | null,
+): Page {
+  const inserted = insertPage(db, sessionId, url, statusCode);
+  if (inserted) return inserted;
+
+  // Already exists — look it up
+  const row = db
+    .prepare('SELECT * FROM pages WHERE session_id = ? AND url = ?')
+    .get(sessionId, url) as PageRow;
   return toPage(row);
 }
 

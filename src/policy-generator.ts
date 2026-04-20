@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { Violation, StrictnessLevel } from './types.js';
+import type { Violation, StrictnessLevel, InlineHash } from './types.js';
 import { getViolations, getSession, getInlineHashes } from './db/repository.js';
 import { violationToSourceExpression, violationToHashSource } from './rule-builder.js';
 import { CSP_DIRECTIVES, DIRECTIVE_FALLBACK_MAP } from './utils/csp-constants.js';
@@ -71,6 +71,41 @@ export function generatePolicyFromViolations(
 }
 
 /**
+ * Merges inline content hashes from the inline_hashes table into a directive map.
+ * Resolves sub-directives to parent directives when they already exist in the map,
+ * using the CSP directive fallback chain.
+ */
+export function mergeInlineHashes(
+  directives: Record<string, string[]>,
+  inlineHashes: InlineHash[],
+): void {
+  for (const ih of inlineHashes) {
+    const hashSource = `'sha256-${ih.hash}'`;
+
+    // Resolve the target directive: use the parent directive if it already
+    // exists in the map (e.g. script-src-elem → script-src), otherwise
+    // use the sub-directive as-is.
+    let targetDirective = ih.directive;
+    const directiveKey = ih.directive as keyof typeof DIRECTIVE_FALLBACK_MAP;
+    if (directiveKey in DIRECTIVE_FALLBACK_MAP) {
+      const parentDirective = DIRECTIVE_FALLBACK_MAP[directiveKey];
+      if (parentDirective && parentDirective in directives) {
+        targetDirective = parentDirective;
+      }
+    }
+
+    if (targetDirective in directives) {
+      if (!directives[targetDirective].includes(hashSource)) {
+        directives[targetDirective].push(hashSource);
+        directives[targetDirective].sort();
+      }
+    } else {
+      directives[targetDirective] = [hashSource];
+    }
+  }
+}
+
+/**
  * Generates a CSP directive map from violations stored in the database for a given session.
  */
 export function generatePolicy(
@@ -96,30 +131,7 @@ export function generatePolicy(
   // These are full-content hashes computed from the DOM (not truncated samples).
   if (options.includeHashes) {
     const inlineHashes = getInlineHashes(db, sessionId);
-    for (const ih of inlineHashes) {
-      const hashSource = `'sha256-${ih.hash}'`;
-
-      // Resolve the target directive: use the parent directive if it already
-      // exists in the map (e.g. script-src-elem → script-src), otherwise
-      // use the sub-directive as-is.
-      let targetDirective = ih.directive;
-      const directiveKey = ih.directive as keyof typeof DIRECTIVE_FALLBACK_MAP;
-      if (directiveKey in DIRECTIVE_FALLBACK_MAP) {
-        const parentDirective = DIRECTIVE_FALLBACK_MAP[directiveKey];
-        if (parentDirective && parentDirective in directives) {
-          targetDirective = parentDirective;
-        }
-      }
-
-      if (targetDirective in directives) {
-        if (!directives[targetDirective].includes(hashSource)) {
-          directives[targetDirective].push(hashSource);
-          directives[targetDirective].sort();
-        }
-      } else {
-        directives[targetDirective] = [hashSource];
-      }
-    }
+    mergeInlineHashes(directives, inlineHashes);
   }
 
   return directives;

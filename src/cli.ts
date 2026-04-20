@@ -942,51 +942,6 @@ async function runSetupCommand(): Promise<void> {
   }
 }
 
-/**
- * Checks if Playwright's Chromium browser is installed and launchable.
- * Gives a helpful, platform-specific error message if not.
- */
-async function ensureBrowserInstalled(): Promise<void> {
-  try {
-    const { chromium } = await import('playwright');
-    const browser = await chromium.launch({ headless: true });
-    await browser.close();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const isMissingBrowser =
-      message.includes("Executable doesn't exist") ||
-      message.includes('browserType.launch') ||
-      message.includes('ENOENT');
-    const isMissingDeps =
-      message.includes('shared libraries') || message.includes('cannot open shared object');
-
-    if (isMissingBrowser) {
-      process.stderr.write(
-        red('Error: Playwright browser is not installed.\n\n') +
-          'Run the following command to set up:\n\n' +
-          '  csp-analyser setup\n',
-      );
-    } else if (isMissingDeps) {
-      const platform = detectPlatform();
-      const missingLibs = extractMissingLibs(message);
-      process.stderr.write(
-        red('Error: Browser is installed but system dependencies are missing.\n') +
-          getMissingDepsGuidance(platform.distro, missingLibs) +
-          '\nOr run "csp-analyser setup" for guided installation.\n',
-      );
-    } else {
-      process.stderr.write(
-        red('Error: Failed to launch browser.\n\n') +
-          `Details: ${message}\n\n` +
-          'Try running "csp-analyser setup" to reinstall.\n',
-      );
-    }
-
-    process.exitCode = 1;
-    throw new Error('Browser not available', { cause: err });
-  }
-}
-
 // ── Main ────────────────────────────────────────────────────────────────
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
@@ -1023,15 +978,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         return;
       }
       case 'crawl':
-        await ensureBrowserInstalled();
         await runCrawlCommand(args);
         return;
       case 'interactive':
-        await ensureBrowserInstalled();
         await runInteractiveCommand(args);
         return;
       case 'audit':
-        await ensureBrowserInstalled();
         await runAuditCommand(args);
         return;
       case 'generate':

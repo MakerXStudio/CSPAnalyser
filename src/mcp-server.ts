@@ -2,6 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import * as path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type Database from 'better-sqlite3';
 import {
   createDatabase,
@@ -18,7 +21,7 @@ import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { formatPolicy, directivesToString } from './policy-formatter.js';
 import { createLogger } from './utils/logger.js';
-import { validateTargetUrl } from './utils/url-utils.js';
+import { validateTargetUrlWithDns } from './utils/url-utils.js';
 import { getDataDir, resolveProjectName } from './utils/file-utils.js';
 // Lazy import type for session-manager (dynamic import requires inline type annotation)
 import type { runSession, runAuditSession } from './session-manager.js';
@@ -81,10 +84,21 @@ function getProjectScopedSession(
   return session;
 }
 
+function getPackageVersion(): string {
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const pkgPath = resolve(__dirname, '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
+    return pkg.version;
+  } catch {
+    return '0.0.0';
+  }
+}
+
 export function createMcpServer(db: Database.Database): McpServer {
   const server = new McpServer({
     name: 'csp-analyser',
-    version: '0.1.0',
+    version: getPackageVersion(),
   });
 
   // ── start_session ───────────────────────────────────────────────────
@@ -129,7 +143,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        validateTargetUrl(args.targetUrl);
+        await validateTargetUrlWithDns(args.targetUrl);
         // Dynamic import so the server module compiles even before session-manager exists
         const { runSession } = (await import('./session-manager.js')) as SessionManagerModule;
 
@@ -181,7 +195,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        validateTargetUrl(args.url);
+        await validateTargetUrlWithDns(args.url);
         const { runSession } = (await import('./session-manager.js')) as SessionManagerModule;
 
         const result = await runSession(db, {
@@ -653,7 +667,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     },
     async (args) => {
       try {
-        validateTargetUrl(args.targetUrl);
+        await validateTargetUrlWithDns(args.targetUrl);
         const { runAuditSession } = (await import('./session-manager.js')) as SessionManagerModule;
         const { generateAuditResult, formatAuditResult } = await import('./audit.js');
 

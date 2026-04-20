@@ -6,12 +6,15 @@ import {
   getSession,
   getInlineHashes,
 } from './db/repository.js';
-import { generatePolicyFromViolations, type PolicyGeneratorOptions } from './policy-generator.js';
+import {
+  generatePolicyFromViolations,
+  mergeInlineHashes,
+  type PolicyGeneratorOptions,
+} from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
 import { comparePolicies, type PolicyDiff } from './policy-diff.js';
 import { parseCspHeader, unionDirectives, mergeDirectives } from './utils/csp-parser.js';
 import { directivesToString } from './policy-formatter.js';
-import { DIRECTIVE_FALLBACK_MAP } from './utils/csp-constants.js';
 import { createLogger } from './utils/logger.js';
 
 const logger = createLogger();
@@ -58,30 +61,10 @@ function generateAdditionsFromViolations(
 ): Record<string, string[]> {
   const directives = generatePolicyFromViolations(violations, targetOrigin, options);
 
-  // Merge inline content hashes (same logic as policy-generator.ts generatePolicy)
+  // Merge inline content hashes from the inline_hashes table
   if (options.includeHashes) {
     const inlineHashes = getInlineHashes(db, sessionId);
-    for (const ih of inlineHashes) {
-      const hashSource = `'sha256-${ih.hash}'`;
-
-      let targetDirective = ih.directive;
-      const directiveKey = ih.directive as keyof typeof DIRECTIVE_FALLBACK_MAP;
-      if (directiveKey in DIRECTIVE_FALLBACK_MAP) {
-        const parentDirective = DIRECTIVE_FALLBACK_MAP[directiveKey];
-        if (parentDirective && parentDirective in directives) {
-          targetDirective = parentDirective;
-        }
-      }
-
-      if (targetDirective in directives) {
-        if (!directives[targetDirective].includes(hashSource)) {
-          directives[targetDirective].push(hashSource);
-          directives[targetDirective].sort();
-        }
-      } else {
-        directives[targetDirective] = [hashSource];
-      }
-    }
+    mergeInlineHashes(directives, inlineHashes);
   }
 
   return directives;

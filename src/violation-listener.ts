@@ -20,17 +20,21 @@ export function generateInitScript(): string {
  * Exposes a `__cspViolationReport` function on the page's window object,
  * and injects an init script that captures SecurityPolicyViolationEvents
  * and forwards them to the exposed function.
+ *
+ * @param pageId - Either a static page ID or a resolver function that returns
+ *   the current page ID (used in interactive mode where the page ID changes on navigation).
  */
 export async function setupViolationListener(
   page: Page,
   db: Database.Database,
   sessionId: string,
-  pageId: string | null,
+  pageId: string | null | (() => string | null),
 ): Promise<void> {
   await page.exposeFunction('__cspViolationReport', (data: unknown) => {
-    const violation = parseDomViolation(data, sessionId, pageId);
+    const resolvedPageId = typeof pageId === 'function' ? pageId() : pageId;
+    const violation = parseDomViolation(data, sessionId, resolvedPageId);
     if (!violation) {
-      logger.warn('Failed to parse DOM violation', { sessionId, pageId });
+      logger.warn('Failed to parse DOM violation', { sessionId, pageId: resolvedPageId });
       return;
     }
 

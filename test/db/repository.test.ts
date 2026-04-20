@@ -257,8 +257,16 @@ describe('getLatestSession', () => {
     expect(latest!.id).toBe(s1.id);
   });
 
-  it('falls back to any project when scoped project has no sessions', () => {
+  it('does not fall back to other projects when scoped project has no sessions', () => {
     const s1 = createSession(db, { ...TEST_CONFIG, project: 'app-a' });
+    updateSession(db, s1.id, { status: 'complete' });
+
+    const latest = getLatestSession(db, 'app-b');
+    expect(latest).toBeNull();
+  });
+
+  it('returns unscoped sessions when project is specified', () => {
+    const s1 = createSession(db, { ...TEST_CONFIG, project: undefined });
     updateSession(db, s1.id, { status: 'complete' });
 
     const latest = getLatestSession(db, 'app-b');

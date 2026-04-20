@@ -46,10 +46,21 @@ export interface ValidateTargetUrlOptions {
 }
 
 /**
+ * Returns true if a resolved IP address is private/link-local.
+ */
+function isPrivateIp(ip: string): boolean {
+  for (const pattern of PRIVATE_IPV4_PATTERNS) {
+    if (pattern.test(ip)) return true;
+  }
+  return isPrivateIPv6(ip);
+}
+
+/**
  * Validates that a target URL is safe for crawling:
  * - Must be a valid URL
  * - Must use http: or https: scheme
  * - By default, rejects localhost, private/link-local IPs (IPv4 and IPv6)
+ * - Resolves DNS to catch hostnames that point to private/loopback addresses
  * - Use allowLocalNetwork to permit localhost (CLI mode)
  * - Use allowPrivateIps to permit all private ranges
  *
@@ -101,6 +112,61 @@ export function validateTargetUrl(url: string, options?: ValidateTargetUrlOption
     throw new Error(
       `Invalid target URL: private/internal IPv6 addresses are not allowed ("${hostname}"). Use --allow-private-ips to override.`,
     );
+  }
+
+  return url;
+}
+
+/**
+ * Async version of validateTargetUrl that also resolves DNS to catch hostnames
+ * pointing to private/loopback addresses (SSRF protection).
+ *
+ * This should be used in the MCP server where agent-driven crawling needs
+ * full SSRF protection. The synchronous validateTargetUrl only checks literal
+ * hostnames and cannot catch DNS rebinding to private IPs.
+ */
+export async function validateTargetUrlWithDns(
+  url: string,
+  options?: ValidateTargetUrlOptions,
+): Promise<string> {
+  // First run all synchronous checks
+  validateTargetUrl(url, options);
+
+  // Skip DNS resolution if private IPs are allowed or if the hostname is
+  // already a literal IP (already checked above)
+  if (options?.allowPrivateIps) return url;
+
+  const parsed = new URL(url);
+  const hostname = parsed.hostname;
+
+  // Skip DNS check for literal IPs — already validated above
+  if (isLocalhost(hostname)) return url;
+  for (const pattern of PRIVATE_IPV4_PATTERNS) {
+    if (pattern.test(hostname)) return url;
+  }
+  if (isPrivateIPv6(hostname)) return url;
+
+  // Resolve DNS and check all addresses
+  const { lookup } = await import('node:dns/promises');
+  try {
+    const addresses = await lookup(hostname, { all: true });
+    for (const addr of addresses) {
+      if (isPrivateIp(addr.address) || isLocalhost(addr.address)) {
+        const allowLocal = options?.allowLocalNetwork && isLocalhost(addr.address);
+        if (!allowLocal) {
+          throw new Error(
+            `Invalid target URL: hostname "${hostname}" resolves to private/internal address ${addr.address}. ` +
+              'Use --allow-private-ips to override.',
+          );
+        }
+      }
+    }
+  } catch (err) {
+    // Re-throw our own SSRF errors, but let DNS lookup failures pass through
+    // (the browser will produce a more useful error)
+    if (err instanceof Error && err.message.includes('Invalid target URL')) {
+      throw err;
+    }
   }
 
   return url;

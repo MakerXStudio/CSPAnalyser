@@ -502,14 +502,25 @@ describe('stripUnsafeEval', () => {
   it('removes unsafe-eval from script-src-elem and script-src-attr', () => {
     const result = optimizePolicy(
       {
-        'script-src-elem': ["'unsafe-eval'"],
-        'script-src-attr': ["'unsafe-eval'"],
+        'script-src-elem': ["'unsafe-eval'", "'self'"],
+        'script-src-attr': ["'unsafe-eval'", "'self'"],
       },
       undefined,
       { stripUnsafeEval: true },
     );
     expect(result['script-src-elem']).not.toContain("'unsafe-eval'");
     expect(result['script-src-attr']).not.toContain("'unsafe-eval'");
+  });
+
+  it('drops directives entirely when stripUnsafeEval removes the only source', () => {
+    const result = optimizePolicy(
+      {
+        'script-src-elem': ["'unsafe-eval'"],
+      },
+      undefined,
+      { stripUnsafeEval: true },
+    );
+    expect(result['script-src-elem']).toBeUndefined();
   });
 
   it('does not modify when stripUnsafeEval is false', () => {
@@ -578,8 +589,8 @@ describe('stripUnsafeInline', () => {
     const result = optimizePolicy(
       {
         'script-src-elem': ["'unsafe-inline'", "'sha256-abc'"],
-        'script-src-attr': ["'unsafe-inline'"],
-        'style-src-elem': ["'unsafe-inline'"],
+        'script-src-attr': ["'unsafe-inline'", "'self'"],
+        'style-src-elem': ["'unsafe-inline'", "'self'"],
         'style-src-attr': ["'unsafe-inline'", "'sha256-def'"],
       },
       undefined,
@@ -589,6 +600,17 @@ describe('stripUnsafeInline', () => {
     expect(result['script-src-attr']).not.toContain("'unsafe-inline'");
     expect(result['style-src-elem']).not.toContain("'unsafe-inline'");
     expect(result['style-src-attr']).not.toContain("'unsafe-inline'");
+  });
+
+  it('drops directives entirely when stripUnsafeInline removes the only source', () => {
+    const result = optimizePolicy(
+      {
+        'script-src-attr': ["'unsafe-inline'"],
+      },
+      undefined,
+      { stripUnsafeInline: true },
+    );
+    expect(result['script-src-attr']).toBeUndefined();
   });
 
   it('does not remove unsafe-inline when option is false', () => {

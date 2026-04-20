@@ -71,7 +71,8 @@ export async function startReportServer(
         return;
       }
 
-      handleReport(req, res, db, sessionId, req.url === cspReportPath, (count: number) => {
+      const remaining = violationLimit > 0 ? violationLimit - violationCount : Infinity;
+      handleReport(req, res, db, sessionId, req.url === cspReportPath, remaining, (count: number) => {
         violationCount += count;
       });
       return;
@@ -113,6 +114,7 @@ function handleReport(
   db: Database.Database,
   sessionId: string,
   isCspReport: boolean,
+  remainingCapacity: number,
   onViolationsInserted: (count: number) => void,
 ): void {
   const contentType = req.headers['content-type'] ?? '';
@@ -172,21 +174,33 @@ function handleReport(
       if (isCspReport) {
         const violation = parseCspReport(body, sessionId, null);
         if (violation) {
-          insertViolation(db, violation);
-          onViolationsInserted(1);
+          const result = insertViolation(db, violation);
+          if (result) {
+            onViolationsInserted(1);
+          }
           logger.debug('CSP report stored', { directive: violation.effectiveDirective });
         }
         res.writeHead(204);
         res.end();
       } else {
         const violations = parseReportingApiReport(body, sessionId, null);
+        let insertedCount = 0;
         for (const v of violations) {
-          insertViolation(db, v);
+          if (insertedCount >= remainingCapacity) {
+            logger.debug('Batch truncated at violation limit', {
+              sessionId,
+              accepted: insertedCount,
+              total: violations.length,
+            });
+            break;
+          }
+          const result = insertViolation(db, v);
+          if (result) insertedCount++;
         }
-        if (violations.length > 0) {
-          onViolationsInserted(violations.length);
+        if (insertedCount > 0) {
+          onViolationsInserted(insertedCount);
         }
-        logger.debug('Reporting API reports stored', { count: violations.length });
+        logger.debug('Reporting API reports stored', { count: insertedCount });
         res.writeHead(204);
         res.end();
       }

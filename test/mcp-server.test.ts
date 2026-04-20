@@ -856,6 +856,7 @@ describe('server metadata', () => {
   it('has correct server info', () => {
     const serverInstance = (server as unknown as { server: { _serverInfo: { name: string; version: string } } }).server;
     expect(serverInstance._serverInfo.name).toBe('csp-analyser');
-    expect(serverInstance._serverInfo.version).toBe('0.1.0');
+    // Version is read from package.json at runtime — just verify it's a valid semver-like string
+    expect(serverInstance._serverInfo.version).toMatch(/^\d+\.\d+\.\d+/);
   });
 });
