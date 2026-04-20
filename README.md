@@ -152,8 +152,15 @@ For content that framework JS injects at runtime (not present in the built HTML)
 
 ```bash
 csp-analyser hash-static dist/ --inject \
-  --extra-style-elem 'sha256-runtimeInjectedStyleHash=' \
-  --extra-script-elem 'sha256-runtimeInjectedScriptHash='
+  --extra "style-src-elem='sha256-runtimeInjectedStyleHash='" \
+  --extra "script-src-elem='sha256-runtimeInjectedScriptHash='"
+```
+
+Or export a crawl as JSON and merge the whole policy at once:
+
+```bash
+csp-analyser export --format json > crawl-policy.json
+csp-analyser hash-static dist/ --inject --merge-json crawl-policy.json
 ```
 
 ## Export formats

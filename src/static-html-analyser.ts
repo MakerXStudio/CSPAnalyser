@@ -19,18 +19,14 @@ export interface StaticHashResult {
 }
 
 /**
- * Options for building a policy from scanned hashes. Any hashes in the `extra*`
- * arrays are added to the respective directive to cover content that cannot be
- * discovered by static scanning (e.g. inline scripts or styles injected by
- * framework bundles at runtime). Source expressions are passed through
- * verbatim, so callers can include anything a CSP accepts (hashes, nonces,
- * keywords).
+ * Options for building a policy from scanned hashes. Extra directives are
+ * merged into the generated policy to cover sources that cannot be discovered
+ * by static scanning (e.g. API endpoints, CDN origins, runtime-injected
+ * inline content from a prior crawl export).
  */
 export interface BuildPolicyOptions {
-  extraScriptElem?: readonly string[];
-  extraStyleElem?: readonly string[];
-  extraStyleAttr?: readonly string[];
-  extraScriptAttr?: readonly string[];
+  /** Extra sources keyed by directive name (from --extra / --merge-json flags) */
+  extraDirectives?: ReadonlyMap<string, readonly string[]>;
 }
 
 // ── File walking ─────────────────────────────────────────────────────────
@@ -197,27 +193,6 @@ export function buildStaticPolicy(
   options: BuildPolicyOptions = {},
 ): Record<string, string[]> {
   const dedupeSort = (items: Iterable<string>): string[] => [...new Set(items)].sort();
-  const normalizeAll = (sources: readonly string[] | undefined): string[] =>
-    (sources ?? []).map(normalizeSourceExpression);
-
-  const scriptElem = dedupeSort([
-    "'self'",
-    ...normalizeAll(options.extraScriptElem),
-    ...hashes.scriptElem,
-  ]);
-  const styleElem = dedupeSort([
-    "'self'",
-    ...normalizeAll(options.extraStyleElem),
-    ...hashes.styleElem,
-  ]);
-  const styleAttr = dedupeSort([
-    ...normalizeAll(options.extraStyleAttr),
-    ...hashes.styleAttr,
-  ]);
-  const scriptAttr = dedupeSort([
-    ...normalizeAll(options.extraScriptAttr),
-    ...hashes.scriptAttr,
-  ]);
 
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
@@ -226,17 +201,38 @@ export function buildStaticPolicy(
     'form-action': ["'self'"],
     'img-src': ["'self'", 'data:'],
     'object-src': ["'none'"],
-    'script-src-elem': scriptElem,
-    'style-src-elem': styleElem,
+    'script-src-elem': dedupeSort(["'self'", ...hashes.scriptElem]),
+    'style-src-elem': dedupeSort(["'self'", ...hashes.styleElem]),
   };
 
   // Attribute directives require 'unsafe-hashes' for the listed hashes to
   // actually apply to inline attributes (spec quirk).
-  if (styleAttr.length > 0) {
-    directives['style-src-attr'] = ["'unsafe-hashes'", ...styleAttr];
+  if (hashes.styleAttr.size > 0) {
+    directives['style-src-attr'] = ["'unsafe-hashes'", ...dedupeSort(hashes.styleAttr)];
   }
-  if (scriptAttr.length > 0) {
-    directives['script-src-attr'] = ["'unsafe-hashes'", ...scriptAttr];
+  if (hashes.scriptAttr.size > 0) {
+    directives['script-src-attr'] = ["'unsafe-hashes'", ...dedupeSort(hashes.scriptAttr)];
+  }
+
+  // Merge extra directive sources into the directive map.
+  if (options.extraDirectives) {
+    for (const [directive, sources] of options.extraDirectives) {
+      const normalized = sources.map(normalizeSourceExpression);
+      const existing = directive in directives ? directives[directive] : undefined;
+      directives[directive] = existing
+        ? dedupeSort([...existing, ...normalized])
+        : dedupeSort(normalized);
+    }
+  }
+
+  // Ensure attribute directives contain 'unsafe-hashes' when they have hash
+  // sources — without it browsers silently ignore the hashes (CSP3 §2.3.2).
+  // This covers both scan-discovered and --extra / --merge-json sources.
+  for (const attrDirective of ['style-src-attr', 'script-src-attr'] as const) {
+    const values = directives[attrDirective] as string[] | undefined;
+    if (values && values.some((s) => s.startsWith("'sha")) && !values.includes("'unsafe-hashes'")) {
+      directives[attrDirective] = ["'unsafe-hashes'", ...values];
+    }
   }
 
   return directives;

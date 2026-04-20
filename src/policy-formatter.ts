@@ -1,6 +1,10 @@
 import type { ExportFormat } from './types.js';
 
-const META_STRIPPED_DIRECTIVES = ['report-uri', 'report-to'];
+/**
+ * Directives that must be stripped from CSP `<meta>` tags — the HTML spec
+ * forbids `report-uri` and `report-to` in meta-delivered policies.
+ */
+export const META_STRIPPED_DIRECTIVES = ['report-uri', 'report-to'];
 
 /**
  * Converts a directive map to a CSP policy string.

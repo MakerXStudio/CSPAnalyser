@@ -34,6 +34,7 @@ import { compareSessions, formatDiff } from './policy-diff.js';
 import { generateAuditResult, formatAuditResult } from './audit.js';
 import { scoreCspPolicy, formatScore } from './policy-scorer.js';
 import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
+import { CSP_DIRECTIVES } from './utils/csp-constants.js';
 
 const logger = createLogger();
 
@@ -85,11 +86,10 @@ export interface ParsedArgs {
   inputs?: string[];
   /** For hash-static: write the generated meta tag into each scanned HTML */
   inject: boolean;
-  /** For hash-static: extra source expressions to add to specific directives */
-  extraScriptElem?: string[];
-  extraStyleElem?: string[];
-  extraStyleAttr?: string[];
-  extraScriptAttr?: string[];
+  /** For hash-static: extra sources keyed by directive name */
+  extraDirectives?: Map<string, string[]>;
+  /** For hash-static: raw document directives (report-uri, sandbox, etc.) */
+  documentDirectives?: Map<string, string[]>;
   /** Explicit project name override (--project flag) */
   project?: string;
   /** Show sessions from all projects (--all flag, sessions command only) */
@@ -110,6 +110,139 @@ const VALID_FORMATS: ReadonlySet<string> = new Set([
   'helmet',
   'json',
 ]);
+// ── Extra directive parsing ─────────────────────────────────────────────
+
+const VALID_CSP_DIRECTIVES: ReadonlySet<string> = new Set(CSP_DIRECTIVES);
+
+/**
+ * Parses `--extra directive=source` values into a Map grouped by directive.
+ * Validates that each directive is a known CSP directive.
+ */
+function parseExtraDirectives(raw: readonly string[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const entry of raw) {
+    const eqIdx = entry.indexOf('=');
+    if (eqIdx === -1) {
+      throw new Error(
+        `Invalid --extra value "${entry}". Expected format: --extra <directive>=<source> (e.g. --extra connect-src=https://api.example.com)`,
+      );
+    }
+    const directive = entry.slice(0, eqIdx).trim();
+    const source = entry.slice(eqIdx + 1).trim();
+    if (!VALID_CSP_DIRECTIVES.has(directive)) {
+      throw new Error(
+        `Unknown CSP directive "${directive}" in --extra. Supported directives: ${CSP_DIRECTIVES.join(', ')}`,
+      );
+    }
+    if (source.length === 0) {
+      throw new Error(`Empty source value for directive "${directive}" in --extra.`);
+    }
+    const existing = map.get(directive);
+    if (existing) {
+      existing.push(source);
+    } else {
+      map.set(directive, [source]);
+    }
+  }
+  return map;
+}
+
+/**
+ * CSP document directives that don't take source lists. These are set
+ * verbatim via --policy-directive and are separate from --extra (which
+ * handles fetch/navigation directives with source-list validation).
+ */
+const DOCUMENT_DIRECTIVES: ReadonlySet<string> = new Set([
+  'report-uri',
+  'report-to',
+  'sandbox',
+  'upgrade-insecure-requests',
+  'require-trusted-types-for',
+  'trusted-types',
+  'plugin-types',
+]);
+
+/**
+ * Parses `--policy-directive directive=value` entries. Value-less directives
+ * like `upgrade-insecure-requests` are stored with an empty-string value.
+ */
+function parsePolicyDirectives(raw: readonly string[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const entry of raw) {
+    const eqIdx = entry.indexOf('=');
+    const directive = eqIdx === -1 ? entry.trim() : entry.slice(0, eqIdx).trim();
+    const value = eqIdx === -1 ? '' : entry.slice(eqIdx + 1).trim();
+    if (directive.length === 0) {
+      throw new Error(`Empty directive name in --policy-directive "${entry}".`);
+    }
+    if (!DOCUMENT_DIRECTIVES.has(directive)) {
+      throw new Error(
+        `Unknown document directive "${directive}" in --policy-directive. Supported: ${[...DOCUMENT_DIRECTIVES].join(', ')}`,
+      );
+    }
+    const existing = map.get(directive);
+    if (existing) {
+      if (value.length > 0) existing.push(value);
+    } else {
+      map.set(directive, value.length > 0 ? [value] : []);
+    }
+  }
+  return map;
+}
+
+/**
+ * Reads one or more JSON files in the csp-analyser export format
+ * (`{ directives: Record<string, string[]> }`) and merges their directives
+ * into an existing extra-directives map.
+ */
+function mergJsonFiles(
+  paths: readonly string[],
+  into: Map<string, string[]>,
+): void {
+  for (const filePath of paths) {
+    let raw: string;
+    try {
+      raw = readFileSync(filePath, 'utf8');
+    } catch {
+      throw new Error(`Cannot read --merge-json file: ${filePath}`);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`--merge-json file is not valid JSON: ${filePath}`);
+    }
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error(`--merge-json file must contain a JSON object: ${filePath}`);
+    }
+
+    // Accept both { directives: { ... } } (full export) and a bare directive map.
+    const obj = parsed as Record<string, unknown>;
+    const directivesObj =
+      typeof obj.directives === 'object' && obj.directives !== null && !Array.isArray(obj.directives)
+        ? (obj.directives as Record<string, unknown>)
+        : obj;
+
+    for (const [key, value] of Object.entries(directivesObj)) {
+      if (!VALID_CSP_DIRECTIVES.has(key)) continue;
+      if (!Array.isArray(value)) {
+        throw new Error(
+          `Directive "${key}" in ${filePath} must be an array of source expressions, got ${typeof value}`,
+        );
+      }
+      const sources = value as string[];
+      const existing = into.get(key);
+      if (existing) {
+        existing.push(...sources);
+      } else {
+        into.set(key, [...sources]);
+      }
+    }
+  }
+}
+
 // ── Help text ───────────────────────────────────────────────────────────
 
 export const HELP_TEXT = `csp-analyser — Generate Content Security Policy headers by crawling websites
@@ -152,10 +285,13 @@ Options:
 hash-static options:
   --inject               Rewrite each scanned HTML to include the generated
                          <meta http-equiv="Content-Security-Policy"> in <head>
-  --extra-script-elem <src>  Extra source(s) for script-src-elem (repeatable)
-  --extra-style-elem <src>   Extra source(s) for style-src-elem (repeatable)
-  --extra-style-attr <src>   Extra source(s) for style-src-attr (repeatable)
-  --extra-script-attr <src>  Extra source(s) for script-src-attr (repeatable)
+  --extra <directive>=<src>  Extra source for a CSP fetch/navigation directive (repeatable)
+                             e.g. --extra connect-src=https://api.example.com
+  --merge-json <path>        Merge directives from a previously exported JSON file
+                             (the { directives: { ... } } format from --format json)
+  --policy-directive <d>=<v> Set a CSP document directive verbatim (repeatable)
+                             e.g. --policy-directive report-uri=/csp-report
+                             --policy-directive upgrade-insecure-requests
 `;
 
 // ── Argument parsing ────────────────────────────────────────────────────
@@ -214,10 +350,9 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       project: { type: 'string' },
       all: { type: 'boolean', default: false },
       inject: { type: 'boolean', default: false },
-      'extra-script-elem': { type: 'string', multiple: true },
-      'extra-style-elem': { type: 'string', multiple: true },
-      'extra-style-attr': { type: 'string', multiple: true },
-      'extra-script-attr': { type: 'string', multiple: true },
+      extra: { type: 'string', multiple: true },
+      'merge-json': { type: 'string', multiple: true },
+      'policy-directive': { type: 'string', multiple: true },
     },
     allowPositionals: true,
     strict: false,
@@ -342,14 +477,19 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       );
     }
     parsed.inputs = inputs;
-    const eScript = values['extra-script-elem'] as string[] | undefined;
-    const eStyle = values['extra-style-elem'] as string[] | undefined;
-    const eStyleAttr = values['extra-style-attr'] as string[] | undefined;
-    const eScriptAttr = values['extra-script-attr'] as string[] | undefined;
-    if (eScript) parsed.extraScriptElem = eScript;
-    if (eStyle) parsed.extraStyleElem = eStyle;
-    if (eStyleAttr) parsed.extraStyleAttr = eStyleAttr;
-    if (eScriptAttr) parsed.extraScriptAttr = eScriptAttr;
+    const extraRaw = values.extra as string[] | undefined;
+    const mergeJsonPaths = values['merge-json'] as string[] | undefined;
+    if (extraRaw || mergeJsonPaths) {
+      const map = extraRaw ? parseExtraDirectives(extraRaw) : new Map<string, string[]>();
+      if (mergeJsonPaths) {
+        mergJsonFiles(mergeJsonPaths, map);
+      }
+      parsed.extraDirectives = map;
+    }
+    const policyDirRaw = values['policy-directive'] as string[] | undefined;
+    if (policyDirRaw) {
+      parsed.documentDirectives = parsePolicyDirectives(policyDirRaw);
+    }
   } else if ((command === 'crawl' || command === 'interactive' || command === 'audit') && positionalArg) {
     validateTargetUrl(positionalArg, { allowLocalNetwork: true });
     parsed.url = positionalArg;
@@ -673,17 +813,26 @@ async function runHashStaticCommand(args: ParsedArgs): Promise<void> {
   const paths = args.inputs ?? [];
   const { result, files } = await scanHtmlFiles(paths);
   const directives = buildStaticPolicy(result, {
-    extraScriptElem: args.extraScriptElem,
-    extraStyleElem: args.extraStyleElem,
-    extraStyleAttr: args.extraStyleAttr,
-    extraScriptAttr: args.extraScriptAttr,
+    extraDirectives: args.extraDirectives,
   });
-  const policyString = directivesToString(directives);
+
+  // Append document directives (report-uri, sandbox, etc.) verbatim.
+  if (args.documentDirectives) {
+    for (const [directive, values] of args.documentDirectives) {
+      directives[directive] = values;
+    }
+  }
 
   if (args.inject) {
     if (files.length === 0) {
       throw new Error(`No HTML files found under: ${paths.join(', ')}`);
     }
+    // Meta tags cannot include report-uri / report-to — strip them.
+    const { META_STRIPPED_DIRECTIVES } = await import('./policy-formatter.js');
+    const metaDirectives = Object.fromEntries(
+      Object.entries(directives).filter(([k]) => !META_STRIPPED_DIRECTIVES.includes(k)),
+    );
+    const policyString = directivesToString(metaDirectives);
     for (const file of files) {
       const html = readFileSync(file, 'utf8');
       writeFileSync(file, injectCspMeta(html, policyString));

@@ -350,6 +350,189 @@ describe('parseCliArgs', () => {
       );
     });
   });
+
+  describe('hash-static --merge-json', () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+      const { mkdtempSync } = await import('node:fs');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      tmpDir = mkdtempSync(join(tmpdir(), 'csp-cli-test-'));
+    });
+
+    afterEach(async () => {
+      const { rmSync } = await import('node:fs');
+      rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('parses --merge-json with full export format into extraDirectives', async () => {
+      const { writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const jsonFile = join(tmpDir, 'policy.json');
+      const htmlFile = join(tmpDir, 'index.html');
+      writeFileSync(htmlFile, '<html><head></head></html>');
+      writeFileSync(
+        jsonFile,
+        JSON.stringify({
+          directives: {
+            'connect-src': ["'self'", 'https://api.example.com'],
+            'font-src': ["'self'", 'https://fonts.gstatic.com'],
+          },
+          policyString: "connect-src 'self' https://api.example.com",
+          isReportOnly: false,
+        }),
+      );
+      const result = parseCliArgs(['hash-static', tmpDir, '--merge-json', jsonFile]);
+      expect(result.extraDirectives).toBeDefined();
+      expect(result.extraDirectives!.get('connect-src')).toEqual([
+        "'self'",
+        'https://api.example.com',
+      ]);
+      expect(result.extraDirectives!.get('font-src')).toEqual([
+        "'self'",
+        'https://fonts.gstatic.com',
+      ]);
+    });
+
+    it('parses --merge-json with bare directive map', async () => {
+      const { writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const jsonFile = join(tmpDir, 'directives.json');
+      const htmlFile = join(tmpDir, 'index.html');
+      writeFileSync(htmlFile, '<html><head></head></html>');
+      writeFileSync(
+        jsonFile,
+        JSON.stringify({
+          'frame-src': ['https://www.youtube.com'],
+        }),
+      );
+      const result = parseCliArgs(['hash-static', tmpDir, '--merge-json', jsonFile]);
+      expect(result.extraDirectives!.get('frame-src')).toEqual(['https://www.youtube.com']);
+    });
+
+    it('merges --merge-json and --extra into one extraDirectives map', async () => {
+      const { writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const jsonFile = join(tmpDir, 'policy.json');
+      const htmlFile = join(tmpDir, 'index.html');
+      writeFileSync(htmlFile, '<html><head></head></html>');
+      writeFileSync(
+        jsonFile,
+        JSON.stringify({
+          directives: { 'connect-src': ['https://api.example.com'] },
+        }),
+      );
+      const result = parseCliArgs([
+        'hash-static',
+        tmpDir,
+        '--merge-json',
+        jsonFile,
+        '--extra',
+        'connect-src=https://other.example.com',
+      ]);
+      const connectSrc = result.extraDirectives!.get('connect-src')!;
+      expect(connectSrc).toContain('https://api.example.com');
+      expect(connectSrc).toContain('https://other.example.com');
+    });
+
+    it('throws on non-existent --merge-json file', () => {
+      expect(() =>
+        parseCliArgs(['hash-static', '.', '--merge-json', '/nonexistent/policy.json']),
+      ).toThrow('Cannot read --merge-json file');
+    });
+
+    it('throws on invalid JSON in --merge-json file', async () => {
+      const { writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const jsonFile = join(tmpDir, 'bad.json');
+      writeFileSync(jsonFile, 'not json');
+      expect(() => parseCliArgs(['hash-static', '.', '--merge-json', jsonFile])).toThrow(
+        'not valid JSON',
+      );
+    });
+
+    it('skips unknown directive keys in the JSON file', async () => {
+      const { writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const jsonFile = join(tmpDir, 'policy.json');
+      const htmlFile = join(tmpDir, 'index.html');
+      writeFileSync(htmlFile, '<html><head></head></html>');
+      writeFileSync(
+        jsonFile,
+        JSON.stringify({
+          'connect-src': ['https://api.example.com'],
+          policyString: "connect-src 'self'",
+          isReportOnly: false,
+        }),
+      );
+      const result = parseCliArgs(['hash-static', tmpDir, '--merge-json', jsonFile]);
+      // policyString and isReportOnly are not CSP directives, should be ignored
+      expect(result.extraDirectives!.has('policyString')).toBe(false);
+      expect(result.extraDirectives!.has('isReportOnly')).toBe(false);
+      expect(result.extraDirectives!.get('connect-src')).toEqual(['https://api.example.com']);
+    });
+  });
+
+  describe('hash-static --policy-directive', () => {
+    it('parses report-uri into documentDirectives', () => {
+      const result = parseCliArgs([
+        'hash-static',
+        '.',
+        '--policy-directive',
+        'report-uri=/csp-report',
+      ]);
+      expect(result.documentDirectives).toBeDefined();
+      expect(result.documentDirectives!.get('report-uri')).toEqual(['/csp-report']);
+    });
+
+    it('parses report-to into documentDirectives', () => {
+      const result = parseCliArgs([
+        'hash-static',
+        '.',
+        '--policy-directive',
+        'report-to=csp-endpoint',
+      ]);
+      expect(result.documentDirectives!.get('report-to')).toEqual(['csp-endpoint']);
+    });
+
+    it('handles value-less directives like upgrade-insecure-requests', () => {
+      const result = parseCliArgs([
+        'hash-static',
+        '.',
+        '--policy-directive',
+        'upgrade-insecure-requests',
+      ]);
+      expect(result.documentDirectives!.get('upgrade-insecure-requests')).toEqual([]);
+    });
+
+    it('handles sandbox with flag values', () => {
+      const result = parseCliArgs([
+        'hash-static',
+        '.',
+        '--policy-directive',
+        'sandbox=allow-scripts',
+        '--policy-directive',
+        'sandbox=allow-same-origin',
+      ]);
+      expect(result.documentDirectives!.get('sandbox')).toEqual([
+        'allow-scripts',
+        'allow-same-origin',
+      ]);
+    });
+
+    it('throws on unknown document directive', () => {
+      expect(() =>
+        parseCliArgs(['hash-static', '.', '--policy-directive', 'connect-src=https://x.com']),
+      ).toThrow('Unknown document directive');
+    });
+
+    it('throws on empty directive name', () => {
+      expect(() =>
+        parseCliArgs(['hash-static', '.', '--policy-directive', '=value']),
+      ).toThrow('Empty directive name');
+    });
+  });
 });
 
 // ── HELP_TEXT ────────────────────────────────────────────────────────────

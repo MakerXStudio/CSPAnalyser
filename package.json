@@ -1,6 +1,6 @@
 {
   "name": "@makerx/csp-analyser",
-  "version": "0.9.1",
+  "version": "1.0.0",
   "type": "module",
   "description": "Headlessly browse websites with a deny-all report-only CSP, capture violations, and generate production-ready CSP policies",
   "license": "MIT",
@@ -43,7 +43,7 @@
     "start": "node dist/mcp-server.js",
     "cli": "node dist/cli.js",
     "docs:dev": "vitepress dev docs",
-    "docs:csp": "node dist/cli.js hash-static docs/.vitepress/dist --inject --extra-style-elem 'sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='",
+    "docs:csp": "node dist/cli.js hash-static docs/.vitepress/dist --inject --extra style-src-elem='sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='",
     "predocs:build": "npm run build",
     "docs:build": "vitepress build docs && npm run docs:csp",
     "docs:preview": "vitepress preview docs"

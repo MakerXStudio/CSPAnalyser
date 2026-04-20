@@ -192,7 +192,9 @@ describe('buildStaticPolicy', () => {
       scriptAttr: new Set<string>(),
     };
     const directives = buildStaticPolicy(hashes, {
-      extraStyleElem: ['sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='],
+      extraDirectives: new Map([
+        ['style-src-elem', ['sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y=']],
+      ]),
     });
     expect(directives['style-src-elem']).toContain(
       "'sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='",
@@ -232,7 +234,88 @@ describe('buildStaticPolicy', () => {
     expect(directives['script-src-attr']?.[0]).toBe("'unsafe-hashes'");
   });
 
-  it('merges extra* sources and dedupes against scanned hashes', () => {
+  it("adds 'unsafe-hashes' when extraDirectives injects hashes into attribute directives", () => {
+    const hashes = {
+      scriptElem: new Set<string>(),
+      styleElem: new Set<string>(),
+      styleAttr: new Set<string>(),
+      scriptAttr: new Set<string>(),
+    };
+    const directives = buildStaticPolicy(hashes, {
+      extraDirectives: new Map([
+        ['style-src-attr', [sha256('color: red')]],
+        ['script-src-attr', [sha256('alert(1)')]],
+      ]),
+    });
+    expect(directives['style-src-attr']?.[0]).toBe("'unsafe-hashes'");
+    expect(directives['script-src-attr']?.[0]).toBe("'unsafe-hashes'");
+    expect(directives['style-src-attr']).toContain(sha256('color: red'));
+    expect(directives['script-src-attr']).toContain(sha256('alert(1)'));
+  });
+
+  it('adds a new directive via extraDirectives', () => {
+    const hashes = {
+      scriptElem: new Set<string>(),
+      styleElem: new Set<string>(),
+      styleAttr: new Set<string>(),
+      scriptAttr: new Set<string>(),
+    };
+    const directives = buildStaticPolicy(hashes, {
+      extraDirectives: new Map([
+        ['connect-src', ['https://api.example.com', 'https://cdn.example.com']],
+      ]),
+    });
+    expect(directives['connect-src']).toEqual([
+      'https://api.example.com',
+      'https://cdn.example.com',
+    ]);
+  });
+
+  it('appends extraDirectives sources to existing baseline directives', () => {
+    const hashes = {
+      scriptElem: new Set<string>(),
+      styleElem: new Set<string>(),
+      styleAttr: new Set<string>(),
+      scriptAttr: new Set<string>(),
+    };
+    const directives = buildStaticPolicy(hashes, {
+      extraDirectives: new Map([
+        ['font-src', ['https://fonts.gstatic.com']],
+        ['img-src', ['https://cdn.example.com']],
+      ]),
+    });
+    expect(directives['font-src']).toEqual(["'self'", 'https://fonts.gstatic.com']);
+    expect(directives['img-src']).toEqual(["'self'", 'data:', 'https://cdn.example.com']);
+  });
+
+  it('dedupes extraDirectives sources against existing values', () => {
+    const hashes = {
+      scriptElem: new Set<string>(),
+      styleElem: new Set<string>(),
+      styleAttr: new Set<string>(),
+      scriptAttr: new Set<string>(),
+    };
+    const directives = buildStaticPolicy(hashes, {
+      extraDirectives: new Map([['font-src', ["'self'", 'https://fonts.gstatic.com']]]),
+    });
+    // 'self' should not be duplicated
+    expect(directives['font-src']!.filter((s) => s === "'self'").length).toBe(1);
+    expect(directives['font-src']).toContain('https://fonts.gstatic.com');
+  });
+
+  it('omits extra directives when extraDirectives is not provided', () => {
+    const hashes = {
+      scriptElem: new Set<string>(),
+      styleElem: new Set<string>(),
+      styleAttr: new Set<string>(),
+      scriptAttr: new Set<string>(),
+    };
+    const directives = buildStaticPolicy(hashes);
+    expect(directives['connect-src']).toBeUndefined();
+    expect(directives['frame-src']).toBeUndefined();
+  });
+
+  it('merges extra directive sources and dedupes against scanned hashes', () => {
     const scanHash = sha256('inline');
     const hashes = {
       scriptElem: new Set<string>([scanHash]),
@@ -241,7 +324,7 @@ describe('buildStaticPolicy', () => {
       scriptAttr: new Set<string>(),
     };
     const directives = buildStaticPolicy(hashes, {
-      extraScriptElem: [scanHash, "'sha256-extra='"],
+      extraDirectives: new Map([['script-src-elem', [scanHash, "'sha256-extra='"]]]),
     });
     const sources = directives['script-src-elem'];
     // extra hash that was already scanned is not duplicated

@@ -15,9 +15,9 @@ Use this as a post-build step when you ship a static site: it hashes every inlin
 |---|---|
 | You have a static build on disk and want deterministic hashes | `hash-static` |
 | You need to capture inline content injected by JS at runtime | `crawl` (dynamic) |
-| You want both: static build + framework-injected inline content | `hash-static` with `--extra-*` flags seeded from a one-off crawl |
+| You want both: static build + framework-injected inline content | `hash-static` with `--extra` / `--merge-json` seeded from a one-off crawl |
 
-`hash-static` is fast (no Playwright, no network) and ideal for CI. It only sees what is in the HTML on disk — content added by JavaScript at runtime (e.g. some framework hydration scripts) is invisible to it. For those cases, run `crawl` once against a preview server, capture the missing hashes, and feed them back via `--extra-*`.
+`hash-static` is fast (no Playwright, no network) and ideal for CI. It only sees what is in the HTML on disk — content added by JavaScript at runtime (e.g. some framework hydration scripts) is invisible to it. For those cases, run `crawl` once against a preview server, export as JSON, and feed the result back via `--merge-json` (or individual sources via `--extra`).
 
 ## Usage
 
@@ -34,10 +34,9 @@ csp-analyser hash-static <path>... [options]
 | `--inject` | `false` | Rewrite each scanned HTML in place to include the generated CSP as a `<meta http-equiv="Content-Security-Policy">` immediately after `<head>`. Any existing CSP `<meta>` is replaced. |
 | `--format <fmt>` | `meta` | Output format when not using `--inject` (see [export formats](../guides/export-formats)). |
 | `--report-only` | `false` | Emit `Content-Security-Policy-Report-Only` instead of the enforcing header. |
-| `--extra-script-elem <src>` | — | Extra source expression for `script-src-elem`. Repeatable. Use for runtime-injected inline scripts. |
-| `--extra-style-elem <src>` | — | Extra source expression for `style-src-elem`. Repeatable. |
-| `--extra-style-attr <src>` | — | Extra source expression for `style-src-attr`. Repeatable. |
-| `--extra-script-attr <src>` | — | Extra source expression for `script-src-attr`. Repeatable. |
+| `--extra <directive>=<src>` | — | Extra source for a CSP fetch or navigation directive. Repeatable. e.g. `--extra connect-src=https://api.example.com`. See [supported directives](#supported-directives). |
+| `--merge-json <path>` | — | Merge directives from a previously exported JSON file (the `{ directives: { ... } }` format from `--format json`). Repeatable. Also accepts a bare directive map. |
+| `--policy-directive <d>=<v>` | — | Set a CSP document directive verbatim. Repeatable. e.g. `--policy-directive report-uri=/csp-report`. Value-less directives like `upgrade-insecure-requests` omit the `=`. See [supported directives](#supported-directives). |
 
 ## What it captures
 
@@ -63,7 +62,7 @@ The generated directive map always includes a secure baseline:
 - `img-src 'self' data:`
 - `object-src 'none'`
 
-Plus `script-src-elem` / `style-src-elem` / `style-src-attr` / `script-src-attr` populated from the scan.
+Plus `script-src-elem` / `style-src-elem` / `style-src-attr` / `script-src-attr` populated from the scan, and any additional directives provided via `--extra`.
 
 ## Examples
 
@@ -93,8 +92,40 @@ csp-analyser hash-static dist/ --inject
 
 ```bash
 csp-analyser hash-static dist/ --inject \
-  --extra-style-elem "'sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='" \
-  --extra-script-elem "'sha256-someRuntimeInjectedScriptHash='"
+  --extra "style-src-elem='sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='" \
+  --extra "script-src-elem='sha256-someRuntimeInjectedScriptHash='"
+```
+
+### Add API endpoints, font CDNs, and frame sources
+
+```bash
+csp-analyser hash-static dist/ --inject \
+  --extra connect-src=https://api.example.com \
+  --extra connect-src=wss://ws.example.com \
+  --extra font-src=https://fonts.gstatic.com \
+  --extra frame-src=https://www.youtube.com
+```
+
+### Merge directives from a previous crawl export
+
+```bash
+# First, crawl the live site and export as JSON:
+csp-analyser crawl https://example.com
+csp-analyser export --format json > crawl-policy.json
+
+# Then combine with static hashes:
+csp-analyser hash-static dist/ --inject --merge-json crawl-policy.json
+```
+
+This merges runtime-discovered directives (like `connect-src`, `frame-src`) from the crawl with the static inline hashes — missing directives fall back to `default-src 'self'`.
+
+### Add reporting and upgrade directives
+
+```bash
+csp-analyser hash-static dist/ --format header \
+  --policy-directive report-uri=/csp-report \
+  --policy-directive report-to=csp-endpoint \
+  --policy-directive upgrade-insecure-requests
 ```
 
 ### Export as Cloudflare Pages `_headers`
@@ -102,6 +133,18 @@ csp-analyser hash-static dist/ --inject \
 ```bash
 csp-analyser hash-static dist/ --format cloudflare-pages > dist/_headers
 ```
+
+## Supported directives
+
+`--extra` and `--merge-json` accept the following CSP fetch and navigation directives:
+
+`default-src`, `script-src`, `style-src`, `img-src`, `font-src`, `connect-src`, `media-src`, `object-src`, `frame-src`, `worker-src`, `child-src`, `form-action`, `base-uri`, `manifest-src`, `script-src-elem`, `script-src-attr`, `style-src-elem`, `style-src-attr`
+
+`--policy-directive` accepts CSP document directives that don't take source lists:
+
+`report-uri`, `report-to`, `sandbox`, `upgrade-insecure-requests`, `require-trusted-types-for`, `trusted-types`, `plugin-types`
+
+These are passed verbatim into the policy. Note that `report-uri` and `report-to` are stripped when exporting to `meta` format (meta tags cannot include them).
 
 ## Notes
 
