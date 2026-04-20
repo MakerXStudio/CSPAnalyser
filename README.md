@@ -75,6 +75,7 @@ csp-analyser hash-static dist/ --inject   # hashes inline content and writes <me
 | -------------------------- | ------------------------------------------------------------ |
 | `crawl <url>`              | Headless crawl and generate policy                           |
 | `interactive <url>`        | Manual browsing with violation capture                       |
+| `audit <url>`              | Audit an existing CSP deployment and generate updated policy |
 | `hash-static <path>...`    | Hash inline content in built HTML files, no browser required |
 | `generate <session-id>`    | Regenerate policy from a previous session                    |
 | `export <session-id>`      | Export policy in a specific format                           |
