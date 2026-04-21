@@ -283,8 +283,9 @@ export async function performManualLogin(
           items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
         }
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
       (window as any).__cspReportSessionStorage(window.location.origin, JSON.stringify(items));
+      /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
     };
     window.addEventListener('beforeunload', report);
     window.addEventListener('load', () => setTimeout(report, 1_000));
@@ -339,7 +340,7 @@ export async function performManualLogin(
       if (existing) {
         existing.sessionStorage = entries;
       } else {
-        origins.push({ origin, sessionStorage: entries });
+        origins.push({ origin, localStorage: [], sessionStorage: entries });
       }
     }
     storageState.origins = origins;
@@ -421,7 +422,7 @@ export async function captureSessionStorage(
     if (existing) {
       existing.sessionStorage = entries;
     } else {
-      origins.push({ origin, sessionStorage: entries });
+      origins.push({ origin, localStorage: [], sessionStorage: entries });
     }
   }
 

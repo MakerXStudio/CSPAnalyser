@@ -507,8 +507,9 @@ export async function runInteractiveSession(
                 items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
               }
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
             (window as any).__cspReportSessionStorage(window.location.origin, JSON.stringify(items));
+            /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
           };
           window.addEventListener('beforeunload', report);
           window.addEventListener('load', () => setTimeout(report, 1_000));
@@ -615,13 +616,13 @@ export async function runInteractiveSession(
             origin: string;
             localStorage?: Array<{ name: string; value: string }>;
             sessionStorage?: Array<{ name: string; value: string }>;
-          }> = [...(state.origins ?? [])];
+          }> = [...state.origins];
           for (const [origin, entries] of sessionStorageSnapshots) {
             const existing = extOrigins.find((o) => o.origin === origin);
             if (existing) {
               existing.sessionStorage = entries;
             } else {
-              extOrigins.push({ origin, sessionStorage: entries });
+              extOrigins.push({ origin, localStorage: [], sessionStorage: entries });
             }
           }
           // The JSON output includes sessionStorage; Playwright's

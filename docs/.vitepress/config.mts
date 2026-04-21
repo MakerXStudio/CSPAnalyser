@@ -112,6 +112,7 @@ export default defineConfig({
             { text: 'Strictness Levels', link: '/guides/strictness' },
             { text: 'Understanding Scores', link: '/guides/scoring' },
             { text: 'CI/CD Integration', link: '/guides/ci-integration' },
+            { text: 'Advanced Scenarios', link: '/guides/advanced-scenarios' },
           ],
         },
       ],

@@ -27,6 +27,8 @@ csp-analyser crawl <url> [options]
 | `--strict-dynamic`       | `false`       | Add `'strict-dynamic'` alongside nonces in script directives. Implies `--nonce`.                                              |
 | `--hash`                 | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.            |
 | `--strip-unsafe-eval`    | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                     |
+| `--collapse-hash-threshold <n>` | disabled | Collapse hashes to `'unsafe-inline'` when a directive exceeds `<n>` hashes.                                              |
+| `--static-site`          | `false`       | Target is a static site — disables nonce replacement.                                                                         |
 | `--report-only`          | `false`       | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one.                                          |
 | `--project <name>`       | auto-detected | Override auto-detected project name. Sessions are tagged with this name.                                                      |
 

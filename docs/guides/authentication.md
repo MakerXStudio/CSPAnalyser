@@ -112,6 +112,42 @@ Manual login requires headed mode. It cannot be used in headless environments (C
 | Cookie injection | MCP agent workflows                     |    Yes     |     Yes     |
 | Manual login     | Complex auth flows, initial exploration |     No     |     No      |
 
+## sessionStorage and token-based auth (MSAL / Azure AD B2C)
+
+Many modern SPAs use token-based authentication (MSAL, Auth0, Firebase Auth) where tokens are stored in `sessionStorage` rather than cookies. Playwright's built-in `storageState()` only captures cookies and localStorage — sessionStorage is normally lost.
+
+CSP Analyser extends the storage state format to also capture and restore `sessionStorage`. When you use `--save-storage-state`, sessionStorage is captured through multiple mechanisms to ensure no tokens are lost:
+
+- **`beforeunload` handler** (via `addInitScript`) — captures the final state right before each page closes, surviving all navigations during the auth flow
+- **`load` + 1s delay** — catches async MSAL token writes after auth redirects
+- **5-second periodic snapshots** — catches silent token refreshes between page loads
+
+The captured entries are written into the JSON file alongside cookies and localStorage.
+
+When you later use `--storage-state` to load the file, CSP Analyser:
+
+1. Passes the file to Playwright (restoring cookies + localStorage as normal)
+2. Reads the `sessionStorage` extension from the file
+3. Registers an `addInitScript` that calls `sessionStorage.setItem()` for each entry — this runs **before any page JavaScript**, so tokens are available when frameworks like MSAL initialize
+
+This means MSAL access tokens, ID tokens, and refresh tokens are restored correctly:
+
+```bash
+# Step 1: Log in via Azure AD B2C and save everything
+csp-analyser interactive https://app.example.com --save-storage-state auth.json
+
+# Step 2: Headless crawl with full auth state (including sessionStorage tokens)
+csp-analyser crawl https://app.example.com --storage-state auth.json
+```
+
+::: tip
+If the crawl still redirects to login, the tokens have likely expired. MSAL access tokens typically expire after 1 hour. Re-run the interactive login to generate a fresh storage state file.
+:::
+
+::: warning Cross-origin sessionStorage
+Only sessionStorage entries for the **target origin** are restored. Cross-origin sessionStorage (e.g. from the identity provider domain) cannot be injected and is not useful for CSP crawling.
+:::
+
 ## Security notes
 
 ::: danger
@@ -119,7 +155,7 @@ Storage state files and cookies contain session secrets. Never commit them to ve
 :::
 
 - Add `auth.json` and `*.storage-state.json` to your `.gitignore`
-- Storage state files can contain localStorage data, which may include tokens, user data, or API keys
+- Storage state files can contain localStorage and sessionStorage data, which may include auth tokens, user data, or API keys
 - The `--storage-state` path is resolved through symlinks using `fs.realpathSync()` to prevent symlink-based path traversal attacks
 - Cookie values are validated against RFC 6265 to prevent header injection
 

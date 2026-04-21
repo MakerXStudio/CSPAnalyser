@@ -91,13 +91,6 @@ export function detectStaticSite(
     );
   }
 
-  // meta tag export format can't use nonces at all
-  const hasMetaExport = directives['meta-export'] !== undefined;
-  if (hasMetaExport) {
-    staticScore += 3;
-    reasons.push('Policy uses meta tag format — nonces cannot be set in meta tags');
-  }
-
   const isLikelyStatic = staticScore > ssrScore && staticScore >= 2;
 
   let confidence: StaticSiteSignals['confidence'];

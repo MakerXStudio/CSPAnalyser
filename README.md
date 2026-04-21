@@ -8,7 +8,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 
 - Headless crawling with configurable depth and page limits
 - Interactive mode for manual browsing with live violation capture
-- Authentication support (storage state, manual login, raw cookies)
+- Authentication support (storage state with sessionStorage capture, manual login, raw cookies)
 - Dual violation capture (DOM events + HTTP reporting endpoint)
 - Smart policy optimization (common sources factored into `default-src`)
 - Nonce generation replacing `unsafe-inline` with `nonce-` placeholders
@@ -16,6 +16,10 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 - Hash-based `unsafe-inline` removal using SHA-256/384/512 hashes
 - `unsafe-eval` stripping for iterative hardening
 - `strict-dynamic` support for script loading
+- Auto-collapse excessive hashes to `unsafe-inline` (configurable threshold)
+- Static site mode: detects static hosting and disables nonce suggestions
+- Hash stability analysis: warns when hashes are build-specific and impractical
+- `unsafe-eval` source attribution: identifies which dependencies require `eval()`
 - Session diffing to compare policy changes over time
 - Policy scoring and security grading
 - Permissions-Policy header capture
@@ -98,6 +102,9 @@ csp-analyser hash-static dist/ --inject   # hashes inline content and writes <me
 --strict-dynamic        Add strict-dynamic alongside nonces (implies --nonce)
 --hash                  Remove unsafe-inline when hash sources are available
 --strip-unsafe-eval     Remove unsafe-eval from the generated policy
+--collapse-hash-threshold <n>  Collapse hashes to 'unsafe-inline' when count
+                        exceeds <n> per directive
+--static-site           Target is a static site (disables nonce suggestions)
 --storage-state <path>  Playwright storage state file for auth
 --cookies <json>        Raw cookies as JSON string
 --manual-login          Open browser for manual login before crawl

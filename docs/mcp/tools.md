@@ -88,11 +88,13 @@ Generate an optimised CSP policy from violations captured in a session.
 
 | Parameter         | Type                                     | Required | Default      | Description                                                                                       |
 | ----------------- | ---------------------------------------- | :------: | ------------ | ------------------------------------------------------------------------------------------------- |
-| `sessionId`       | `string` (UUID)                          |   Yes    | --           | The session ID                                                                                    |
-| `strictness`      | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness                                                                                 |
-| `includeHashes`   | `boolean`                                |    No    | `false`      | Include SHA-256 hashes for inline scripts/styles (from violation samples and full DOM extraction) |
-| `useHashes`       | `boolean`                                |    No    | `false`      | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`)         |
-| `stripUnsafeEval` | `boolean`                                |    No    | `false`      | Remove `'unsafe-eval'` from the generated policy                                                  |
+| `sessionId`              | `string` (UUID)                          |   Yes    | --           | The session ID                                                                                    |
+| `strictness`             | `"strict" \| "moderate" \| "permissive"` |    No    | `"moderate"` | Policy strictness                                                                                 |
+| `includeHashes`          | `boolean`                                |    No    | `false`      | Include SHA-256 hashes for inline scripts/styles (from violation samples and full DOM extraction) |
+| `useHashes`              | `boolean`                                |    No    | `false`      | Remove `'unsafe-inline'` from directives that have hash sources (implies `includeHashes`)         |
+| `stripUnsafeEval`        | `boolean`                                |    No    | `false`      | Remove `'unsafe-eval'` from the generated policy                                                  |
+| `collapseHashThreshold`  | `integer` (0+)                           |    No    | disabled     | Collapse hashes to `'unsafe-inline'` when a directive exceeds this many hashes                    |
+| `staticSiteMode`         | `boolean`                                |    No    | `false`      | Target is a static site — skips nonce suggestions and enables hash collapsing recommendations     |
 
 **Example:**
 
@@ -104,7 +106,11 @@ Generate an optimised CSP policy from violations captured in a session.
 }
 ```
 
-**Response includes:** `sessionId`, `strictness`, `directives` (map), `policyString`
+**Response includes:** `sessionId`, `strictness`, `directives` (map), `policyString`. May also include:
+
+- `evalSources` — when `'unsafe-eval'` is in the policy, lists the source files and line numbers that triggered it (for identifying which dependencies call `eval()`)
+- `hashStability` — warnings when hashes are likely build-specific and impractical to maintain (high count, large content, bundler patterns like webpack/Expo/Next.js)
+- `staticSiteAnalysis` — when the site is detected as static, includes confidence level, reasons, and whether nonces are feasible
 
 ---
 
@@ -118,8 +124,10 @@ Export a CSP policy in a deployment-ready format.
 | `format`          | `"header" \| "meta" \| "nginx" \| "apache" \| "cloudflare" \| "cloudflare-pages" \| "azure-frontdoor" \| "helmet" \| "json"` |   Yes    | --           | Output format                                                   |
 | `strictness`      | `"strict" \| "moderate" \| "permissive"`                                                                                     |    No    | `"moderate"` | Policy strictness                                               |
 | `isReportOnly`    | `boolean`                                                                                                                    |    No    | `false`      | Use `Content-Security-Policy-Report-Only` header                |
-| `useHashes`       | `boolean`                                                                                                                    |    No    | `false`      | Remove `'unsafe-inline'` from directives that have hash sources |
-| `stripUnsafeEval` | `boolean`                                                                                                                    |    No    | `false`      | Remove `'unsafe-eval'` from the generated policy                |
+| `useHashes`              | `boolean`                                                                                                                    |    No    | `false`      | Remove `'unsafe-inline'` from directives that have hash sources |
+| `stripUnsafeEval`        | `boolean`                                                                                                                    |    No    | `false`      | Remove `'unsafe-eval'` from the generated policy                |
+| `collapseHashThreshold`  | `integer` (0+)                                                                                                               |    No    | disabled     | Collapse hashes to `'unsafe-inline'` when a directive exceeds this many hashes |
+| `staticSiteMode`         | `boolean`                                                                                                                    |    No    | `false`      | Target is a static site — skips nonce suggestions               |
 
 **Example:**
 

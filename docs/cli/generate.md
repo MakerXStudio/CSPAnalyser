@@ -25,6 +25,8 @@ When `session-id` is omitted, the most recent completed session for the current 
 | `--strict-dynamic`     | `false`       | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`.                                                                   |
 | `--hash`               | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.            |
 | `--strip-unsafe-eval`  | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                     |
+| `--collapse-hash-threshold <n>` | disabled | Collapse hashes to `'unsafe-inline'` when a directive exceeds `<n>` hashes. Useful for CSS-in-JS apps that generate thousands of dynamic inline styles. |
+| `--static-site`        | `false`       | Target is a static site — disables nonce replacement since nonces require a server to generate per-request values.             |
 | `--report-only`        | `false`       | Generate a report-only header.                                                                                                |
 | `--project <name>`     | auto-detected | Override auto-detected project name for session lookup.                                                                       |
 

@@ -28,3 +28,9 @@ Once you have a policy you're happy with, export it in the format your infrastru
 
 - **[Export Formats](/guides/export-formats)** — All output formats with examples for nginx, Apache, Cloudflare, Azure Front Door, Helmet, and more
 - **[CI/CD Integration](/guides/ci-integration)** — Run CSP Analyser in GitHub Actions and other CI pipelines to catch regressions automatically
+
+## Advanced scenarios
+
+Handling real-world edge cases: CSS-in-JS hash explosions, static hosting without nonces, `eval()` attribution, and option interactions.
+
+- **[Advanced Scenarios](/guides/advanced-scenarios)** — Hash collapsing, static site mode, `unsafe-eval` source attribution, and how `--hash`, `--collapse-hash-threshold`, and `--strip-unsafe-eval` interact
