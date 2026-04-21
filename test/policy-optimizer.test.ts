@@ -643,3 +643,114 @@ describe('stripUnsafeInline', () => {
     expect(result['script-src']).toContain("'unsafe-eval'");
   });
 });
+
+// ── collapseHashThreshold ─────────────────────────────────────────────
+
+describe('collapseHashThreshold', () => {
+  it('does not collapse hashes below the threshold', () => {
+    const hashes = Array.from({ length: 5 }, (_, i) => `'sha256-hash${i}='`);
+    const result = optimizePolicy(
+      { 'style-src-attr': [...hashes, "'unsafe-hashes'"] },
+      undefined,
+      { collapseHashThreshold: 10 },
+    );
+    // All hashes preserved
+    for (const h of hashes) {
+      expect(result['style-src-attr']).toContain(h);
+    }
+    expect(result['style-src-attr']).not.toContain("'unsafe-inline'");
+  });
+
+  it('collapses hashes above the threshold to unsafe-inline', () => {
+    const hashes = Array.from({ length: 20 }, (_, i) => `'sha256-hash${i}='`);
+    const result = optimizePolicy(
+      { 'style-src-attr': [...hashes, "'unsafe-hashes'", "'self'"] },
+      undefined,
+      { collapseHashThreshold: 10 },
+    );
+    expect(result['style-src-attr']).toContain("'unsafe-inline'");
+    expect(result['style-src-attr']).toContain("'self'");
+    // All hashes removed
+    for (const h of hashes) {
+      expect(result['style-src-attr']).not.toContain(h);
+    }
+    // unsafe-hashes also removed
+    expect(result['style-src-attr']).not.toContain("'unsafe-hashes'");
+  });
+
+  it('collapses script-src-elem hashes above the threshold', () => {
+    const hashes = Array.from({ length: 15 }, (_, i) => `'sha256-script${i}='`);
+    const result = optimizePolicy(
+      { 'script-src-elem': ["'self'", ...hashes] },
+      undefined,
+      { collapseHashThreshold: 10 },
+    );
+    expect(result['script-src-elem']).toContain("'unsafe-inline'");
+    expect(result['script-src-elem']).toContain("'self'");
+    for (const h of hashes) {
+      expect(result['script-src-elem']).not.toContain(h);
+    }
+  });
+
+  it('does not collapse when threshold is 0 (disabled)', () => {
+    const hashes = Array.from({ length: 50 }, (_, i) => `'sha256-hash${i}='`);
+    const result = optimizePolicy(
+      { 'style-src-attr': hashes },
+      undefined,
+      { collapseHashThreshold: 0 },
+    );
+    // All hashes preserved, plus 'unsafe-hashes' added by the attr-hash correctness logic
+    expect(result['style-src-attr']).toHaveLength(51);
+    expect(result['style-src-attr']).toContain("'unsafe-hashes'");
+  });
+
+  it('does not add duplicate unsafe-inline if already present', () => {
+    const hashes = Array.from({ length: 20 }, (_, i) => `'sha256-hash${i}='`);
+    const result = optimizePolicy(
+      { 'style-src-attr': ["'unsafe-inline'", ...hashes] },
+      undefined,
+      { collapseHashThreshold: 10 },
+    );
+    const unsafeInlineCount = result['style-src-attr'].filter(
+      (s) => s === "'unsafe-inline'",
+    ).length;
+    expect(unsafeInlineCount).toBe(1);
+  });
+
+  it('does not affect directives that are not script/style', () => {
+    const hashes = Array.from({ length: 20 }, (_, i) => `'sha256-hash${i}='`);
+    const result = optimizePolicy(
+      { 'img-src': ["'self'", ...hashes] },
+      undefined,
+      { collapseHashThreshold: 10 },
+    );
+    // img-src is not eligible for collapse
+    for (const h of hashes) {
+      expect(result['img-src']).toContain(h);
+    }
+  });
+});
+
+// ── staticSiteMode ────────────────────────────────────────────────────
+
+describe('staticSiteMode', () => {
+  it('skips nonce replacement when static site mode is enabled', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-inline'"] },
+      undefined,
+      { useNonces: true, staticSiteMode: true },
+    );
+    // Nonces should not be injected
+    expect(result['script-src']).toContain("'unsafe-inline'");
+    expect(result['script-src']).not.toContain("'nonce-{{CSP_NONCE}}'");
+  });
+
+  it('still applies other optimizations in static site mode', () => {
+    const result = optimizePolicy(
+      { 'script-src': ["'self'", "'unsafe-eval'"] },
+      undefined,
+      { staticSiteMode: true, stripUnsafeEval: true },
+    );
+    expect(result['script-src']).not.toContain("'unsafe-eval'");
+  });
+});

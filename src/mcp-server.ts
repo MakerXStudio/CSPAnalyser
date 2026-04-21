@@ -16,6 +16,8 @@ import {
   getPages,
   getPermissionsPolicies,
   getPermissionsPolicyByDirective,
+  getEvalSourceAttribution,
+  getInlineHashes,
 } from './db/repository.js';
 import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
@@ -298,6 +300,20 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Remove 'unsafe-eval' from the generated policy (default: false)"),
+        collapseHashThreshold: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Collapse hashes to 'unsafe-inline' when a directive exceeds this many hashes (default: disabled)",
+          ),
+        staticSiteMode: z
+          .boolean()
+          .optional()
+          .describe(
+            'Target is a static site — skips nonce suggestions and enables aggressive hash collapsing recommendations (default: false)',
+          ),
       },
     },
     async (args) => {
@@ -315,14 +331,36 @@ export function createMcpServer(db: Database.Database): McpServer {
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
           stripUnsafeEval: args.stripUnsafeEval,
+          collapseHashThreshold: args.collapseHashThreshold,
+          staticSiteMode: args.staticSiteMode,
         });
         const policyString = directivesToString(optimized);
+
+        // Eval source attribution: show which files/lines require unsafe-eval
+        const hasUnsafeEval = Object.values(optimized).some((sources) =>
+          sources.includes("'unsafe-eval'"),
+        );
+        const evalSources = hasUnsafeEval
+          ? getEvalSourceAttribution(db, args.sessionId)
+          : [];
+
+        // Hash stability analysis
+        const { analyseHashStability } = await import('./hash-stability-analyser.js');
+        const inlineHashes = getInlineHashes(db, args.sessionId);
+        const hashStability = analyseHashStability(inlineHashes);
+
+        // Static site detection
+        const { detectStaticSite } = await import('./static-site-detector.js');
+        const staticSiteAnalysis = detectStaticSite(inlineHashes, optimized);
 
         return toolResult({
           sessionId: args.sessionId,
           strictness: args.strictness ?? 'moderate',
           directives: optimized,
           policyString,
+          ...(evalSources.length > 0 ? { evalSources } : {}),
+          ...(hashStability.warnings.length > 0 ? { hashStability } : {}),
+          ...(staticSiteAnalysis.isLikelyStatic ? { staticSiteAnalysis } : {}),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -371,6 +409,20 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Remove 'unsafe-eval' from the generated policy (default: false)"),
+        collapseHashThreshold: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Collapse hashes to 'unsafe-inline' when a directive exceeds this many hashes (default: disabled)",
+          ),
+        staticSiteMode: z
+          .boolean()
+          .optional()
+          .describe(
+            'Target is a static site — skips nonce suggestions (default: false)',
+          ),
       },
     },
     async (args) => {
@@ -388,6 +440,8 @@ export function createMcpServer(db: Database.Database): McpServer {
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
           stripUnsafeEval: args.stripUnsafeEval,
+          collapseHashThreshold: args.collapseHashThreshold,
+          staticSiteMode: args.staticSiteMode,
         });
         const formatted = formatPolicy(optimized, args.format, args.isReportOnly ?? false);
 

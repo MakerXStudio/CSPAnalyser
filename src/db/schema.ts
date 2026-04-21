@@ -109,6 +109,13 @@ export function initializeDatabase(db: Database.Database): void {
     // Column already exists — ignore
   }
 
+  // Add content column to inline_hashes for storing actual inline content.
+  try {
+    db.exec('ALTER TABLE inline_hashes ADD COLUMN content TEXT');
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Migrate the violations table uniqueness constraint.
   // Old databases have a table-level UNIQUE(session_id, document_uri, blocked_uri,
   // effective_directive) that is too coarse. The new schema uses a UNIQUE INDEX with

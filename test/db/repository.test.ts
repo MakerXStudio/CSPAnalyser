@@ -22,6 +22,7 @@ import {
   getPermissionsPolicyByDirective,
   insertInlineHash,
   getInlineHashes,
+  getEvalSourceAttribution,
   type InsertViolationParams,
 } from '../../src/db/repository.js';
 import type { SessionConfig } from '../../src/types.js';
@@ -923,5 +924,202 @@ describe('inline hash repository', () => {
     expect(getInlineHashes(db, session.id)).toHaveLength(1);
     db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);
     expect(getInlineHashes(db, session.id)).toEqual([]);
+  });
+
+  it('stores and retrieves inline content', () => {
+    const content = '<script>console.log("hello")</script>';
+    const result = insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'contenthash==',
+      contentLength: content.length,
+      content,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.content).toBe(content);
+
+    const hashes = getInlineHashes(db, session.id);
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0].content).toBe(content);
+  });
+
+  it('stores null content when not provided', () => {
+    const result = insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'nocontent==',
+      contentLength: 42,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.content).toBeNull();
+  });
+
+  it('upserts content when existing row has NULL content', () => {
+    // First insert without content (simulates observer path)
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'upserthash==',
+      contentLength: 42,
+    });
+
+    let hashes = getInlineHashes(db, session.id);
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0].content).toBeNull();
+
+    // Second insert with content (simulates extractor path)
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'upserthash==',
+      contentLength: 42,
+      content: 'console.log("hello")',
+    });
+
+    hashes = getInlineHashes(db, session.id);
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0].content).toBe('console.log("hello")');
+  });
+
+  it('does not overwrite existing content with NULL', () => {
+    // First insert with content
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'keepcontent==',
+      contentLength: 20,
+      content: 'original content',
+    });
+
+    // Second insert without content (should not overwrite)
+    insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'keepcontent==',
+      contentLength: 20,
+    });
+
+    const hashes = getInlineHashes(db, session.id);
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0].content).toBe('original content');
+  });
+
+  it('truncates content exceeding 100KB storage limit', () => {
+    const largeContent = 'x'.repeat(200_000);
+    const result = insertInlineHash(db, {
+      sessionId: session.id,
+      pageId: null,
+      directive: 'script-src-elem',
+      hash: 'largehash==',
+      contentLength: largeContent.length,
+      content: largeContent,
+    });
+
+    expect(result).not.toBeNull();
+    // Stored content is truncated to 100KB (102_400 chars)
+    expect(result!.content).toHaveLength(102_400);
+    // Original content length is preserved
+    expect(result!.contentLength).toBe(200_000);
+  });
+});
+
+// ── Eval source attribution ───────────────────────────────────────────────
+
+describe('getEvalSourceAttribution', () => {
+  let db: Database.Database;
+  let session: ReturnType<typeof createSession>;
+
+  beforeEach(() => {
+    db = createTestDb();
+    session = createSession(db, TEST_CONFIG);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('returns grouped eval violation sources aggregated across pages', () => {
+    const base: InsertViolationParams = {
+      sessionId: session.id,
+      pageId: null,
+      documentUri: 'https://example.com/',
+      blockedUri: "'unsafe-eval'",
+      violatedDirective: 'script-src',
+      effectiveDirective: 'script-src',
+      capturedVia: 'dom_event',
+    };
+
+    // Two violations from same source file/line but different pages
+    insertViolation(db, {
+      ...base,
+      sourceFile: 'https://example.com/bundle.js',
+      lineNumber: 42,
+      columnNumber: 10,
+    });
+    insertViolation(db, {
+      ...base,
+      sourceFile: 'https://example.com/bundle.js',
+      lineNumber: 42,
+      columnNumber: 10,
+      documentUri: 'https://example.com/page2',
+    });
+
+    // One from a different source
+    insertViolation(db, {
+      ...base,
+      sourceFile: 'https://example.com/other.js',
+      lineNumber: 100,
+      columnNumber: 5,
+    });
+
+    const results = getEvalSourceAttribution(db, session.id);
+    // Same callsite across two pages is aggregated into one row
+    expect(results).toHaveLength(2);
+    // Ordered by count desc — bundle.js:42 has count 2
+    expect(results[0].sourceFile).toBe('https://example.com/bundle.js');
+    expect(results[0].lineNumber).toBe(42);
+    expect(results[0].count).toBe(2);
+    // other.js:100 has count 1
+    expect(results[1].sourceFile).toBe('https://example.com/other.js');
+    expect(results[1].count).toBe(1);
+  });
+
+  it('returns empty array when no eval violations exist', () => {
+    insertViolation(db, {
+      sessionId: session.id,
+      pageId: null,
+      documentUri: 'https://example.com/',
+      blockedUri: 'https://cdn.example.com/script.js',
+      violatedDirective: 'script-src',
+      effectiveDirective: 'script-src',
+      capturedVia: 'dom_event',
+    });
+
+    const results = getEvalSourceAttribution(db, session.id);
+    expect(results).toEqual([]);
+  });
+
+  it('excludes eval violations without source_file', () => {
+    insertViolation(db, {
+      sessionId: session.id,
+      pageId: null,
+      documentUri: 'https://example.com/',
+      blockedUri: "'unsafe-eval'",
+      violatedDirective: 'script-src',
+      effectiveDirective: 'script-src',
+      capturedVia: 'dom_event',
+      // No sourceFile
+    });
+
+    const results = getEvalSourceAttribution(db, session.id);
+    expect(results).toEqual([]);
   });
 });

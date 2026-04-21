@@ -351,6 +351,53 @@ describe('parseCliArgs', () => {
     });
   });
 
+  describe('--collapse-hash-threshold', () => {
+    it('parses valid integer', () => {
+      const result = parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', '10']);
+      expect(result.collapseHashThreshold).toBe(10);
+    });
+
+    it('parses zero', () => {
+      const result = parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', '0']);
+      expect(result.collapseHashThreshold).toBe(0);
+    });
+
+    it('throws on non-integer value', () => {
+      expect(() =>
+        parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', 'abc']),
+      ).toThrow('Invalid --collapse-hash-threshold');
+    });
+
+    it('throws on negative value', () => {
+      expect(() =>
+        parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', '-1']),
+      ).toThrow('Invalid --collapse-hash-threshold');
+    });
+
+    it('throws on float value', () => {
+      expect(() =>
+        parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', '10.5']),
+      ).toThrow('Invalid --collapse-hash-threshold');
+    });
+
+    it('is undefined when not provided', () => {
+      const result = parseCliArgs(['crawl', 'https://example.com']);
+      expect(result.collapseHashThreshold).toBeUndefined();
+    });
+  });
+
+  describe('--static-site', () => {
+    it('defaults to false', () => {
+      const result = parseCliArgs(['crawl', 'https://example.com']);
+      expect(result.staticSiteMode).toBe(false);
+    });
+
+    it('sets to true when provided', () => {
+      const result = parseCliArgs(['crawl', 'https://example.com', '--static-site']);
+      expect(result.staticSiteMode).toBe(true);
+    });
+  });
+
   describe('hash-static --merge-json', () => {
     let tmpDir: string;
 

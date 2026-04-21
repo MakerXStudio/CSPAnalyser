@@ -109,6 +109,7 @@ export async function extractInlineHashes(
       directive: item.directive,
       hash,
       contentLength: item.content.length,
+      content: item.content,
     });
     if (result) {
       count++;

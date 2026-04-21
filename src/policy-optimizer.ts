@@ -70,6 +70,17 @@ export interface OptimizePolicyOptions {
    * this option is applied.
    */
   stripUnsafeInline?: boolean;
+  /**
+   * When a directive has more hashes than this threshold, collapse them to
+   * 'unsafe-inline' instead. Set to 0 to disable. Default: disabled.
+   */
+  collapseHashThreshold?: number;
+  /**
+   * When true, the target is a static site where nonces cannot be generated
+   * per-request. Skips nonce replacement and enables more aggressive hash
+   * collapsing for impractical hash counts.
+   */
+  staticSiteMode?: boolean;
 }
 
 /**
@@ -212,6 +223,48 @@ export function optimizePolicy(
         result[directive] = [...sources, "'unsafe-hashes'"].sort();
       }
     }
+  }
+
+  // Collapse hashes to 'unsafe-inline' when a directive exceeds the threshold.
+  // This addresses the common case of CSS-in-JS frameworks generating thousands
+  // of unique inline style hashes that are impractical to maintain.
+  const collapseThreshold = options?.collapseHashThreshold;
+  if (collapseThreshold != null && collapseThreshold > 0) {
+    const collapseEligible = [
+      'script-src', 'script-src-elem', 'script-src-attr',
+      'style-src', 'style-src-elem', 'style-src-attr',
+    ];
+    for (const directive of collapseEligible) {
+      if (directive in result) {
+        const sources = result[directive];
+        const hashCount = sources.filter(
+          (s) =>
+            s.startsWith("'sha256-") ||
+            s.startsWith("'sha384-") ||
+            s.startsWith("'sha512-"),
+        ).length;
+        if (hashCount > collapseThreshold) {
+          result[directive] = sources.filter(
+            (s) =>
+              !s.startsWith("'sha256-") &&
+              !s.startsWith("'sha384-") &&
+              !s.startsWith("'sha512-") &&
+              s !== "'unsafe-hashes'",
+          );
+          if (!result[directive].includes("'unsafe-inline'")) {
+            result[directive].push("'unsafe-inline'");
+          }
+        }
+      }
+    }
+  }
+
+  // In static site mode, skip nonce replacement — nonces require a server
+  // to generate a unique value per request, which is not possible for
+  // static file hosts (e.g. Azure Static Web Apps, GitHub Pages, S3).
+  if (options?.staticSiteMode && options.useNonces) {
+    // Silently skip nonces — the caller opted for static site mode
+    options = { ...options, useNonces: false };
   }
 
   // Replace 'unsafe-inline' with nonce placeholder in script/style directives

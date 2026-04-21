@@ -27,6 +27,7 @@ import type {
   ExistingCspHeader,
   ExistingCspHeaderRow,
   ExistingCspHeaderType,
+  EvalSourceAttribution,
 } from '../types.js';
 
 const logger = createLogger();
@@ -407,6 +408,39 @@ export function getViolationSummary(
   }));
 }
 
+// ── Eval source attribution ──────────────────────────────────────────────
+
+/**
+ * Returns grouped source attribution for eval-related violations,
+ * showing which source files and line numbers triggered 'unsafe-eval'.
+ */
+export function getEvalSourceAttribution(
+  db: Database.Database,
+  sessionId: string,
+): EvalSourceAttribution[] {
+  const rows = db
+    .prepare(
+      `SELECT source_file, line_number, column_number, COUNT(*) as count
+       FROM violations
+       WHERE session_id = ? AND blocked_uri = ? AND source_file IS NOT NULL
+       GROUP BY source_file, line_number, column_number
+       ORDER BY count DESC`,
+    )
+    .all(sessionId, "'unsafe-eval'") as Array<{
+    source_file: string;
+    line_number: number | null;
+    column_number: number | null;
+    count: number;
+  }>;
+
+  return rows.map((r) => ({
+    sourceFile: r.source_file,
+    lineNumber: r.line_number,
+    columnNumber: r.column_number,
+    count: r.count,
+  }));
+}
+
 // ── Policy repository ─────────────────────────────────────────────────────
 
 export interface InsertPolicyParams {
@@ -527,6 +561,7 @@ function toInlineHash(row: InlineHashRow): InlineHash {
     directive: row.directive,
     hash: row.hash,
     contentLength: row.content_length,
+    content: row.content,
     createdAt: row.created_at,
   };
 }
@@ -537,16 +572,34 @@ export interface InsertInlineHashParams {
   directive: string;
   hash: string;
   contentLength: number;
+  content?: string | null;
 }
+
+/** Maximum inline content size to store in the database (100 KB). */
+const MAX_STORED_CONTENT_LENGTH = 102_400;
 
 export function insertInlineHash(
   db: Database.Database,
   p: InsertInlineHashParams,
 ): InlineHash | null {
+  // Truncate content above the storage limit to keep the database manageable
+  const storedContent =
+    p.content != null
+      ? p.content.length <= MAX_STORED_CONTENT_LENGTH
+        ? p.content
+        : p.content.slice(0, MAX_STORED_CONTENT_LENGTH)
+      : null;
+
+  // Two-step upsert: INSERT OR IGNORE first, then UPDATE content if the
+  // existing row has NULL content and the new insert has content. This
+  // handles the race between the inline-content-observer (fires first,
+  // may insert with NULL content) and the post-load extractor (fires
+  // later with full content). The second step is a no-op when content
+  // already exists or when the new insert has no content.
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO inline_hashes
-      (session_id, page_id, directive, hash, content_length)
-    VALUES (?, ?, ?, ?, ?)
+      (session_id, page_id, directive, hash, content_length, content)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   const result = stmt.run(
     p.sessionId,
@@ -554,8 +607,20 @@ export function insertInlineHash(
     p.directive,
     p.hash,
     p.contentLength,
+    storedContent,
   );
-  if (result.changes === 0) return null;
+
+  if (result.changes === 0) {
+    // Row already exists — backfill content if ours is non-null and theirs is null
+    if (storedContent != null) {
+      db.prepare(`
+        UPDATE inline_hashes
+        SET content = ?, content_length = ?
+        WHERE session_id = ? AND directive = ? AND hash = ? AND content IS NULL
+      `).run(storedContent, p.contentLength, p.sessionId, p.directive, p.hash);
+    }
+    return null;
+  }
 
   const row = db
     .prepare('SELECT * FROM inline_hashes WHERE id = ?')

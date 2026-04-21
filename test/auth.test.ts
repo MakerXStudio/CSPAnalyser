@@ -5,6 +5,8 @@ import * as os from 'node:os';
 import {
   createAuthenticatedContext,
   performManualLogin,
+  captureSessionStorage,
+  restoreSessionStorage,
   extractHostname,
   mapCookies,
   validateStorageStatePath,
@@ -21,7 +23,10 @@ import type { CookieParam } from '../src/types.js';
 function createMockContext(overrides?: Partial<PlaywrightBrowserContext>): PlaywrightBrowserContext {
   return {
     addCookies: vi.fn<PlaywrightBrowserContext['addCookies']>().mockResolvedValue(undefined),
+    addInitScript: vi.fn<PlaywrightBrowserContext['addInitScript']>().mockResolvedValue(undefined),
     storageState: vi.fn<PlaywrightBrowserContext['storageState']>().mockResolvedValue({ cookies: [] }),
+    pages: vi.fn<PlaywrightBrowserContext['pages']>().mockReturnValue([]),
+    newPage: vi.fn<PlaywrightBrowserContext['newPage']>().mockImplementation(async () => createMockPage()),
     close: vi.fn<PlaywrightBrowserContext['close']>().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -35,13 +40,18 @@ function createMockBrowser(context?: PlaywrightBrowserContext): PlaywrightBrowse
   };
 }
 
-function createMockPage(context?: PlaywrightBrowserContext): PlaywrightBrowserPage {
+function createMockPage(context?: PlaywrightBrowserContext, pageUrl = 'about:blank'): PlaywrightBrowserPage {
   const ctx = context ?? createMockContext();
   return {
     goto: vi.fn<PlaywrightBrowserPage['goto']>().mockResolvedValue(undefined),
     waitForEvent: vi.fn<PlaywrightBrowserPage['waitForEvent']>().mockResolvedValue(undefined),
     close: vi.fn<PlaywrightBrowserPage['close']>().mockResolvedValue(undefined),
     context: vi.fn<PlaywrightBrowserPage['context']>().mockReturnValue(ctx),
+    url: vi.fn().mockReturnValue(pageUrl),
+    on: vi.fn(),
+    evaluate: vi.fn().mockResolvedValue([]),
+    exposeFunction: vi.fn().mockResolvedValue(undefined),
+    addInitScript: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -417,5 +427,254 @@ describe('performManualLogin', () => {
     expect(page.waitForEvent).toHaveBeenCalledWith('close');
     expect(ctx.storageState).toHaveBeenCalled();
     expect(result).toBe(storageStateObj);
+  });
+
+  it('sets up exposeFunction for sessionStorage capture', async () => {
+    const storageStateObj: StorageStateObject = {
+      cookies: [],
+      origins: [{ origin: 'https://app.example.com', localStorage: [] }],
+    };
+    const ctx = createMockContext({
+      storageState: vi.fn<PlaywrightBrowserContext['storageState']>().mockResolvedValue(storageStateObj),
+      pages: vi.fn().mockReturnValue([]),
+    });
+    const page = createMockPage(ctx, 'https://app.example.com/');
+    const browser: PlaywrightBrowser = {
+      newContext: vi.fn<PlaywrightBrowser['newContext']>().mockResolvedValue(ctx),
+      newPage: vi.fn<PlaywrightBrowser['newPage']>().mockResolvedValue(page),
+    };
+
+    await performManualLogin(browser, 'https://app.example.com/');
+
+    // exposeFunction should be called with '__cspReportSessionStorage'
+    expect(page.exposeFunction).toHaveBeenCalledWith(
+      '__cspReportSessionStorage',
+      expect.any(Function),
+    );
+
+    // addInitScript (not evaluate) should be called to install the
+    // beforeunload handler — addInitScript survives navigation,
+    // evaluate does not
+    expect(page.addInitScript).toHaveBeenCalled();
+  });
+
+  it('merges sessionStorage captured via exposeFunction into returned state', async () => {
+    const storageStateObj: StorageStateObject = {
+      cookies: [],
+      origins: [{ origin: 'https://app.example.com', localStorage: [] }],
+    };
+    const ctx = createMockContext({
+      storageState: vi.fn<PlaywrightBrowserContext['storageState']>().mockResolvedValue(storageStateObj),
+      pages: vi.fn().mockReturnValue([]),
+    });
+    const page = createMockPage(ctx, 'https://app.example.com/');
+
+    // When exposeFunction is called, capture the callback so we can simulate
+    // the browser calling it (as beforeunload would)
+    let reportCallback: (origin: unknown, json: unknown) => void = () => {};
+    (page.exposeFunction as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_name: string, cb: (...args: unknown[]) => unknown) => {
+        reportCallback = cb as (origin: unknown, json: unknown) => void;
+      },
+    );
+
+    const browser: PlaywrightBrowser = {
+      newContext: vi.fn<PlaywrightBrowser['newContext']>().mockResolvedValue(ctx),
+      newPage: vi.fn<PlaywrightBrowser['newPage']>().mockResolvedValue(page),
+    };
+
+    // Simulate the browser calling the exposed function during the login flow
+    // We need to do this before waitForEvent resolves, so hook into goto
+    (page.goto as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      // Simulate beforeunload firing and reporting sessionStorage
+      reportCallback(
+        'https://app.example.com',
+        JSON.stringify([
+          { name: 'msal.token', value: 'abc123' },
+          { name: 'msal.idtoken', value: 'def456' },
+        ]),
+      );
+    });
+
+    const result = await performManualLogin(browser, 'https://app.example.com/');
+
+    // sessionStorage should be merged into the returned state
+    const appOrigin = result.origins?.find((o) => o.origin === 'https://app.example.com');
+    expect(appOrigin).toBeDefined();
+    expect(appOrigin!.sessionStorage).toHaveLength(2);
+    expect(appOrigin!.sessionStorage![0].name).toBe('msal.token');
+  });
+});
+
+// ── captureSessionStorage ──────────────────────────────────────────────
+
+describe('captureSessionStorage', () => {
+  it('captures sessionStorage from pages and merges into state', async () => {
+    const page = createMockPage(undefined, 'https://app.example.com/dashboard');
+    (page.evaluate as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { name: 'msal.token', value: 'abc123' },
+      { name: 'msal.idtoken', value: 'def456' },
+    ]);
+
+    const state: StorageStateObject = {
+      cookies: [],
+      origins: [{ origin: 'https://app.example.com', localStorage: [] }],
+    };
+
+    const result = await captureSessionStorage([page], state);
+
+    expect(result.origins).toHaveLength(1);
+    const origin = result.origins![0];
+    expect(origin.origin).toBe('https://app.example.com');
+    expect(origin.sessionStorage).toHaveLength(2);
+    expect(origin.sessionStorage![0].name).toBe('msal.token');
+  });
+
+  it('returns state unchanged when no pages have sessionStorage', async () => {
+    const page = createMockPage(undefined, 'https://app.example.com/');
+    (page.evaluate as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const state: StorageStateObject = { cookies: [{ name: 'a' }] };
+    const result = await captureSessionStorage([page], state);
+
+    expect(result).toBe(state); // Same reference, no modification
+  });
+
+  it('handles about:blank pages', async () => {
+    const page = createMockPage(undefined, 'about:blank');
+
+    const state: StorageStateObject = { cookies: [] };
+    const result = await captureSessionStorage([page], state);
+
+    expect(result).toBe(state);
+    expect(page.evaluate).not.toHaveBeenCalled();
+  });
+
+  it('creates new origin entry when not present in state', async () => {
+    const page = createMockPage(undefined, 'https://auth.example.com/');
+    (page.evaluate as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { name: 'session', value: 'xyz' },
+    ]);
+
+    const state: StorageStateObject = { cookies: [], origins: [] };
+    const result = await captureSessionStorage([page], state);
+
+    expect(result.origins).toHaveLength(1);
+    expect(result.origins![0].origin).toBe('https://auth.example.com');
+    expect(result.origins![0].sessionStorage).toHaveLength(1);
+  });
+
+  it('handles evaluate errors gracefully', async () => {
+    const page = createMockPage(undefined, 'https://app.example.com/');
+    (page.evaluate as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Page closed'));
+
+    const state: StorageStateObject = { cookies: [] };
+    const result = await captureSessionStorage([page], state);
+
+    expect(result).toBe(state);
+  });
+});
+
+// ── restoreSessionStorage ──────────────────────────────────────────────
+
+describe('restoreSessionStorage', () => {
+  it('registers addInitScript for the target origin', async () => {
+    const ctx = createMockContext();
+
+    const state: StorageStateObject = {
+      cookies: [],
+      origins: [
+        {
+          origin: 'https://app.example.com',
+          localStorage: [],
+          sessionStorage: [
+            { name: 'msal.token', value: 'abc123' },
+            { name: 'msal.idtoken', value: 'def456' },
+          ],
+        },
+      ],
+    };
+
+    const count = await restoreSessionStorage(ctx, state, 'https://app.example.com/dashboard');
+    expect(count).toBe(2);
+    expect(ctx.addInitScript).toHaveBeenCalledTimes(1);
+    // The second argument to addInitScript is the storage map
+    const storageArg = (ctx.addInitScript as ReturnType<typeof vi.fn>).mock.calls[0][1] as Record<string, string>;
+    expect(storageArg['msal.token']).toBe('abc123');
+    expect(storageArg['msal.idtoken']).toBe('def456');
+  });
+
+  it('skips origins that do not match the target', async () => {
+    const ctx = createMockContext();
+
+    const state: StorageStateObject = {
+      cookies: [],
+      origins: [
+        {
+          origin: 'https://auth.example.com',
+          sessionStorage: [{ name: 'token', value: 'xyz' }],
+        },
+      ],
+    };
+
+    const count = await restoreSessionStorage(ctx, state, 'https://app.example.com/');
+    expect(count).toBe(0);
+    expect(ctx.addInitScript).not.toHaveBeenCalled();
+  });
+
+  it('compares full origin, not just hostname — different protocol is rejected', async () => {
+    const ctx = createMockContext();
+
+    const state: StorageStateObject = {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://app.example.com',
+          sessionStorage: [{ name: 'token', value: 'xyz' }],
+        },
+      ],
+    };
+
+    // Target is https, stored origin is http — must not match
+    const count = await restoreSessionStorage(ctx, state, 'https://app.example.com/');
+    expect(count).toBe(0);
+    expect(ctx.addInitScript).not.toHaveBeenCalled();
+  });
+
+  it('compares full origin, not just hostname — different port is rejected', async () => {
+    const ctx = createMockContext();
+
+    const state: StorageStateObject = {
+      cookies: [],
+      origins: [
+        {
+          origin: 'https://app.example.com:8443',
+          sessionStorage: [{ name: 'token', value: 'xyz' }],
+        },
+      ],
+    };
+
+    // Target is default port, stored origin has :8443 — must not match
+    const count = await restoreSessionStorage(ctx, state, 'https://app.example.com/');
+    expect(count).toBe(0);
+    expect(ctx.addInitScript).not.toHaveBeenCalled();
+  });
+
+  it('returns 0 when no origins have sessionStorage', async () => {
+    const ctx = createMockContext();
+
+    const state: StorageStateObject = {
+      cookies: [],
+      origins: [{ origin: 'https://app.example.com', localStorage: [] }],
+    };
+
+    const count = await restoreSessionStorage(ctx, state, 'https://app.example.com/');
+    expect(count).toBe(0);
+  });
+
+  it('returns 0 for empty state', async () => {
+    const ctx = createMockContext();
+    const count = await restoreSessionStorage(ctx, { cookies: [] }, 'https://app.example.com/');
+    expect(count).toBe(0);
   });
 });

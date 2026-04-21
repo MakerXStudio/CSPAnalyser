@@ -195,6 +195,7 @@ export interface InlineHash {
   directive: string;
   hash: string;
   contentLength: number;
+  content: string | null;
   createdAt: string;
 }
 
@@ -205,7 +206,44 @@ export interface InlineHashRow {
   directive: string;
   hash: string;
   content_length: number;
+  content: string | null;
   created_at: string;
+}
+
+// ── Eval source attribution types ─────────────────────────────────────
+
+export interface EvalSourceAttribution {
+  sourceFile: string;
+  lineNumber: number | null;
+  columnNumber: number | null;
+  count: number;
+}
+
+// ── Hash stability analysis types ─────────────────────────────────────
+
+export type HashStabilityWarningSeverity = 'warning' | 'info';
+
+export interface HashStabilityWarning {
+  directive: string;
+  hashCount: number;
+  reason: string;
+  severity: HashStabilityWarningSeverity;
+}
+
+export interface HashStabilityResult {
+  warnings: HashStabilityWarning[];
+  isHashBasedPolicyPractical: boolean;
+}
+
+// ── Static site detection types ───────────────────────────────────────
+
+export type StaticSiteConfidence = 'high' | 'medium' | 'low';
+
+export interface StaticSiteSignals {
+  isLikelyStatic: boolean;
+  confidence: StaticSiteConfidence;
+  reasons: string[];
+  noncesFeasible: boolean;
 }
 
 // ── Existing CSP header types ─────────────────────────────────────────

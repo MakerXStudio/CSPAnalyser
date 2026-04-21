@@ -11,12 +11,22 @@ const logger = createLogger();
 /** Minimal representation of Playwright's StorageState object. */
 export interface StorageStateObject {
   cookies: Array<Record<string, unknown>>;
-  origins?: Array<Record<string, unknown>>;
+  origins?: Array<StorageStateOrigin>;
+}
+
+export interface StorageStateOrigin {
+  origin: string;
+  localStorage?: Array<{ name: string; value: string }>;
+  /** Extension: sessionStorage captured by CSP Analyser (not part of Playwright's format) */
+  sessionStorage?: Array<{ name: string; value: string }>;
 }
 
 export interface PlaywrightBrowserContext {
   addCookies(cookies: PlaywrightCookie[]): Promise<void>;
+  addInitScript<A>(script: ((arg: A) => void) | string, arg?: A): Promise<void>;
   storageState(options?: { path?: string }): Promise<StorageStateObject>;
+  pages(): PlaywrightBrowserPage[];
+  newPage(): Promise<PlaywrightBrowserPage>;
   close(): Promise<void>;
 }
 
@@ -38,6 +48,12 @@ export interface PlaywrightBrowserPage {
   waitForEvent(event: string): Promise<void>;
   close(): Promise<void>;
   context(): PlaywrightBrowserContext;
+  url(): string;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  evaluate<R>(fn: (...args: any[]) => R, ...args: unknown[]): Promise<R>;
+  exposeFunction(name: string, callback: (...args: unknown[]) => unknown): Promise<void>;
+  addInitScript(script: (() => void) | string): Promise<void>;
 }
 
 export interface PlaywrightCookie {
@@ -167,6 +183,23 @@ export async function createAuthenticatedContext(
       ...baseContextOptions,
       storageState: resolvedPath,
     });
+
+    // Restore sessionStorage if the state file contains our extension.
+    // Playwright only restores cookies + localStorage; MSAL/Azure AD B2C
+    // tokens in sessionStorage are lost without this.
+    try {
+      const raw = fs.readFileSync(resolvedPath, 'utf-8');
+      const stateData = JSON.parse(raw) as StorageStateObject;
+      const restored = await restoreSessionStorage(context, stateData, targetUrl);
+      if (restored > 0) {
+        logger.info('Restored sessionStorage entries from storage state', { count: restored });
+      }
+    } catch (err) {
+      logger.debug('Could not restore sessionStorage from storage state', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     return { context, storageState: resolvedPath };
   }
 
@@ -191,24 +224,270 @@ export async function createAuthenticatedContext(
   logger.info('Manual login requested — waiting for user interaction');
   const storageState = await performManualLogin(browser, targetUrl);
   const context = await browser.newContext({ ...baseContextOptions, storageState });
+
+  // Restore sessionStorage captured during manual login
+  const restored = await restoreSessionStorage(context, storageState, targetUrl);
+  if (restored > 0) {
+    logger.info('Restored sessionStorage from manual login', { count: restored });
+  }
+
   return { context, storageState };
 }
 
 /**
  * Opens a headed browser page for manual login.
  * Navigates to the target URL and waits for the page to close.
- * Returns the storage state object (compatible with browser.newContext).
+ * Returns an extended storage state that includes sessionStorage.
+ *
+ * sessionStorage is captured on every page load event (to catch MSAL
+ * token writes after auth redirects) and merged into the final state.
+ * This must happen before the page closes because sessionStorage is
+ * inaccessible once the page is gone.
  */
 export async function performManualLogin(
   browser: PlaywrightBrowser,
   targetUrl: string,
 ): Promise<StorageStateObject> {
   const page = await browser.newPage();
-  await page.goto(targetUrl);
-  logger.info('Waiting for manual login — close the page when done');
-  await page.waitForEvent('close');
+  const sessionStorageSnapshots = new Map<string, Array<{ name: string; value: string }>>();
+
+  // Expose a bridge function that the page can call to push sessionStorage
+  // to the Node process. This is used by the beforeunload handler to
+  // capture the final state right before the page is destroyed — the only
+  // reliable way to avoid losing tokens on close.
+  await page.exposeFunction(
+    '__cspReportSessionStorage',
+    (origin: unknown, json: unknown) => {
+      try {
+        const entries = JSON.parse(String(json)) as Array<{ name: string; value: string }>;
+        if (entries.length > 0) {
+          sessionStorageSnapshots.set(String(origin), entries);
+        }
+      } catch {
+        // Malformed data from browser — ignore
+      }
+    },
+  );
+
+  // Install in-page reporters via addInitScript so they survive navigation.
+  // page.evaluate() only runs on the current document and is lost when the
+  // page navigates (e.g. from about:blank to the login page to the app).
+  // addInitScript re-runs on every new document, ensuring the reporters
+  // are always present on the authenticated page.
+  await page.addInitScript(() => {
+    const report = () => {
+      const items: Array<{ name: string; value: string }> = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key !== null) {
+          items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
+        }
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__cspReportSessionStorage(window.location.origin, JSON.stringify(items));
+    };
+    window.addEventListener('beforeunload', report);
+    window.addEventListener('load', () => setTimeout(report, 1_000));
+  });
+
+  // Also capture via page.evaluate on load events as a fallback
+  // (beforeunload may not fire in all edge cases)
+  const captureFromPage = async () => {
+    try {
+      const url = page.url();
+      if (!url || url === 'about:blank') return;
+      const origin = new URL(url).origin;
+      const entries: Array<{ name: string; value: string }> = await page.evaluate(() => {
+        const items: Array<{ name: string; value: string }> = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key !== null) {
+            items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
+          }
+        }
+        return items;
+      });
+      if (entries.length > 0) {
+        sessionStorageSnapshots.set(origin, entries);
+      }
+    } catch {
+      // Page may be navigating or closing — ignore
+    }
+  };
+
+  page.on('load', () => { captureFromPage().catch(() => {}); });
+
+  const snapshotInterval = setInterval(() => {
+    captureFromPage().catch(() => {});
+  }, 5_000);
+
+  try {
+    await page.goto(targetUrl);
+    logger.info('Waiting for manual login — close the page when done');
+    await page.waitForEvent('close');
+  } finally {
+    clearInterval(snapshotInterval);
+  }
+
   const storageState = await page.context().storageState();
+
+  // Merge captured sessionStorage into the state
+  if (sessionStorageSnapshots.size > 0) {
+    const origins: StorageStateOrigin[] = [...(storageState.origins ?? [])];
+    for (const [origin, entries] of sessionStorageSnapshots) {
+      const existing = origins.find((o) => o.origin === origin);
+      if (existing) {
+        existing.sessionStorage = entries;
+      } else {
+        origins.push({ origin, sessionStorage: entries });
+      }
+    }
+    storageState.origins = origins;
+    logger.info('Captured sessionStorage during manual login', {
+      origins: sessionStorageSnapshots.size,
+    });
+  }
+
   return storageState;
+}
+
+// ── Session storage capture/restore ──────────────────────────────────────
+
+/**
+ * Captures sessionStorage from all open pages and merges it into a
+ * Playwright StorageStateObject. Playwright's built-in storageState()
+ * only captures cookies and localStorage — sessionStorage is lost.
+ *
+ * This is critical for MSAL/Azure AD B2C flows where tokens live in
+ * sessionStorage. The result uses an `sessionStorage` extension key
+ * on each origin entry, which Playwright ignores on restore but CSP
+ * Analyser reads via `restoreSessionStorage`.
+ */
+export async function captureSessionStorage(
+  pages: PlaywrightBrowserPage[],
+  state: StorageStateObject,
+): Promise<StorageStateObject> {
+  const sessionStorageByOrigin = new Map<string, Array<{ name: string; value: string }>>();
+
+  for (const page of pages) {
+    try {
+      const url = page.url();
+      if (!url || url === 'about:blank') continue;
+
+      const origin = new URL(url).origin;
+      const entries = await page.evaluate(() => {
+        const items: Array<{ name: string; value: string }> = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key !== null) {
+            items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
+          }
+        }
+        return items;
+      });
+
+      if (entries.length > 0) {
+        const existing = sessionStorageByOrigin.get(origin);
+        if (existing) {
+          // Merge, dedup by name (later page wins)
+          const merged = new Map(existing.map((e) => [e.name, e.value]));
+          for (const entry of entries) {
+            merged.set(entry.name, entry.value);
+          }
+          sessionStorageByOrigin.set(
+            origin,
+            [...merged.entries()].map(([name, value]) => ({ name, value })),
+          );
+        } else {
+          sessionStorageByOrigin.set(origin, entries);
+        }
+      }
+    } catch (err) {
+      // Page may have been closed or navigated away — skip silently
+      logger.debug('Failed to capture sessionStorage from page', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (sessionStorageByOrigin.size === 0) {
+    return state;
+  }
+
+  // Merge into origins array
+  const origins: StorageStateOrigin[] = [...(state.origins ?? [])];
+  for (const [origin, entries] of sessionStorageByOrigin) {
+    const existing = origins.find((o) => o.origin === origin);
+    if (existing) {
+      existing.sessionStorage = entries;
+    } else {
+      origins.push({ origin, sessionStorage: entries });
+    }
+  }
+
+  return { ...state, origins };
+}
+
+/**
+ * Restores sessionStorage entries from an extended StorageStateObject
+ * into a browser context using `addInitScript`. The script runs before
+ * any page JavaScript, so tokens are available when frameworks like
+ * MSAL initialize — no temporary page or navigation required.
+ *
+ * Only entries for the target origin's hostname are injected.
+ */
+export async function restoreSessionStorage(
+  context: PlaywrightBrowserContext,
+  state: StorageStateObject,
+  targetUrl: string,
+): Promise<number> {
+  const origins = state.origins ?? [];
+  const originsWithSessionStorage = origins.filter(
+    (o): o is StorageStateOrigin & { sessionStorage: Array<{ name: string; value: string }> } =>
+      Array.isArray(o.sessionStorage) && o.sessionStorage.length > 0,
+  );
+
+  if (originsWithSessionStorage.length === 0) {
+    return 0;
+  }
+
+  let restored = 0;
+  // Compare full origin (scheme + host + port) — sessionStorage is
+  // origin-scoped, so https://example.com and http://example.com are
+  // distinct. Comparing hostname alone could inject tokens across
+  // protocol or port boundaries.
+  const targetOrigin = new URL(targetUrl).origin;
+
+  for (const origin of originsWithSessionStorage) {
+    if (origin.origin !== targetOrigin) {
+      logger.debug('Skipping sessionStorage restore for non-target origin', {
+        origin: origin.origin,
+        targetOrigin,
+      });
+      continue;
+    }
+
+    const entries = origin.sessionStorage;
+    // Convert to a plain object for the init script argument
+    const storageMap: Record<string, string> = {};
+    for (const { name, value } of entries) {
+      storageMap[name] = value;
+    }
+
+    await context.addInitScript((storage: Record<string, string>) => {
+      for (const [key, value] of Object.entries(storage)) {
+        window.sessionStorage.setItem(key, value);
+      }
+    }, storageMap);
+
+    restored += entries.length;
+    logger.info('Registered sessionStorage init script', {
+      origin: origin.origin,
+      count: entries.length,
+    });
+  }
+
+  return restored;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────

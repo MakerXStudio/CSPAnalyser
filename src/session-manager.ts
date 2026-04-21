@@ -431,13 +431,110 @@ export async function runInteractiveSession(
       });
     };
 
-    // 6. Create initial page, set up, and navigate
+    // 6. Set up sessionStorage capture infrastructure before any navigation.
+    //    Playwright's storageState() only saves cookies + localStorage.
+    //    MSAL/Azure AD tokens live in sessionStorage and must be captured
+    //    via page.evaluate() while pages are still open.
+    const launchedBrowser = browser;
+    const launchedContext = context;
+    const sessionStorageSnapshots = new Map<string, Array<{ name: string; value: string }>>();
+
+    const capturePageSessionStorage = async (page: Page) => {
+      try {
+        const url = page.url();
+        if (!url || url === 'about:blank') return;
+        const origin = new URL(url).origin;
+        const entries: Array<{ name: string; value: string }> = await page.evaluate(() => {
+          const items: Array<{ name: string; value: string }> = [];
+          for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key !== null) {
+              items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
+            }
+          }
+          return items;
+        });
+        if (entries.length > 0) {
+          sessionStorageSnapshots.set(origin, entries);
+        }
+      } catch {
+        // Page may already be closing — ignore
+      }
+    };
+
+    const captureAllPages = async () => {
+      const openPages = launchedContext.pages();
+      await Promise.allSettled(openPages.map(capturePageSessionStorage));
+    };
+
+    /**
+     * Attach sessionStorage capture to a page via three mechanisms:
+     * 1. exposeFunction + beforeunload — captures final state before close
+     * 2. In-page load + 1s delay — catches async MSAL token writes
+     * 3. Node-side load event — fallback via page.evaluate
+     */
+    const attachSessionStorageCapture = async (page: Page) => {
+      // Expose bridge for in-page reporters to push sessionStorage to Node
+      try {
+        await page.exposeFunction(
+          '__cspReportSessionStorage',
+          (origin: unknown, json: unknown) => {
+            try {
+              const entries = JSON.parse(String(json)) as Array<{ name: string; value: string }>;
+              if (entries.length > 0) {
+                sessionStorageSnapshots.set(String(origin), entries);
+              }
+            } catch {
+              // Malformed data — ignore
+            }
+          },
+        );
+      } catch {
+        // exposeFunction may fail if the page is already closed or
+        // if the function was already exposed on a recycled context
+      }
+
+      // Install in-page beforeunload + delayed load reporters via
+      // addInitScript so they survive navigation (page.evaluate only
+      // runs on the current document and is lost on each navigation).
+      try {
+        await page.addInitScript(() => {
+          const report = () => {
+            const items: Array<{ name: string; value: string }> = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              if (key !== null) {
+                items.push({ name: key, value: sessionStorage.getItem(key) ?? '' });
+              }
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (window as any).__cspReportSessionStorage(window.location.origin, JSON.stringify(items));
+          };
+          window.addEventListener('beforeunload', report);
+          window.addEventListener('load', () => setTimeout(report, 1_000));
+        });
+      } catch {
+        // Page may have navigated away already — ignore
+      }
+
+      // Node-side fallback: also capture via evaluate on load events
+      page.on('load', () => {
+        capturePageSessionStorage(page).catch(() => {});
+      });
+    };
+
+    // 7. Create initial page, set up CSP injection + violation listeners,
+    //    and attach sessionStorage capture — all before navigation.
     const initialPage = await context.newPage();
     await setupPage(initialPage);
+    await attachSessionStorageCapture(initialPage);
 
-    // 7. Listen for additional pages (new tabs opened by the user)
+    // 8. Listen for additional pages (new tabs opened by the user)
     context.on('page', (page: Page) => {
-      setupPage(page).catch((err: unknown) => {
+      Promise.all([
+        setupPage(page),
+        attachSessionStorageCapture(page),
+      ]).catch((err: unknown) => {
         logger.error('Failed to set up interactive page', {
           error: err instanceof Error ? err.message : String(err),
         });
@@ -447,25 +544,38 @@ export async function runInteractiveSession(
     progress('Browser open — browse freely, close the browser when done');
     await initialPage.goto(config.targetUrl, { waitUntil: 'load' });
 
-    // 8. Wait for browser to close (user closes window or browser process exits)
-    const launchedBrowser = browser;
-    const launchedContext = context;
-    await new Promise<void>((resolve) => {
-      // Browser process exited
-      launchedBrowser.on('disconnected', () => resolve());
-      // All pages/tabs closed (user closed the window but process may linger)
-      const checkAllClosed = () => {
-        if (launchedContext.pages().length === 0) resolve();
-      };
-      launchedContext.on('close', () => resolve());
-      launchedContext.on('page', (page: Page) => {
-        page.on('close', () => checkAllClosed());
+    // 9. Wait for browser to close. Periodically snapshot sessionStorage
+    //    (every 5s) to catch tokens written by silent refresh or async
+    //    auth flows between page load events.
+    const snapshotInterval = setInterval(() => {
+      captureAllPages().catch(() => {});
+    }, 5_000);
+
+    try {
+      await new Promise<void>((resolve) => {
+        launchedBrowser.on('disconnected', () => resolve());
+
+        const checkAllClosed = () => {
+          if (launchedContext.pages().length === 0) resolve();
+        };
+
+        launchedContext.on('close', () => resolve());
+        launchedContext.on('page', (page: Page) => {
+          page.on('close', checkAllClosed);
+        });
+        for (const page of launchedContext.pages()) {
+          page.on('close', checkAllClosed);
+        }
       });
-      // Also watch the initial page
-      for (const page of launchedContext.pages()) {
-        page.on('close', () => checkAllClosed());
-      }
-    });
+    } finally {
+      clearInterval(snapshotInterval);
+    }
+
+    // Final best-effort capture from any pages still open in the context.
+    // The close-wait promise may have resolved via 'disconnected' while
+    // pages are still technically alive. This narrows the staleness window
+    // between the last interval tick and the export.
+    await captureAllPages();
 
     // 9. Export storage state if requested (before context closes)
     let savedStorageStatePath: string | undefined;
@@ -492,6 +602,37 @@ export async function runInteractiveSession(
 
         mkdirSync(dirname(outPath), { recursive: true });
         const state = await context.storageState();
+
+        // Merge sessionStorage snapshots into the state. Playwright's
+        // storageState() only captures cookies + localStorage. MSAL and
+        // other token-based auth flows store tokens in sessionStorage,
+        // which are lost without this extension.
+        if (sessionStorageSnapshots.size > 0) {
+          // Build an extended origins array with sessionStorage. We write
+          // this to disk as JSON — Playwright ignores the extra key on
+          // restore, and CSP Analyser reads it via restoreSessionStorage.
+          const extOrigins: Array<{
+            origin: string;
+            localStorage?: Array<{ name: string; value: string }>;
+            sessionStorage?: Array<{ name: string; value: string }>;
+          }> = [...(state.origins ?? [])];
+          for (const [origin, entries] of sessionStorageSnapshots) {
+            const existing = extOrigins.find((o) => o.origin === origin);
+            if (existing) {
+              existing.sessionStorage = entries;
+            } else {
+              extOrigins.push({ origin, sessionStorage: entries });
+            }
+          }
+          // The JSON output includes sessionStorage; Playwright's
+          // newContext({ storageState }) safely ignores the extra field.
+          (state as Record<string, unknown>).origins = extOrigins;
+          logger.info('Merged sessionStorage into storage state', {
+            origins: sessionStorageSnapshots.size,
+            totalEntries: [...sessionStorageSnapshots.values()].reduce((s, e) => s + e.length, 0),
+          });
+        }
+
         writeFileSync(outPath, JSON.stringify(state, null, 2), { mode: 0o600 });
         // Ensure 0600 even when overwriting an existing file with permissive mode
         chmodSync(outPath, 0o600);

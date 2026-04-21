@@ -82,6 +82,8 @@ export interface ParsedArgs {
   strictDynamic: boolean;
   hash: boolean;
   stripUnsafeEval: boolean;
+  collapseHashThreshold?: number;
+  staticSiteMode: boolean;
   /** For hash-static: file/directory paths to scan */
   inputs?: string[];
   /** For hash-static: write the generated meta tag into each scanned HTML */
@@ -275,6 +277,9 @@ Options:
   --strict-dynamic       Add 'strict-dynamic' with nonces (implies --nonce)
   --hash                 Remove 'unsafe-inline' when hash sources are available
   --strip-unsafe-eval    Remove 'unsafe-eval' from the generated policy
+  --collapse-hash-threshold <n>  Collapse hashes to 'unsafe-inline' when count
+                         exceeds <n> per directive (e.g. --collapse-hash-threshold 10)
+  --static-site          Target is a static site (disables nonce suggestions)
   --report-only          Generate report-only policy
   --project <name>       Override auto-detected project name
   --all                  Show sessions from all projects (sessions command)
@@ -310,6 +315,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictDynamic: false,
       hash: false,
       stripUnsafeEval: false,
+      staticSiteMode: false,
       inject: false,
       all: false,
     };
@@ -326,6 +332,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictDynamic: false,
       hash: false,
       stripUnsafeEval: false,
+      staticSiteMode: false,
       inject: false,
       all: false,
     };
@@ -345,6 +352,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'strict-dynamic': { type: 'boolean', default: false },
       hash: { type: 'boolean', default: false },
       'strip-unsafe-eval': { type: 'boolean', default: false },
+      'collapse-hash-threshold': { type: 'string' },
+      'static-site': { type: 'boolean', default: false },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
       project: { type: 'string' },
@@ -397,6 +406,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       strictDynamic: false,
       hash: false,
       stripUnsafeEval: false,
+      staticSiteMode: false,
       inject: false,
       all: (values.all as boolean | undefined) ?? false,
       project: values.project as string | undefined,
@@ -463,6 +473,10 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       ((values['strict-dynamic'] as boolean | undefined) ?? false),
     hash: (values.hash as boolean | undefined) ?? false,
     stripUnsafeEval: (values['strip-unsafe-eval'] as boolean | undefined) ?? false,
+    collapseHashThreshold: values['collapse-hash-threshold'] !== undefined
+      ? parseNonNegativeInt(values['collapse-hash-threshold'] as string, 'collapse-hash-threshold')
+      : undefined,
+    staticSiteMode: (values['static-site'] as boolean | undefined) ?? false,
     inject: (values.inject as boolean | undefined) ?? false,
     all: (values.all as boolean | undefined) ?? false,
     project: values.project as string | undefined,
@@ -584,6 +598,9 @@ function generateAndFormat(
     useNonces: args.nonce,
     useStrictDynamic: args.strictDynamic,
     useHashes: args.hash,
+    stripUnsafeEval: args.stripUnsafeEval,
+    collapseHashThreshold: args.collapseHashThreshold,
+    staticSiteMode: args.staticSiteMode,
   });
   return formatPolicy(optimized, args.format, args.reportOnly);
 }
@@ -656,6 +673,8 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
       useStrictDynamic: args.strictDynamic,
       useHashes: args.hash,
       stripUnsafeEval: args.stripUnsafeEval,
+      collapseHashThreshold: args.collapseHashThreshold,
+      staticSiteMode: args.staticSiteMode,
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
@@ -726,6 +745,8 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
       useStrictDynamic: args.strictDynamic,
       useHashes: args.hash,
       stripUnsafeEval: args.stripUnsafeEval,
+      collapseHashThreshold: args.collapseHashThreshold,
+      staticSiteMode: args.staticSiteMode,
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
@@ -879,6 +900,8 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
       useStrictDynamic: args.strictDynamic,
       useHashes: args.hash,
       stripUnsafeEval: args.stripUnsafeEval,
+      collapseHashThreshold: args.collapseHashThreshold,
+      staticSiteMode: args.staticSiteMode,
     });
     const score = scoreCspPolicy(optimized);
     process.stdout.write(formatScore(score) + '\n');

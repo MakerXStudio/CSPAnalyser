@@ -87,6 +87,7 @@ export async function setupInlineContentObserver(
       directive: report.directive,
       hash,
       contentLength: report.content.length,
+      content: report.content,
     });
   });
 
