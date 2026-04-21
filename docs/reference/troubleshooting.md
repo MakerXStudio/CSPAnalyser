@@ -175,6 +175,24 @@ lsof -i :8080
 lsof -i :3000
 ```
 
+## Missing violations after OAuth / SSO login
+
+**Symptom:** The crawl captures violations on the login page but not on authenticated pages after the OAuth redirect back to the app.
+
+**Cause:** Playwright's request interception does not re-intercept requests that result from HTTP 302 redirects. If the identity provider redirects back to your app via 302, the callback page may load without CSP injection.
+
+**Fix:** Update to CSP Analyser 1.2.0 or later. Versions 1.2.0+ automatically detect 302 redirects from external origins and rewrite them as JS navigations to ensure CSP is injected on the post-redirect page. This works with Azure AD B2C, Okta, Auth0, Google, and other OAuth/OIDC providers.
+
+If you're on a recent version and still see this, check:
+
+1. **Is the callback URL on your target origin?** CSP is only injected on the origin you pass as the target URL. If your callback is on a different subdomain, pass that subdomain as the target.
+2. **Does the IdP use 307/308 redirects?** These are rewritten to GET when targeting your app origin. If your callback rejects GET requests, the auth flow may fail. See the [Authentication guide](/guides/authentication#known-limitation-307-308-redirects) for details.
+3. **Run with debug logging** to see which redirects are being rewritten:
+   ```bash
+   LOG_LEVEL=debug csp-analyser interactive https://app.example.com
+   ```
+   Look for `Replacing non-target redirect with JS navigation` messages.
+
 ## Getting help
 
 If none of the above solve your issue:

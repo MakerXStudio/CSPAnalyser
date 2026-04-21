@@ -148,6 +148,38 @@ If the crawl still redirects to login, the tokens have likely expired. MSAL acce
 Only sessionStorage entries for the **target origin** are restored. Cross-origin sessionStorage (e.g. from the identity provider domain) cannot be injected and is not useful for CSP crawling.
 :::
 
+## How CSP injection works with auth redirects
+
+When you analyse an authenticated site, the browser navigates through external identity providers (Azure AD B2C, Okta, Auth0, etc.) before returning to your app. CSP Analyser needs to inject its deny-all CSP header on your app's pages — but **not** on the IdP's pages, which would pollute the generated policy with violations from the IdP's own resources.
+
+### The redirect challenge
+
+CSP Analyser intercepts all HTTP requests via Playwright's route handler and injects CSP headers only on responses from the target origin. Requests to other origins (the IdP login page, intermediate auth endpoints) pass through unmodified.
+
+The challenge is that Playwright's route handler **does not re-intercept requests that result from HTTP 302 redirects**. When the IdP responds with `302 Location: https://your-app.com/auth/callback`, the browser follows the redirect internally and the route handler never sees the callback request — so CSP headers are never injected on the post-auth page.
+
+### The workaround
+
+CSP Analyser works around this by intercepting non-target-origin navigation requests and replacing HTTP redirect responses (301/302/303) with a small HTML page that performs the same redirect via JavaScript (`window.location.href`). The browser processes any `Set-Cookie` headers from the original response (preserving auth state), then navigates to the redirect target as a fresh request that the route handler can intercept and inject CSP on.
+
+This happens transparently — you won't notice the intermediate page during the auth flow.
+
+### Multi-hop redirect chains
+
+Some identity providers redirect through multiple intermediate endpoints before returning to your app (e.g., `auth/authorize` → `ProcessAuth` → `kmsi` → `app/callback`). Each hop is handled individually: the route handler rewrites each redirect as a JS navigation, so the browser's full cookie jar is available at every step. Cookie-dependent intermediate endpoints work correctly.
+
+### Known limitation: 307/308 redirects
+
+HTTP 307 and 308 redirects preserve the request method and body (unlike 302 which converts to GET). When such a redirect targets your app's origin, CSP Analyser rewrites it as a JS redirect to ensure CSP injection, which converts the request to GET. This can change the behaviour of callback endpoints that depend on POST semantics.
+
+In practice this rarely matters:
+
+- OAuth 2.0 and OIDC specify 302 for authorization responses — 307/308 on the auth return leg is essentially non-existent
+- SPA callback endpoints typically accept GET (the authorization code is in the URL query string)
+- The alternative (no CSP injection) would silently miss all violations on the post-auth page
+
+For intermediate hops between external origins, 307/308 are passed through unchanged to preserve method and body semantics.
+
 ## Security notes
 
 ::: danger
