@@ -16,9 +16,14 @@ describe('generateInitScript', () => {
     expect(typeof script).toBe('string');
   });
 
-  it('listens for securitypolicyviolation events', () => {
+  it('listens for securitypolicyviolation events on window, not document', () => {
     const script = generateInitScript();
     expect(script).toContain('securitypolicyviolation');
+    // Must listen on window to capture connect-src violations from fetch/XHR,
+    // which Chromium dispatches on window (not document) after cross-origin
+    // navigations like OAuth redirect chains.
+    expect(script).toContain('window.addEventListener');
+    expect(script).not.toContain('document.addEventListener');
   });
 
   it('calls window.__cspViolationReport', () => {
