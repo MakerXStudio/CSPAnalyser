@@ -621,8 +621,6 @@ export async function runInteractiveSession(
             const existing = extOrigins.find((o) => o.origin === origin);
             if (existing) {
               existing.sessionStorage = entries;
-            } else {
-              extOrigins.push({ origin, localStorage: [], sessionStorage: entries });
             }
           }
           // The JSON output includes sessionStorage; Playwright's

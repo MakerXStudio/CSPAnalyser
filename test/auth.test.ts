@@ -550,7 +550,7 @@ describe('captureSessionStorage', () => {
     expect(page.evaluate).not.toHaveBeenCalled();
   });
 
-  it('creates new origin entry when not present in state', async () => {
+  it('skips origins not already in Playwright state', async () => {
     const page = createMockPage(undefined, 'https://auth.example.com/');
     (page.evaluate as ReturnType<typeof vi.fn>).mockResolvedValue([
       { name: 'session', value: 'xyz' },
@@ -559,9 +559,8 @@ describe('captureSessionStorage', () => {
     const state: StorageStateObject = { cookies: [], origins: [] };
     const result = await captureSessionStorage([page], state);
 
-    expect(result.origins).toHaveLength(1);
-    expect(result.origins![0].origin).toBe('https://auth.example.com');
-    expect(result.origins![0].sessionStorage).toHaveLength(1);
+    // Origin not in Playwright's state — sessionStorage is not added
+    expect(result.origins).toHaveLength(0);
   });
 
   it('handles evaluate errors gracefully', async () => {
