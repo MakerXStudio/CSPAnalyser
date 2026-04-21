@@ -9,9 +9,17 @@ const logger = createLogger();
 /**
  * Returns the JavaScript init script that captures SecurityPolicyViolationEvents
  * and forwards them to the Node.js callback via window.__cspViolationReport.
+ *
+ * Listens on `window` (not `document`). CSP Level 3 fires the event at the
+ * "violation's global object" — for fetch/XHR (`connect-src`) violations this
+ * is `window`, not `document`. After cross-origin navigations (e.g. OAuth
+ * redirect chains) Chromium only dispatches connect-src events on `window`,
+ * so listening on `document` alone silently drops them. Resource violations
+ * (img, font, script, style) bubble to `window` as well, so a single
+ * `window` listener captures everything.
  */
 export function generateInitScript(): string {
-  return `try{document.addEventListener('securitypolicyviolation',function(e){var s=e.sample||null;if(s&&s.length>256)s=s.slice(0,256);window.__cspViolationReport({documentURI:e.documentURI,blockedURI:e.blockedURI,violatedDirective:e.violatedDirective,effectiveDirective:e.effectiveDirective,sourceFile:e.sourceFile||null,lineNumber:e.lineNumber||null,columnNumber:e.columnNumber||null,disposition:e.disposition||'report',sample:s})})}catch(e){}`;
+  return `try{window.addEventListener('securitypolicyviolation',function(e){var s=e.sample||null;if(s&&s.length>256)s=s.slice(0,256);window.__cspViolationReport({documentURI:e.documentURI,blockedURI:e.blockedURI,violatedDirective:e.violatedDirective,effectiveDirective:e.effectiveDirective,sourceFile:e.sourceFile||null,lineNumber:e.lineNumber||null,columnNumber:e.columnNumber||null,disposition:e.disposition||'report',sample:s})})}catch(e){}`;
 }
 
 /**
