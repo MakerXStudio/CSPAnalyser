@@ -339,6 +339,11 @@ export async function performManualLogin(
       const existing = origins.find((o) => o.origin === origin);
       if (existing) {
         existing.sessionStorage = entries;
+      } else {
+        // Playwright didn't capture this origin (no localStorage), but the
+        // page did have sessionStorage. Create the entry with an empty
+        // localStorage array — Playwright requires it to be present.
+        origins.push({ origin, localStorage: [], sessionStorage: entries });
       }
     }
     storageState.origins = origins;
@@ -419,6 +424,8 @@ export async function captureSessionStorage(
     const existing = origins.find((o) => o.origin === origin);
     if (existing) {
       existing.sessionStorage = entries;
+    } else {
+      origins.push({ origin, localStorage: [], sessionStorage: entries });
     }
   }
 
