@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { transformResponseHeadersForAudit } from '../src/csp-passthrough.js';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  setupCspPassthrough,
+  transformResponseHeadersForAudit,
+} from '../src/csp-passthrough.js';
+import type {
+  PlaywrightPage,
+  PlaywrightRoute,
+  PlaywrightResponse,
+} from '../src/csp-injector.js';
 
 const TEST_PORT = 9876;
 const TEST_TOKEN = 'test-token-123';
@@ -172,5 +180,94 @@ describe('transformResponseHeadersForAudit', () => {
 
     const csp = result['content-security-policy'];
     expect(csp).toContain(`report-uri http://127.0.0.1:${TEST_PORT}/csp-report`);
+  });
+});
+
+// ── setupCspPassthrough: non-target-origin handling ─────────────────────
+
+describe('setupCspPassthrough non-target origin delegation', () => {
+  const TARGET = 'https://app.example.com';
+
+  function createMockPage() {
+    const routes: Array<{
+      url: string | RegExp;
+      handler: (route: PlaywrightRoute) => Promise<void> | void;
+    }> = [];
+
+    const page: PlaywrightPage = {
+      route: vi.fn(async (url, handler) => {
+        routes.push({ url, handler });
+      }),
+      unroute: vi.fn(async () => {
+        routes.length = 0;
+      }),
+    };
+
+    return { page, routes };
+  }
+
+  function createMockResponse(
+    status: number,
+    headers: Record<string, string> = {},
+  ): PlaywrightResponse {
+    return {
+      status: () => status,
+      headers: () => headers,
+      body: async () => Buffer.from(''),
+    };
+  }
+
+  function createMockRoute(
+    url: string,
+    resourceType: string,
+    response: PlaywrightResponse,
+  ): PlaywrightRoute {
+    return {
+      fetch: vi.fn(async () => response),
+      fulfill: vi.fn(async () => {}),
+      continue: vi.fn(async () => {}),
+      request: () => ({ url: () => url, resourceType: () => resourceType }),
+    };
+  }
+
+  it('rewrites a 302 from a non-target origin back to target as JS navigation', async () => {
+    const { page, routes } = createMockPage();
+    await setupCspPassthrough(page, TEST_PORT, TEST_TOKEN, undefined, undefined, TARGET);
+
+    const redirectResponse = createMockResponse(302, {
+      location: `${TARGET}/auth/callback?code=abc`,
+    });
+    const route = createMockRoute(
+      'https://idp.example.com/auth',
+      'document',
+      redirectResponse,
+    );
+
+    await routes[0]!.handler(route);
+
+    const fulfillCall = vi.mocked(route.fulfill).mock.calls[0]?.[0];
+    expect(fulfillCall?.status).toBe(200);
+    expect(fulfillCall?.body).toContain(
+      `window.location.href="${TARGET}/auth/callback?code=abc"`,
+    );
+    // The pre-refactor behaviour was route.continue() — that would have meant
+    // CSP on the post-redirect page was missed. Ensure we don't do that now.
+    expect(route.continue).not.toHaveBeenCalled();
+  });
+
+  it('passes through non-document requests on non-target origins', async () => {
+    const { page, routes } = createMockPage();
+    await setupCspPassthrough(page, TEST_PORT, TEST_TOKEN, undefined, undefined, TARGET);
+
+    const route = createMockRoute(
+      'https://idp.example.com/static.css',
+      'stylesheet',
+      createMockResponse(200),
+    );
+
+    await routes[0]!.handler(route);
+
+    expect(route.continue).toHaveBeenCalledOnce();
+    expect(route.fetch).not.toHaveBeenCalled();
   });
 });

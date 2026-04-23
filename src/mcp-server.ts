@@ -745,6 +745,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           sessionId: auditResult.sessionId,
           pagesVisited: result.pagesVisited,
           violationsFound: auditResult.violationsFound,
+          errors: result.errors,
           enforced: auditResult.enforced
             ? {
                 existingDirectives: auditResult.enforced.existingDirectives,

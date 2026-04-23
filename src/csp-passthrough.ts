@@ -1,6 +1,7 @@
 import { buildReportToHeader } from './utils/csp-constants.js';
 import { extractOrigin } from './utils/url-utils.js';
 import { createLogger } from './utils/logger.js';
+import { handleNonTargetOriginRequest } from './utils/route-redirect-rewriter.js';
 import type {
   PlaywrightPage,
   PlaywrightRoute,
@@ -120,6 +121,11 @@ export function transformResponseHeadersForAudit(
  * If a response has no CSP headers, it passes through unmodified (there is
  * nothing to audit — no CSP means no violations).
  *
+ * Non-target-origin requests are delegated to `handleNonTargetOriginRequest`,
+ * which rewrites 3xx redirects back to the target origin as JS navigations.
+ * Without this, Playwright skips re-intercepting the post-redirect request
+ * and the CSP on the auth callback page would never be captured.
+ *
  * Returns a cleanup function that removes the route handler.
  */
 export async function setupCspPassthrough(
@@ -132,16 +138,17 @@ export async function setupCspPassthrough(
 ): Promise<() => Promise<void>> {
   const handler = async (route: PlaywrightRoute): Promise<void> => {
     try {
-      // Skip passthrough for non-target origins
       if (targetOrigin) {
+        let requestOrigin: string;
         try {
-          const requestOrigin = extractOrigin(route.request().url());
-          if (requestOrigin !== targetOrigin) {
-            await route.continue();
-            return;
-          }
+          requestOrigin = extractOrigin(route.request().url());
         } catch {
           await route.continue();
+          return;
+        }
+
+        if (requestOrigin !== targetOrigin) {
+          await handleNonTargetOriginRequest(route, targetOrigin);
           return;
         }
       }

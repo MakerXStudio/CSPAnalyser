@@ -11,10 +11,12 @@ import {
 import { createMcpServer, sanitizeErrorMessage, main } from '../src/mcp-server.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-// Mock session-manager for start_session / crawl_url success tests
+// Mock session-manager for start_session / crawl_url / audit_policy success tests
 const mockRunSession = vi.fn();
+const mockRunAuditSession = vi.fn();
 vi.mock('../src/session-manager.js', () => ({
   runSession: mockRunSession,
+  runAuditSession: mockRunAuditSession,
 }));
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -847,6 +849,36 @@ describe('main() DB cleanup on connect failure', () => {
 
     expect(closeSpy).toHaveBeenCalled();
     closeSpy.mockRestore();
+  });
+});
+
+// ── audit_policy ──────────────────────────────────────────────────────
+
+describe('audit_policy', () => {
+  afterEach(() => {
+    mockRunAuditSession.mockReset();
+  });
+
+  it('includes crawl errors in the response', async () => {
+    const session = createTestSession();
+
+    mockRunAuditSession.mockResolvedValue({
+      session: { ...getSession(db, session.id)!, status: 'complete' },
+      pagesVisited: 0,
+      violationsFound: 0,
+      errors: [{ url: 'https://example.com/', error: 'Navigation timeout' }],
+    });
+
+    const result = await callTool('audit_policy', {
+      targetUrl: 'https://example.com',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.errors).toEqual([
+      { url: 'https://example.com/', error: 'Navigation timeout' },
+    ]);
+    expect(data.pagesVisited).toBe(0);
   });
 });
 
