@@ -155,6 +155,8 @@ auth.json
 
 # Test temp directories
 .tmp-auth-ctx-test-*
+.tmp-csp-storage-*
+.tmp-csp-handoff-*
 
 # Security audit logs
 .security/
