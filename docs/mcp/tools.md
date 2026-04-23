@@ -272,7 +272,7 @@ Audit an existing CSP: crawl a website preserving its current CSP, capture viola
 }
 ```
 
-**Response includes:** `sessionId`, `pagesVisited`, `violationsFound`, `enforced` (existing + merged directives, diff, violation count), `reportOnly` (same structure), `formatted` (human-readable summary). `enforced` and `reportOnly` are `null` when the site has no corresponding CSP header.
+**Response includes:** `sessionId`, `pagesVisited`, `violationsFound`, `errors` (array of `{ url, error }` entries for pages that failed to load), `enforced` (existing + merged directives, diff, violation count), `reportOnly` (same structure), `formatted` (human-readable summary). `enforced` and `reportOnly` are `null` when the site has no corresponding CSP header.
 
 ---
 

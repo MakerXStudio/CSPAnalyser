@@ -6,7 +6,12 @@ Accepted
 
 ## Context
 
-CSP Analyser injects a deny-all `Content-Security-Policy-Report-Only` header onto every response from the target origin by intercepting requests via Playwright's `page.route('**/*')` API. When a request matches the target origin, the handler calls `route.fetch()` to get the server's response, replaces the CSP headers, and fulfills the request with the modified response.
+CSP Analyser has two route-handler modes that intercept requests via Playwright's `page.route('**/*')` API:
+
+- **Injection mode** (`setupCspInjection` in `csp-injector.ts`) — used by `start_session` / `crawl_url`. Strips any existing CSP and injects a deny-all `Content-Security-Policy-Report-Only` header onto every response from the target origin.
+- **Audit mode** (`setupCspPassthrough` in `csp-passthrough.ts`) — used by `audit_policy`. Preserves the site's existing CSP headers, appends our report endpoints, and captures the original directives for later diffing.
+
+Both modes share the same underlying limitation.
 
 ### The Playwright Limitation
 
@@ -18,13 +23,17 @@ This is a problem for OAuth/OIDC auth flows where an external identity provider 
 App → IdP login page → IdP processes auth → 302 to app/callback
 ```
 
-The request to the IdP is intercepted (non-target origin → `route.continue()`). The 302 redirect to `app/callback` is **not** intercepted. The callback page loads without the deny-all CSP, so no violations fire for any `fetch()`, image, or script loads on the post-auth page.
+The request to the IdP is intercepted (non-target origin → `route.continue()`). The 302 redirect to `app/callback` is **not** intercepted. The callback page loads without the injected CSP (or without CSP capture, in audit mode), so no violations fire for any `fetch()`, image, or script loads on the post-auth page.
 
 ## Decision
 
+### Shared helper: `route-redirect-rewriter.ts`
+
+The non-target-origin navigation logic lives in `src/utils/route-redirect-rewriter.ts` as `handleNonTargetOriginRequest(route, targetOrigin)`. Both `setupCspInjection` and `setupCspPassthrough` delegate to it when they see a request on an origin other than the target. This keeps the two route-handler modes in sync — the audit-mode equivalent previously used a plain `route.continue()` for non-target origins, which silently dropped CSP capture on post-redirect pages.
+
 ### Core mechanism: rewrite 3xx redirects as JS navigations
 
-For non-target-origin **document** navigation requests, the handler fetches the response with `maxRedirects: 0` to inspect the raw 3xx response. If the response is a redirect, it replaces the HTTP redirect with a synthetic HTML page containing `window.location.href = "<target-url>"`. The browser renders this page (processing any `Set-Cookie` headers from the original response) and then performs a fresh top-level navigation to the target URL. This new navigation re-enters the route handler, where CSP can be injected normally.
+For non-target-origin **document** navigation requests, the helper fetches the response with `maxRedirects: 0` to inspect the raw 3xx response. If the response is a redirect, it replaces the HTTP redirect with a synthetic HTML page containing `window.location.href = "<target-url>"`. The browser renders this page (processing any `Set-Cookie` headers from the original response) and then performs a fresh top-level navigation to the target URL. This new navigation re-enters the route handler, where CSP can be injected or captured normally.
 
 ### Multi-hop chains
 
@@ -64,10 +73,12 @@ The DOM violation event listener uses `window.addEventListener('securitypolicyvi
 
 ### Positive
 
-- CSP violations are captured reliably after OAuth/OIDC redirect chains (the primary use case)
+- CSP violations are captured reliably after OAuth/OIDC redirect chains (the primary use case) — in both injection and audit modes
+- Audit mode captures the deployed CSP on post-redirect pages (e.g. `/auth/callback`), not just the initial shell
 - Multi-hop redirect chains work naturally with the browser's cookie jar
 - Auth state (cookies, session tokens) is preserved across redirects
 - No dependency on Node.js HTTP client for following redirect chains
+- One shared implementation — a fix applied once benefits both modes
 
 ### Negative
 

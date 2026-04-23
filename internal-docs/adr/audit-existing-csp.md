@@ -81,6 +81,8 @@ The implementation introduces:
 
 The `runAuditSession` function in `session-manager.ts` follows the same structure as `runSession` but calls `setupCspPassthrough` instead of `setupCspInjection`. The structural similarity is intentional — it keeps the two paths independent and avoids mode-switching conditionals in the hot path.
 
+Non-target-origin navigation (OAuth redirects, etc.) is delegated to `handleNonTargetOriginRequest` in `utils/route-redirect-rewriter.ts`, shared with `setupCspInjection`. See [Redirect Chain CSP Injection](./redirect-chain-csp-injection.md) — audit mode relies on the same JS-redirect rewrite to ensure CSP headers are captured on post-OAuth callback pages.
+
 ## Consequences
 
 - Sites with an existing CSP can be audited without regenerating from scratch — the output shows exactly what needs to change
