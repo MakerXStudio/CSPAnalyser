@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import * as path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type Database from 'better-sqlite3';
@@ -21,18 +21,73 @@ import {
 } from './db/repository.js';
 import { generatePolicy } from './policy-generator.js';
 import { optimizePolicy } from './policy-optimizer.js';
-import { formatPolicy, directivesToString } from './policy-formatter.js';
+import { formatPolicy, directivesToString, META_STRIPPED_DIRECTIVES } from './policy-formatter.js';
 import { createLogger } from './utils/logger.js';
 import { validateTargetUrlWithDns } from './utils/url-utils.js';
 import { getDataDir, resolveProjectName } from './utils/file-utils.js';
+import { CSP_DIRECTIVES } from './utils/csp-constants.js';
+import type { ExportFormat } from './types.js';
 // Lazy import type for session-manager (dynamic import requires inline type annotation)
 import type { runSession, runAuditSession } from './session-manager.js';
+import type { CookieParam } from './types.js';
 type SessionManagerModule = {
   runSession: typeof runSession;
   runAuditSession: typeof runAuditSession;
 };
 
 const logger = createLogger();
+const exportFormatSchema = z.enum([
+  'header',
+  'meta',
+  'nginx',
+  'apache',
+  'cloudflare',
+  'cloudflare-pages',
+  'azure-frontdoor',
+  'helmet',
+  'json',
+]);
+const staticProfileSchema = z
+  .enum(['react-expo'])
+  .optional()
+  .describe(
+    "Static framework profile. 'react-expo' keeps script hashes strict while allowing style-src-attr hash explosions to collapse to 'unsafe-inline' when collapseHashThreshold is exceeded.",
+  );
+const useNoncesSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    "Replace 'unsafe-inline' in script/style directives with 'nonce-{{CSP_NONCE}}' placeholders (default: false). Static site mode and static profiles skip nonce replacement.",
+  );
+const useStrictDynamicSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    "Add 'strict-dynamic' alongside script nonces and imply nonce mode when useNonces is not set (default: false).",
+  );
+const cookieSchema: z.ZodType<CookieParam> = z.object({
+  name: z.string(),
+  value: z.string(),
+  domain: z.string().optional(),
+  path: z.string().optional(),
+  httpOnly: z.boolean().optional(),
+  secure: z.boolean().optional(),
+  sameSite: z.enum(['Strict', 'Lax', 'None']).optional(),
+});
+const cookiesSchema = z
+  .array(cookieSchema)
+  .optional()
+  .describe('Cookies to inject into the browser context before crawling');
+const knownCspDirectives: ReadonlySet<string> = new Set(CSP_DIRECTIVES);
+const documentDirectives: ReadonlySet<string> = new Set([
+  'report-uri',
+  'report-to',
+  'sandbox',
+  'upgrade-insecure-requests',
+  'require-trusted-types-for',
+  'trusted-types',
+  'plugin-types',
+]);
 
 // ── Tool result helpers ─────────────────────────────────────────────────
 
@@ -58,6 +113,130 @@ function toolError(message: string): {
     content: [{ type: 'text' as const, text: sanitizeErrorMessage(message) }],
     isError: true,
   };
+}
+
+function resolveUnderCurrentWorkingDirectory(inputPath: string): string {
+  const cwd = realpathSync(process.cwd());
+  const absolute = path.resolve(cwd, inputPath);
+  let resolvedPath: string;
+
+  try {
+    resolvedPath = realpathSync(absolute);
+  } catch {
+    resolvedPath = absolute;
+  }
+
+  const relative = path.relative(cwd, resolvedPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Path is outside the current working directory: ${inputPath}`);
+  }
+
+  return resolvedPath;
+}
+
+function mergeDirectiveRecord(
+  into: Map<string, string[]>,
+  directives: Record<string, string[]>,
+): void {
+  for (const [directive, sources] of Object.entries(directives)) {
+    if (!knownCspDirectives.has(directive)) continue;
+    const existing = into.get(directive);
+    if (existing) {
+      existing.push(...sources);
+    } else {
+      into.set(directive, [...sources]);
+    }
+  }
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readMergeJsonFiles(paths: readonly string[]): Map<string, string[]> {
+  const merged = new Map<string, string[]>();
+
+  for (const rawPath of paths) {
+    const filePath = resolveUnderCurrentWorkingDirectory(rawPath);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(filePath, 'utf8'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Cannot read merge JSON file "${rawPath}": ${message}`, { cause: error });
+    }
+
+    if (!isObjectRecord(parsed)) {
+      throw new Error(`Merge JSON file must contain an object: ${rawPath}`);
+    }
+
+    const parsedRecord = parsed;
+    const candidate = parsedRecord.directives;
+    const directivesSource = isObjectRecord(candidate) ? candidate : parsedRecord;
+
+    const directiveMap: Record<string, string[]> = {};
+    for (const [directive, value] of Object.entries(directivesSource)) {
+      if (!knownCspDirectives.has(directive)) continue;
+      if (
+        !Array.isArray(value) ||
+        !value.every((source): source is string => typeof source === 'string')
+      ) {
+        throw new Error(`Directive "${directive}" in ${rawPath} must be an array of strings`);
+      }
+      directiveMap[directive] = value;
+    }
+    mergeDirectiveRecord(merged, directiveMap);
+  }
+
+  return merged;
+}
+
+function mergeInputDirectives(
+  extraDirectives?: Record<string, string[]>,
+  mergeJsonPaths?: readonly string[],
+): Map<string, string[]> | undefined {
+  const merged = new Map<string, string[]>();
+  if (extraDirectives) {
+    mergeDirectiveRecord(merged, extraDirectives);
+  }
+  if (mergeJsonPaths && mergeJsonPaths.length > 0) {
+    const fromFiles = readMergeJsonFiles(mergeJsonPaths);
+    for (const [directive, sources] of fromFiles) {
+      const existing = merged.get(directive);
+      if (existing) {
+        existing.push(...sources);
+      } else {
+        merged.set(directive, sources);
+      }
+    }
+  }
+  return merged.size > 0 ? merged : undefined;
+}
+
+function withoutMetaStrippedDirectives(
+  directives: Record<string, string[]>,
+): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(directives).filter(
+      ([directive]) => !META_STRIPPED_DIRECTIVES.includes(directive),
+    ),
+  );
+}
+
+function appendPolicyDirectives(
+  directives: Record<string, string[]>,
+  policyDirectives: Record<string, string[]>,
+): void {
+  for (const [directive, values] of Object.entries(policyDirectives)) {
+    if (!documentDirectives.has(directive)) {
+      throw new Error(
+        `Unknown document directive "${directive}". Supported directives: ${[
+          ...documentDirectives,
+        ].join(', ')}`,
+      );
+    }
+    directives[directive] = [...values];
+  }
 }
 
 // ── Server factory ──────────────────────────────────────────────────────
@@ -131,10 +310,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           .string()
           .optional()
           .describe('Path to Playwright storageState JSON for authenticated sessions'),
-        strictness: z
-          .enum(['strict', 'moderate', 'permissive'])
-          .optional()
-          .describe('Policy strictness level (default: moderate)'),
+        cookies: cookiesSchema,
         violationLimit: z
           .number()
           .int()
@@ -157,6 +333,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             settlementDelay: args.settlementDelay,
           },
           storageStatePath: args.storageStatePath,
+          cookies: args.cookies,
           violationLimit: args.violationLimit,
           project: resolveProjectName(),
         });
@@ -189,10 +366,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           .string()
           .optional()
           .describe('Path to Playwright storageState JSON for authenticated sessions'),
-        strictness: z
-          .enum(['strict', 'moderate', 'permissive'])
-          .optional()
-          .describe('Policy strictness level (default: moderate)'),
+        cookies: cookiesSchema,
       },
     },
     async (args) => {
@@ -207,6 +381,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             maxPages: 1,
           },
           storageStatePath: args.storageStatePath,
+          cookies: args.cookies,
           project: resolveProjectName(),
         });
 
@@ -300,6 +475,8 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Remove 'unsafe-eval' from the generated policy (default: false)"),
+        useNonces: useNoncesSchema,
+        useStrictDynamic: useStrictDynamicSchema,
         collapseHashThreshold: z
           .number()
           .int()
@@ -314,6 +491,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           .describe(
             'Target is a static site — skips nonce suggestions and enables aggressive hash collapsing recommendations (default: false)',
           ),
+        staticProfile: staticProfileSchema,
       },
     },
     async (args) => {
@@ -331,8 +509,11 @@ export function createMcpServer(db: Database.Database): McpServer {
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
           stripUnsafeEval: args.stripUnsafeEval,
+          useNonces: args.useNonces ?? args.useStrictDynamic ?? false,
+          useStrictDynamic: args.useStrictDynamic,
           collapseHashThreshold: args.collapseHashThreshold,
           staticSiteMode: args.staticSiteMode,
+          staticProfile: args.staticProfile,
         });
         const policyString = directivesToString(optimized);
 
@@ -340,9 +521,7 @@ export function createMcpServer(db: Database.Database): McpServer {
         const hasUnsafeEval = Object.values(optimized).some((sources) =>
           sources.includes("'unsafe-eval'"),
         );
-        const evalSources = hasUnsafeEval
-          ? getEvalSourceAttribution(db, args.sessionId)
-          : [];
+        const evalSources = hasUnsafeEval ? getEvalSourceAttribution(db, args.sessionId) : [];
 
         // Hash stability analysis
         const { analyseHashStability } = await import('./hash-stability-analyser.js');
@@ -356,6 +535,7 @@ export function createMcpServer(db: Database.Database): McpServer {
         return toolResult({
           sessionId: args.sessionId,
           strictness: args.strictness ?? 'moderate',
+          ...(args.staticProfile ? { staticProfile: args.staticProfile } : {}),
           directives: optimized,
           policyString,
           ...(evalSources.length > 0 ? { evalSources } : {}),
@@ -409,6 +589,8 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Remove 'unsafe-eval' from the generated policy (default: false)"),
+        useNonces: useNoncesSchema,
+        useStrictDynamic: useStrictDynamicSchema,
         collapseHashThreshold: z
           .number()
           .int()
@@ -420,9 +602,8 @@ export function createMcpServer(db: Database.Database): McpServer {
         staticSiteMode: z
           .boolean()
           .optional()
-          .describe(
-            'Target is a static site — skips nonce suggestions (default: false)',
-          ),
+          .describe('Target is a static site — skips nonce suggestions (default: false)'),
+        staticProfile: staticProfileSchema,
       },
     },
     async (args) => {
@@ -440,8 +621,11 @@ export function createMcpServer(db: Database.Database): McpServer {
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
           stripUnsafeEval: args.stripUnsafeEval,
+          useNonces: args.useNonces ?? args.useStrictDynamic ?? false,
+          useStrictDynamic: args.useStrictDynamic,
           collapseHashThreshold: args.collapseHashThreshold,
           staticSiteMode: args.staticSiteMode,
+          staticProfile: args.staticProfile,
         });
         const formatted = formatPolicy(optimized, args.format, args.isReportOnly ?? false);
 
@@ -454,6 +638,108 @@ export function createMcpServer(db: Database.Database): McpServer {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return toolError(`Failed to export policy: ${message}`);
+      }
+    },
+  );
+
+  // ── hash_static ──────────────────────────────────────────────────────
+
+  server.registerTool(
+    'hash_static',
+    {
+      description:
+        'Generate a CSP for browserless static HTML files under the current project, optionally injecting a CSP meta tag into scanned files',
+      inputSchema: {
+        paths: z
+          .array(z.string())
+          .min(1)
+          .describe('Project-local HTML files or directories to scan'),
+        format: exportFormatSchema.optional().describe('Output format (default: meta)'),
+        isReportOnly: z
+          .boolean()
+          .optional()
+          .describe('Use Content-Security-Policy-Report-Only header (default: false)'),
+        inject: z
+          .boolean()
+          .optional()
+          .describe('Write a CSP meta tag into each scanned HTML file (default: false)'),
+        extraDirectives: z
+          .record(z.string(), z.array(z.string()))
+          .optional()
+          .describe('Additional sources keyed by known CSP fetch/navigation directive'),
+        mergeJsonPaths: z
+          .array(z.string())
+          .optional()
+          .describe('Project-local JSON policy files exported by this tool or the CLI'),
+        policyDirectives: z
+          .record(z.string(), z.array(z.string()))
+          .optional()
+          .describe('Document directives appended verbatim, such as report-uri or sandbox'),
+        collapseHashThreshold: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Collapse hashes to 'unsafe-inline' when an eligible directive exceeds this count",
+          ),
+        staticProfile: staticProfileSchema,
+      },
+    },
+    async (args) => {
+      try {
+        const { scanHtmlFiles, buildStaticPolicy, injectCspMeta } =
+          await import('./static-html-analyser.js');
+
+        const resolvedPaths = args.paths.map(resolveUnderCurrentWorkingDirectory);
+        const extraDirectives = mergeInputDirectives(args.extraDirectives, args.mergeJsonPaths);
+        const { result, files } = await scanHtmlFiles(resolvedPaths);
+        const directives = buildStaticPolicy(result, {
+          extraDirectives,
+          staticProfile: args.staticProfile,
+          collapseHashThreshold: args.collapseHashThreshold,
+        });
+
+        if (args.policyDirectives) {
+          appendPolicyDirectives(directives, args.policyDirectives);
+        }
+
+        const format: ExportFormat = args.format ?? 'meta';
+        const isReportOnly = args.isReportOnly ?? false;
+        const shouldInject = args.inject ?? false;
+
+        if (shouldInject && files.length === 0) {
+          return toolError(`No HTML files found under: ${args.paths.join(', ')}`);
+        }
+
+        const policy = formatPolicy(directives, format, isReportOnly);
+
+        if (shouldInject) {
+          const metaPolicy = directivesToString(withoutMetaStrippedDirectives(directives));
+          for (const file of files) {
+            const html = readFileSync(file, 'utf8');
+            writeFileSync(file, injectCspMeta(html, metaPolicy));
+          }
+        }
+
+        return toolResult({
+          format,
+          isReportOnly,
+          policy,
+          directives,
+          filesScanned: files.length,
+          counts: {
+            scriptElemHashes: result.scriptElem.size,
+            styleElemHashes: result.styleElem.size,
+            styleAttrHashes: result.styleAttr.size,
+            scriptAttrHashes: result.scriptAttr.size,
+          },
+          injected: shouldInject,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('hash_static failed', { error: message });
+        return toolError(`Failed to hash static HTML: ${message}`);
       }
     },
   );
@@ -480,6 +766,21 @@ export function createMcpServer(db: Database.Database): McpServer {
           .boolean()
           .optional()
           .describe("Score the policy with 'unsafe-eval' stripped (default: false)"),
+        useNonces: useNoncesSchema,
+        useStrictDynamic: useStrictDynamicSchema,
+        collapseHashThreshold: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            'Collapse hashes before scoring when a directive exceeds this many hashes (default: disabled)',
+          ),
+        staticSiteMode: z
+          .boolean()
+          .optional()
+          .describe('Score with static-site nonce skipping behavior (default: false)'),
+        staticProfile: staticProfileSchema,
       },
     },
     async (args) => {
@@ -496,6 +797,11 @@ export function createMcpServer(db: Database.Database): McpServer {
         const optimized = optimizePolicy(directives, session.targetUrl, {
           useHashes: args.useHashes,
           stripUnsafeEval: args.stripUnsafeEval,
+          useNonces: args.useNonces ?? args.useStrictDynamic ?? false,
+          useStrictDynamic: args.useStrictDynamic,
+          collapseHashThreshold: args.collapseHashThreshold,
+          staticSiteMode: args.staticSiteMode,
+          staticProfile: args.staticProfile,
         });
 
         const { scoreCspPolicy, formatScore } = await import('./policy-scorer.js');
@@ -525,10 +831,24 @@ export function createMcpServer(db: Database.Database): McpServer {
           .enum(['strict', 'moderate', 'permissive'])
           .optional()
           .describe('Policy strictness (default: moderate)'),
+        allProjects: z
+          .boolean()
+          .optional()
+          .describe('Allow comparing sessions from any project (default: false)'),
       },
     },
     async (args) => {
       try {
+        const sessionA = getProjectScopedSession(db, args.sessionIdA, args.allProjects);
+        if (!sessionA) {
+          return toolError(`Session not found: ${args.sessionIdA}`);
+        }
+
+        const sessionB = getProjectScopedSession(db, args.sessionIdB, args.allProjects);
+        if (!sessionB) {
+          return toolError(`Session not found: ${args.sessionIdB}`);
+        }
+
         const { compareSessions: compare, formatDiff: format } = await import('./policy-diff.js');
         const comparison = compare(
           db,
@@ -705,6 +1025,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           .string()
           .optional()
           .describe('Path to Playwright storageState JSON for authenticated sessions'),
+        cookies: cookiesSchema,
         strictness: z
           .enum(['strict', 'moderate', 'permissive'])
           .optional()
@@ -735,6 +1056,7 @@ export function createMcpServer(db: Database.Database): McpServer {
             settlementDelay: args.settlementDelay,
           },
           storageStatePath: args.storageStatePath,
+          cookies: args.cookies,
           violationLimit: args.violationLimit,
           project: resolveProjectName(),
         });
