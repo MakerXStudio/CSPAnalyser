@@ -15,22 +15,23 @@ csp-analyser crawl <url> [options]
 
 ## Options
 
-| Option                   | Default       | Description                                                                                                                   |
-| ------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `--depth <n>`            | `1`           | How many links deep to follow from the start URL. `0` means visit only the start URL.                                         |
-| `--max-pages <n>`        | `10`          | Maximum number of pages to visit before stopping. Must be a positive integer.                                                 |
-| `--strictness <level>`   | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                                          |
-| `--format <fmt>`         | `header`      | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
-| `--storage-state <path>` | --            | Path to a Playwright storage state JSON file for authenticated crawling.                                                      |
-| `--violation-limit <n>`  | `10000`       | Maximum violations to capture per session. Set to `0` for unlimited.                                                          |
-| `--nonce`                | `false`       | Replace `'unsafe-inline'` with nonce placeholders in script/style directives.                                                 |
-| `--strict-dynamic`       | `false`       | Add `'strict-dynamic'` alongside nonces in script directives. Implies `--nonce`.                                              |
-| `--hash`                 | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.            |
-| `--strip-unsafe-eval`    | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                     |
-| `--collapse-hash-threshold <n>` | disabled | Collapse hashes to `'unsafe-inline'` when a directive exceeds `<n>` hashes.                                              |
-| `--static-site`          | `false`       | Target is a static site — disables nonce replacement.                                                                         |
-| `--report-only`          | `false`       | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one.                                          |
-| `--project <name>`       | auto-detected | Override auto-detected project name. Sessions are tagged with this name.                                                      |
+| Option                          | Default       | Description                                                                                                                                                                                               |
+| ------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--depth <n>`                   | `1`           | How many links deep to follow from the start URL. `0` means visit only the start URL.                                                                                                                     |
+| `--max-pages <n>`               | `10`          | Maximum number of pages to visit before stopping. Must be a positive integer.                                                                                                                             |
+| `--strictness <level>`          | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                                                                                                                      |
+| `--format <fmt>`                | `header`      | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`.                                                                             |
+| `--storage-state <path>`        | --            | Path to a Playwright storage state JSON file for authenticated crawling.                                                                                                                                  |
+| `--violation-limit <n>`         | `10000`       | Maximum violations to capture per session. Set to `0` for unlimited.                                                                                                                                      |
+| `--nonce`                       | `false`       | Replace `'unsafe-inline'` with nonce placeholders in script/style directives.                                                                                                                             |
+| `--strict-dynamic`              | `false`       | Add `'strict-dynamic'` alongside nonces in script directives. Implies `--nonce`.                                                                                                                          |
+| `--hash`                        | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.                                                                                        |
+| `--strip-unsafe-eval`           | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                                                                                                 |
+| `--collapse-hash-threshold <n>` | disabled      | Collapse hashes to `'unsafe-inline'` when a directive exceeds `<n>` hashes.                                                                                                                               |
+| `--static-site`                 | `false`       | Target is a static site — disables nonce replacement.                                                                                                                                                     |
+| `--static-profile react-expo`   | --            | Static React/Expo profile: keeps scripts and `<style>` blocks hash-strict while allowing only excessive `style-src-attr` hashes to collapse to `'unsafe-inline'`. Static profiles skip nonce replacement. |
+| `--report-only`                 | `false`       | Generate a `Content-Security-Policy-Report-Only` header instead of an enforcing one.                                                                                                                      |
+| `--project <name>`              | auto-detected | Override auto-detected project name. Sessions are tagged with this name.                                                                                                                                  |
 
 ## How crawling works
 
@@ -94,6 +95,18 @@ csp-analyser crawl https://example.com --strictness strict
 ```
 
 Generates a tighter policy. Prefers hashes over host-based allowlisting where possible.
+
+### Static React/Expo export
+
+```bash
+csp-analyser crawl https://app.example.com \
+  --hash \
+  --collapse-hash-threshold 10 \
+  --static-site \
+  --static-profile react-expo
+```
+
+Use this for static React Native Web / Expo exports with many generated `style=""` attributes. Scripts and `<style>` blocks remain hash-strict; only `style-src-attr` can fall back to `'unsafe-inline'` when the threshold is exceeded.
 
 ### Report-only mode
 

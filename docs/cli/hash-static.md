@@ -11,10 +11,10 @@ Use this as a post-build step when you ship a static site: it hashes every inlin
 
 ## When to use this vs `crawl`
 
-| Scenario | Use |
-|---|---|
-| You have a static build on disk and want deterministic hashes | `hash-static` |
-| You need to capture inline content injected by JS at runtime | `crawl` (dynamic) |
+| Scenario                                                        | Use                                                                       |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| You have a static build on disk and want deterministic hashes   | `hash-static`                                                             |
+| You need to capture inline content injected by JS at runtime    | `crawl` (dynamic)                                                         |
 | You want both: static build + framework-injected inline content | `hash-static` with `--extra` / `--merge-json` seeded from a one-off crawl |
 
 `hash-static` is fast (no Playwright, no network) and ideal for CI. It only sees what is in the HTML on disk — content added by JavaScript at runtime (e.g. some framework hydration scripts) is invisible to it. For those cases, run `crawl` once against a preview server, export as JSON, and feed the result back via `--merge-json` (or individual sources via `--extra`).
@@ -29,14 +29,15 @@ csp-analyser hash-static <path>... [options]
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `--inject` | `false` | Rewrite each scanned HTML in place to include the generated CSP as a `<meta http-equiv="Content-Security-Policy">` immediately after `<head>`. Any existing CSP `<meta>` is replaced. |
-| `--format <fmt>` | `meta` | Output format when not using `--inject` (see [export formats](../guides/export-formats)). |
-| `--report-only` | `false` | Emit `Content-Security-Policy-Report-Only` instead of the enforcing header. |
-| `--extra <directive>=<src>` | — | Extra source for a CSP fetch or navigation directive. Repeatable. e.g. `--extra connect-src=https://api.example.com`. See [supported directives](#supported-directives). |
-| `--merge-json <path>` | — | Merge directives from a previously exported JSON file (the `{ directives: { ... } }` format from `--format json`). Repeatable. Also accepts a bare directive map. |
-| `--policy-directive <d>=<v>` | — | Set a CSP document directive verbatim. Repeatable. e.g. `--policy-directive report-uri=/csp-report`. Value-less directives like `upgrade-insecure-requests` omit the `=`. See [supported directives](#supported-directives). |
+| Option                        | Default | Description                                                                                                                                                                                                                  |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--inject`                    | `false` | Rewrite each scanned HTML in place to include the generated CSP as a `<meta http-equiv="Content-Security-Policy">` immediately after `<head>`. Any existing CSP `<meta>` is replaced.                                        |
+| `--format <fmt>`              | `meta`  | Output format when not using `--inject` (see [export formats](../guides/export-formats)).                                                                                                                                    |
+| `--report-only`               | `false` | Emit `Content-Security-Policy-Report-Only` instead of the enforcing header.                                                                                                                                                  |
+| `--extra <directive>=<src>`   | —       | Extra source for a CSP fetch or navigation directive. Repeatable. e.g. `--extra connect-src=https://api.example.com`. See [supported directives](#supported-directives).                                                     |
+| `--merge-json <path>`         | —       | Merge directives from a previously exported JSON file (the `{ directives: { ... } }` format from `--format json`). Repeatable. Also accepts a bare directive map.                                                            |
+| `--policy-directive <d>=<v>`  | —       | Set a CSP document directive verbatim. Repeatable. e.g. `--policy-directive report-uri=/csp-report`. Value-less directives like `upgrade-insecure-requests` omit the `=`. See [supported directives](#supported-directives). |
+| `--static-profile react-expo` | —       | Collapse excessive `style-src-attr` hashes to `'unsafe-inline'` when used with `--collapse-hash-threshold`, while keeping script hashes and `<style>` hashes intact.                                                         |
 
 ## What it captures
 
@@ -119,6 +120,16 @@ csp-analyser hash-static dist/ --inject --merge-json crawl-policy.json
 
 This merges runtime-discovered directives (like `connect-src`, `frame-src`) from the crawl with the static inline hashes — missing directives fall back to `default-src 'self'`.
 
+### Static React/Expo style attribute explosion
+
+```bash
+csp-analyser hash-static dist/ --inject \
+  --collapse-hash-threshold 10 \
+  --static-profile react-expo
+```
+
+This keeps `script-src-elem`, `script-src-attr`, and `style-src-elem` hash-based, but collapses an excessive `style-src-attr` hash set to `style-src-attr 'unsafe-inline'`. This is narrower than broad `style-src 'unsafe-inline'` and is intended for static React Native Web / Expo exports where dynamic nonces are unavailable. Attribute hashes require `'unsafe-hashes'`, but very large generated style-attribute sets are usually not maintainable; the profile uses the scoped `style-src-attr` fallback only for that case.
+
 ### Add reporting and upgrade directives
 
 ```bash
@@ -150,7 +161,7 @@ These are passed verbatim into the policy. Note that `report-uri` and `report-to
 
 - **HTML parsing is regex-based**, tuned for compliant machine-generated output (VitePress, Next.js, Astro, etc.). Hand-written HTML with unusual quoting may not parse cleanly.
 - **Runs without a database** — it does not create a session and cannot be compared, scored, or diffed via the session-based commands.
-- If you want to both hash static content *and* capture runtime-injected hashes automatically, run `crawl` against a local preview instead.
+- If you want to both hash static content _and_ capture runtime-injected hashes automatically, run `crawl` against a local preview instead.
 
 ## When to use this command
 
