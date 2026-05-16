@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLogger } from './utils/logger.js';
+import type { StaticProfile } from './types.js';
 
 const logger = createLogger();
 
@@ -27,6 +28,10 @@ export interface StaticHashResult {
 export interface BuildPolicyOptions {
   /** Extra sources keyed by directive name (from --extra / --merge-json flags) */
   extraDirectives?: ReadonlyMap<string, readonly string[]>;
+  /** Collapse policy for static framework compatibility profiles. */
+  staticProfile?: StaticProfile;
+  /** Hash count above which eligible directives collapse to a compatibility fallback. */
+  collapseHashThreshold?: number;
 }
 
 // ── File walking ─────────────────────────────────────────────────────────
@@ -193,6 +198,8 @@ export function buildStaticPolicy(
   options: BuildPolicyOptions = {},
 ): Record<string, string[]> {
   const dedupeSort = (items: Iterable<string>): string[] => [...new Set(items)].sort();
+  const isHashSource = (source: string): boolean =>
+    source.startsWith("'sha256-") || source.startsWith("'sha384-") || source.startsWith("'sha512-");
 
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
@@ -232,6 +239,44 @@ export function buildStaticPolicy(
     const values = directives[attrDirective] as string[] | undefined;
     if (values && values.some((s) => s.startsWith("'sha")) && !values.includes("'unsafe-hashes'")) {
       directives[attrDirective] = ["'unsafe-hashes'", ...values];
+    }
+  }
+
+  let reactExpoStyleAttrFallback = false;
+  if (options.staticProfile === 'react-expo' && options.collapseHashThreshold != null) {
+    const values = Object.prototype.hasOwnProperty.call(directives, 'style-src-attr')
+      ? directives['style-src-attr']
+      : [];
+    const hashCount = values.filter(isHashSource).length;
+    if (options.collapseHashThreshold > 0 && hashCount > options.collapseHashThreshold) {
+      directives['style-src-attr'] = ["'unsafe-inline'"];
+      reactExpoStyleAttrFallback = true;
+    }
+  }
+
+  if (options.staticProfile === 'react-expo') {
+    const strictInlineDirectives = [
+      'default-src',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+      'style-src',
+      'style-src-elem',
+      'style-src-attr',
+    ];
+    for (const directive of strictInlineDirectives) {
+      if (directive === 'style-src-attr' && reactExpoStyleAttrFallback) {
+        continue;
+      }
+      if (directive in directives) {
+        directives[directive] = directives[directive].filter((s) => s !== "'unsafe-inline'");
+      }
+    }
+  }
+
+  for (const key of Object.keys(directives)) {
+    if (directives[key].length === 0) {
+      delete directives[key];
     }
   }
 
