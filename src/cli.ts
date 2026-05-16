@@ -33,7 +33,7 @@ import { getDataDir, resolveProjectName } from './utils/file-utils.js';
 import { compareSessions, formatDiff } from './policy-diff.js';
 import { generateAuditResult, formatAuditResult } from './audit.js';
 import { scoreCspPolicy, formatScore } from './policy-scorer.js';
-import type { StrictnessLevel, ExportFormat, SessionConfig } from './types.js';
+import type { StrictnessLevel, ExportFormat, SessionConfig, StaticProfile } from './types.js';
 import { CSP_DIRECTIVES } from './utils/csp-constants.js';
 
 const logger = createLogger();
@@ -84,6 +84,7 @@ export interface ParsedArgs {
   stripUnsafeEval: boolean;
   collapseHashThreshold?: number;
   staticSiteMode: boolean;
+  staticProfile?: StaticProfile;
   /** For hash-static: file/directory paths to scan */
   inputs?: string[];
   /** For hash-static: write the generated meta tag into each scanned HTML */
@@ -101,6 +102,7 @@ export interface ParsedArgs {
 // ── Valid values ─────────────────────────────────────────────────────────
 
 const VALID_STRICTNESS: ReadonlySet<string> = new Set(['strict', 'moderate', 'permissive']);
+const VALID_STATIC_PROFILES: ReadonlySet<string> = new Set(['react-expo']);
 const VALID_FORMATS: ReadonlySet<string> = new Set([
   'header',
   'meta',
@@ -197,10 +199,7 @@ function parsePolicyDirectives(raw: readonly string[]): Map<string, string[]> {
  * (`{ directives: Record<string, string[]> }`) and merges their directives
  * into an existing extra-directives map.
  */
-function mergJsonFiles(
-  paths: readonly string[],
-  into: Map<string, string[]>,
-): void {
+function mergJsonFiles(paths: readonly string[], into: Map<string, string[]>): void {
   for (const filePath of paths) {
     let raw: string;
     try {
@@ -223,7 +222,9 @@ function mergJsonFiles(
     // Accept both { directives: { ... } } (full export) and a bare directive map.
     const obj = parsed as Record<string, unknown>;
     const directivesObj =
-      typeof obj.directives === 'object' && obj.directives !== null && !Array.isArray(obj.directives)
+      typeof obj.directives === 'object' &&
+      obj.directives !== null &&
+      !Array.isArray(obj.directives)
         ? (obj.directives as Record<string, unknown>)
         : obj;
 
@@ -280,6 +281,7 @@ Options:
   --collapse-hash-threshold <n>  Collapse hashes to 'unsafe-inline' when count
                          exceeds <n> per directive (e.g. --collapse-hash-threshold 10)
   --static-site          Target is a static site (disables nonce suggestions)
+  --static-profile <p>   Static framework profile: react-expo
   --report-only          Generate report-only policy
   --project <name>       Override auto-detected project name
   --all                  Show sessions from all projects (sessions command)
@@ -354,6 +356,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       'strip-unsafe-eval': { type: 'boolean', default: false },
       'collapse-hash-threshold': { type: 'string' },
       'static-site': { type: 'boolean', default: false },
+      'static-profile': { type: 'string' },
       'report-only': { type: 'boolean', default: false },
       'no-color': { type: 'boolean', default: false },
       project: { type: 'string' },
@@ -473,10 +476,15 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
       ((values['strict-dynamic'] as boolean | undefined) ?? false),
     hash: (values.hash as boolean | undefined) ?? false,
     stripUnsafeEval: (values['strip-unsafe-eval'] as boolean | undefined) ?? false,
-    collapseHashThreshold: values['collapse-hash-threshold'] !== undefined
-      ? parseNonNegativeInt(values['collapse-hash-threshold'] as string, 'collapse-hash-threshold')
-      : undefined,
+    collapseHashThreshold:
+      values['collapse-hash-threshold'] !== undefined
+        ? parseNonNegativeInt(
+            values['collapse-hash-threshold'] as string,
+            'collapse-hash-threshold',
+          )
+        : undefined,
     staticSiteMode: (values['static-site'] as boolean | undefined) ?? false,
+    staticProfile: parseStaticProfile(values['static-profile'] as string | undefined),
     inject: (values.inject as boolean | undefined) ?? false,
     all: (values.all as boolean | undefined) ?? false,
     project: values.project as string | undefined,
@@ -504,7 +512,10 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     if (policyDirRaw) {
       parsed.documentDirectives = parsePolicyDirectives(policyDirRaw);
     }
-  } else if ((command === 'crawl' || command === 'interactive' || command === 'audit') && positionalArg) {
+  } else if (
+    (command === 'crawl' || command === 'interactive' || command === 'audit') &&
+    positionalArg
+  ) {
     validateTargetUrl(positionalArg, { allowLocalNetwork: true });
     parsed.url = positionalArg;
   } else if (command === 'diff') {
@@ -546,6 +557,15 @@ function parsePositiveInt(value: string, name: string): number {
     throw new Error(`Invalid --${name}: "${value}". Must be a positive integer.`);
   }
   return n;
+}
+
+function parseStaticProfile(value: string | undefined): StaticProfile | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'react-expo') return value;
+  if (!VALID_STATIC_PROFILES.has(value)) {
+    throw new Error(`Invalid --static-profile: "${value}". Must be react-expo.`);
+  }
+  return undefined;
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────────
@@ -601,6 +621,7 @@ function generateAndFormat(
     stripUnsafeEval: args.stripUnsafeEval,
     collapseHashThreshold: args.collapseHashThreshold,
     staticSiteMode: args.staticSiteMode,
+    staticProfile: args.staticProfile,
   });
   return formatPolicy(optimized, args.format, args.reportOnly);
 }
@@ -675,6 +696,7 @@ async function runCrawlCommand(args: ParsedArgs): Promise<void> {
       stripUnsafeEval: args.stripUnsafeEval,
       collapseHashThreshold: args.collapseHashThreshold,
       staticSiteMode: args.staticSiteMode,
+      staticProfile: args.staticProfile,
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
@@ -747,6 +769,7 @@ async function runInteractiveCommand(args: ParsedArgs): Promise<void> {
       stripUnsafeEval: args.stripUnsafeEval,
       collapseHashThreshold: args.collapseHashThreshold,
       staticSiteMode: args.staticSiteMode,
+      staticProfile: args.staticProfile,
     });
     const output = formatPolicy(optimized, args.format, args.reportOnly);
     process.stdout.write(output + '\n');
@@ -788,7 +811,9 @@ async function runAuditCommand(args: ParsedArgs): Promise<void> {
 
     const elapsed = formatElapsed(Date.now() - startTime);
     process.stderr.write(
-      cyan(`Audit complete: ${result.pagesVisited} pages, ${result.violationsFound} violations, ${elapsed}`) + '\n',
+      cyan(
+        `Audit complete: ${result.pagesVisited} pages, ${result.violationsFound} violations, ${elapsed}`,
+      ) + '\n',
     );
 
     const auditResult = generateAuditResult(db, result.session.id, {
@@ -835,6 +860,8 @@ async function runHashStaticCommand(args: ParsedArgs): Promise<void> {
   const { result, files } = await scanHtmlFiles(paths);
   const directives = buildStaticPolicy(result, {
     extraDirectives: args.extraDirectives,
+    staticProfile: args.staticProfile,
+    collapseHashThreshold: args.collapseHashThreshold,
   });
 
   // Append document directives (report-uri, sandbox, etc.) verbatim.
@@ -902,6 +929,7 @@ async function runScoreCommand(args: ParsedArgs): Promise<void> {
       stripUnsafeEval: args.stripUnsafeEval,
       collapseHashThreshold: args.collapseHashThreshold,
       staticSiteMode: args.staticSiteMode,
+      staticProfile: args.staticProfile,
     });
     const score = scoreCspPolicy(optimized);
     process.stdout.write(formatScore(score) + '\n');
