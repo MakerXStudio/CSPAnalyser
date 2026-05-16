@@ -231,9 +231,7 @@ describe('optimizePolicy', () => {
   });
 
   it('does not dedup self when no targetOrigin provided', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", 'https://example.com'] },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", 'https://example.com'] });
     expect(result['script-src']).toEqual(["'self'", 'https://example.com']);
   });
 
@@ -253,51 +251,43 @@ describe('optimizePolicy', () => {
 
 describe('nonce generation', () => {
   it('replaces unsafe-inline with nonce placeholder in script-src', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+    });
     expect(result['script-src']).toContain("'nonce-{{CSP_NONCE}}'");
     expect(result['script-src']).not.toContain("'unsafe-inline'");
   });
 
   it('replaces unsafe-inline with nonce placeholder in style-src', () => {
-    const result = optimizePolicy(
-      { 'style-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: true },
-    );
+    const result = optimizePolicy({ 'style-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+    });
     expect(result['style-src']).toContain("'nonce-{{CSP_NONCE}}'");
-    expect(result['style-src']).not.toContain("'unsafe-inline'");
+    expect(result['style-src'] ?? []).not.toContain("'unsafe-inline'");
   });
 
   it('adds strict-dynamic alongside nonce in script-src when enabled', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: true, useStrictDynamic: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+      useStrictDynamic: true,
+    });
     expect(result['script-src']).toContain("'nonce-{{CSP_NONCE}}'");
     expect(result['script-src']).toContain("'strict-dynamic'");
   });
 
   it('does not add strict-dynamic to style-src', () => {
-    const result = optimizePolicy(
-      { 'style-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: true, useStrictDynamic: true },
-    );
+    const result = optimizePolicy({ 'style-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+      useStrictDynamic: true,
+    });
     expect(result['style-src']).toContain("'nonce-{{CSP_NONCE}}'");
     expect(result['style-src']).not.toContain("'strict-dynamic'");
   });
 
   it('replaces unsafe-inline in default-src when nonces enabled', () => {
-    const result = optimizePolicy(
-      { 'default-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: true },
-    );
+    const result = optimizePolicy({ 'default-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+    });
     expect(result['default-src']).toContain("'nonce-{{CSP_NONCE}}'");
     expect(result['default-src']).not.toContain("'unsafe-inline'");
   });
@@ -313,11 +303,9 @@ describe('nonce generation', () => {
   });
 
   it('does not modify when useNonces is false', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: false },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: false,
+    });
     expect(result['script-src']).toContain("'unsafe-inline'");
     expect(result['script-src']).not.toContain("'nonce-{{CSP_NONCE}}'");
   });
@@ -357,15 +345,13 @@ describe('hash-based unsafe-inline removal', () => {
       { useHashes: true },
     );
     expect(result['style-src']).toContain("'sha256-xyz789'");
-    expect(result['style-src']).not.toContain("'unsafe-inline'");
+    expect(result['style-src'] ?? []).not.toContain("'unsafe-inline'");
   });
 
   it('keeps unsafe-inline when no hash sources exist', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useHashes: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useHashes: true,
+    });
     expect(result['script-src']).toContain("'unsafe-inline'");
   });
 
@@ -416,11 +402,9 @@ describe('hash-based unsafe-inline removal', () => {
   });
 
   it('does not affect directives without unsafe-inline', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'sha256-abc123'"] },
-      undefined,
-      { useHashes: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'sha256-abc123'"] }, undefined, {
+      useHashes: true,
+    });
     expect(result['script-src']).toEqual(["'self'", "'sha256-abc123'"]);
   });
 });
@@ -443,7 +427,7 @@ describe("auto-add 'unsafe-hashes' to attr directives with hashes", () => {
     expect(result['script-src-attr']).toContain("'unsafe-hashes'");
   });
 
-  it("supports sha384 and sha512", () => {
+  it('supports sha384 and sha512', () => {
     const result = optimizePolicy({
       'style-src-attr': ["'sha384-longhash'"],
       'script-src-attr': ["'sha512-longerhash'"],
@@ -481,21 +465,17 @@ describe("auto-add 'unsafe-hashes' to attr directives with hashes", () => {
 
 describe('stripUnsafeEval', () => {
   it('removes unsafe-eval from script-src', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-eval'"] },
-      undefined,
-      { stripUnsafeEval: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-eval'"] }, undefined, {
+      stripUnsafeEval: true,
+    });
     expect(result['script-src']).not.toContain("'unsafe-eval'");
     expect(result['script-src']).toContain("'self'");
   });
 
   it('removes unsafe-eval from default-src', () => {
-    const result = optimizePolicy(
-      { 'default-src': ["'self'", "'unsafe-eval'"] },
-      undefined,
-      { stripUnsafeEval: true },
-    );
+    const result = optimizePolicy({ 'default-src': ["'self'", "'unsafe-eval'"] }, undefined, {
+      stripUnsafeEval: true,
+    });
     expect(result['default-src']).not.toContain("'unsafe-eval'");
   });
 
@@ -524,11 +504,9 @@ describe('stripUnsafeEval', () => {
   });
 
   it('does not modify when stripUnsafeEval is false', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-eval'"] },
-      undefined,
-      { stripUnsafeEval: false },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-eval'"] }, undefined, {
+      stripUnsafeEval: false,
+    });
     expect(result['script-src']).toContain("'unsafe-eval'");
   });
 
@@ -543,11 +521,9 @@ describe('stripUnsafeEval', () => {
   });
 
   it('does not touch style-src directives (eval is script-only)', () => {
-    const result = optimizePolicy(
-      { 'style-src': ["'self'", "'unsafe-eval'"] },
-      undefined,
-      { stripUnsafeEval: true },
-    );
+    const result = optimizePolicy({ 'style-src': ["'self'", "'unsafe-eval'"] }, undefined, {
+      stripUnsafeEval: true,
+    });
     // unsafe-eval is only meaningful on script-src, but if captured on style-src
     // for some reason we leave it — we target script directives explicitly
     expect(result['style-src']).toContain("'unsafe-eval'");
@@ -558,30 +534,24 @@ describe('stripUnsafeEval', () => {
 
 describe('stripUnsafeInline', () => {
   it('removes unsafe-inline from script-src unconditionally', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { stripUnsafeInline: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      stripUnsafeInline: true,
+    });
     expect(result['script-src']).not.toContain("'unsafe-inline'");
     expect(result['script-src']).toContain("'self'");
   });
 
   it('removes unsafe-inline from style-src unconditionally', () => {
-    const result = optimizePolicy(
-      { 'style-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { stripUnsafeInline: true },
-    );
-    expect(result['style-src']).not.toContain("'unsafe-inline'");
+    const result = optimizePolicy({ 'style-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      stripUnsafeInline: true,
+    });
+    expect(result['style-src'] ?? []).not.toContain("'unsafe-inline'");
   });
 
   it('removes unsafe-inline from default-src', () => {
-    const result = optimizePolicy(
-      { 'default-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { stripUnsafeInline: true },
-    );
+    const result = optimizePolicy({ 'default-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      stripUnsafeInline: true,
+    });
     expect(result['default-src']).not.toContain("'unsafe-inline'");
   });
 
@@ -614,20 +584,16 @@ describe('stripUnsafeInline', () => {
   });
 
   it('does not remove unsafe-inline when option is false', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { stripUnsafeInline: false },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      stripUnsafeInline: false,
+    });
     expect(result['script-src']).toContain("'unsafe-inline'");
   });
 
   it('removes unsafe-inline even without hashes present', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { stripUnsafeInline: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      stripUnsafeInline: true,
+    });
     // Unlike useHashes which only removes when hashes exist,
     // stripUnsafeInline is unconditional
     expect(result['script-src']).not.toContain("'unsafe-inline'");
@@ -649,11 +615,9 @@ describe('stripUnsafeInline', () => {
 describe('collapseHashThreshold', () => {
   it('does not collapse hashes below the threshold', () => {
     const hashes = Array.from({ length: 5 }, (_, i) => `'sha256-hash${i}='`);
-    const result = optimizePolicy(
-      { 'style-src-attr': [...hashes, "'unsafe-hashes'"] },
-      undefined,
-      { collapseHashThreshold: 10 },
-    );
+    const result = optimizePolicy({ 'style-src-attr': [...hashes, "'unsafe-hashes'"] }, undefined, {
+      collapseHashThreshold: 10,
+    });
     // All hashes preserved
     for (const h of hashes) {
       expect(result['style-src-attr']).toContain(h);
@@ -680,11 +644,9 @@ describe('collapseHashThreshold', () => {
 
   it('collapses script-src-elem hashes above the threshold', () => {
     const hashes = Array.from({ length: 15 }, (_, i) => `'sha256-script${i}='`);
-    const result = optimizePolicy(
-      { 'script-src-elem': ["'self'", ...hashes] },
-      undefined,
-      { collapseHashThreshold: 10 },
-    );
+    const result = optimizePolicy({ 'script-src-elem': ["'self'", ...hashes] }, undefined, {
+      collapseHashThreshold: 10,
+    });
     expect(result['script-src-elem']).toContain("'unsafe-inline'");
     expect(result['script-src-elem']).toContain("'self'");
     for (const h of hashes) {
@@ -694,11 +656,9 @@ describe('collapseHashThreshold', () => {
 
   it('does not collapse when threshold is 0 (disabled)', () => {
     const hashes = Array.from({ length: 50 }, (_, i) => `'sha256-hash${i}='`);
-    const result = optimizePolicy(
-      { 'style-src-attr': hashes },
-      undefined,
-      { collapseHashThreshold: 0 },
-    );
+    const result = optimizePolicy({ 'style-src-attr': hashes }, undefined, {
+      collapseHashThreshold: 0,
+    });
     // All hashes preserved, plus 'unsafe-hashes' added by the attr-hash correctness logic
     expect(result['style-src-attr']).toHaveLength(51);
     expect(result['style-src-attr']).toContain("'unsafe-hashes'");
@@ -706,11 +666,9 @@ describe('collapseHashThreshold', () => {
 
   it('does not add duplicate unsafe-inline if already present', () => {
     const hashes = Array.from({ length: 20 }, (_, i) => `'sha256-hash${i}='`);
-    const result = optimizePolicy(
-      { 'style-src-attr': ["'unsafe-inline'", ...hashes] },
-      undefined,
-      { collapseHashThreshold: 10 },
-    );
+    const result = optimizePolicy({ 'style-src-attr': ["'unsafe-inline'", ...hashes] }, undefined, {
+      collapseHashThreshold: 10,
+    });
     const unsafeInlineCount = result['style-src-attr'].filter(
       (s) => s === "'unsafe-inline'",
     ).length;
@@ -719,11 +677,9 @@ describe('collapseHashThreshold', () => {
 
   it('does not affect directives that are not script/style', () => {
     const hashes = Array.from({ length: 20 }, (_, i) => `'sha256-hash${i}='`);
-    const result = optimizePolicy(
-      { 'img-src': ["'self'", ...hashes] },
-      undefined,
-      { collapseHashThreshold: 10 },
-    );
+    const result = optimizePolicy({ 'img-src': ["'self'", ...hashes] }, undefined, {
+      collapseHashThreshold: 10,
+    });
     // img-src is not eligible for collapse
     for (const h of hashes) {
       expect(result['img-src']).toContain(h);
@@ -731,26 +687,107 @@ describe('collapseHashThreshold', () => {
   });
 });
 
+// ── staticProfile: react-expo ─────────────────────────────────────────
+
+describe('staticProfile react-expo', () => {
+  it('collapses only style-src-attr hash explosions to unsafe-inline', () => {
+    const styleAttrHashes = Array.from({ length: 5 }, (_, i) => `'sha256-styleAttr${i}='`);
+    const scriptHashes = Array.from({ length: 5 }, (_, i) => `'sha256-script${i}='`);
+    const styleElemHashes = Array.from({ length: 5 }, (_, i) => `'sha256-styleElem${i}='`);
+
+    const result = optimizePolicy(
+      {
+        'script-src-elem': ["'self'", ...scriptHashes],
+        'style-src-elem': ["'self'", ...styleElemHashes],
+        'style-src-attr': ["'unsafe-hashes'", ...styleAttrHashes],
+      },
+      undefined,
+      { collapseHashThreshold: 2, staticProfile: 'react-expo' },
+    );
+
+    expect(result['style-src-attr']).toEqual(["'unsafe-inline'"]);
+    expect(result['script-src-elem']).not.toContain("'unsafe-inline'");
+    expect(result['style-src-elem']).not.toContain("'unsafe-inline'");
+    for (const h of scriptHashes) {
+      expect(result['script-src-elem']).toContain(h);
+    }
+    for (const h of styleElemHashes) {
+      expect(result['style-src-elem']).toContain(h);
+    }
+    expect(result['style-src'] ?? []).not.toContain("'unsafe-inline'");
+  });
+
+  it('strips unsafe-inline from scripts and broad styles while preserving the scoped style attribute fallback', () => {
+    const styleAttrHashes = Array.from({ length: 5 }, (_, i) => `'sha256-styleAttr${i}='`);
+    const result = optimizePolicy(
+      {
+        'default-src': ["'self'", "'unsafe-inline'"],
+        'script-src': ["'self'", "'unsafe-inline'"],
+        'script-src-elem': ["'self'", "'unsafe-inline'", "'sha256-scriptElem='"],
+        'script-src-attr': ["'unsafe-inline'", "'sha256-scriptAttr='"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'style-src-elem': ["'self'", "'unsafe-inline'", "'sha256-styleElem='"],
+        'style-src-attr': ["'unsafe-hashes'", "'unsafe-inline'", ...styleAttrHashes],
+      },
+      undefined,
+      { collapseHashThreshold: 2, staticProfile: 'react-expo' },
+    );
+
+    expect(result['style-src-attr']).toEqual(["'unsafe-inline'"]);
+    for (const directive of [
+      'default-src',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+      'style-src',
+      'style-src-elem',
+    ]) {
+      expect(result[directive] ?? []).not.toContain("'unsafe-inline'");
+    }
+  });
+
+  it('skips nonce replacement and does not preserve script unsafe-inline', () => {
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+      staticProfile: 'react-expo',
+    });
+
+    expect(result['script-src']).toContain("'self'");
+    expect(result['script-src']).not.toContain("'unsafe-inline'");
+    expect(result['script-src']).not.toContain("'nonce-{{CSP_NONCE}}'");
+  });
+
+  it('does not allow style-src-attr unsafe-inline unless the profile collapse actually fired', () => {
+    const result = optimizePolicy(
+      { 'style-src-attr': ["'unsafe-inline'", "'sha256-styleAttr='"] },
+      undefined,
+      { collapseHashThreshold: 10, staticProfile: 'react-expo' },
+    );
+
+    expect(result['style-src-attr']).toContain("'sha256-styleAttr='");
+    expect(result['style-src-attr']).toContain("'unsafe-hashes'");
+    expect(result['style-src-attr']).not.toContain("'unsafe-inline'");
+  });
+});
+
 // ── staticSiteMode ────────────────────────────────────────────────────
 
 describe('staticSiteMode', () => {
   it('skips nonce replacement when static site mode is enabled', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-inline'"] },
-      undefined,
-      { useNonces: true, staticSiteMode: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-inline'"] }, undefined, {
+      useNonces: true,
+      staticSiteMode: true,
+    });
     // Nonces should not be injected
     expect(result['script-src']).toContain("'unsafe-inline'");
     expect(result['script-src']).not.toContain("'nonce-{{CSP_NONCE}}'");
   });
 
   it('still applies other optimizations in static site mode', () => {
-    const result = optimizePolicy(
-      { 'script-src': ["'self'", "'unsafe-eval'"] },
-      undefined,
-      { staticSiteMode: true, stripUnsafeEval: true },
-    );
+    const result = optimizePolicy({ 'script-src': ["'self'", "'unsafe-eval'"] }, undefined, {
+      staticSiteMode: true,
+      stripUnsafeEval: true,
+    });
     expect(result['script-src']).not.toContain("'unsafe-eval'");
   });
 });

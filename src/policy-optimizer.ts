@@ -1,5 +1,6 @@
 import { FETCH_DIRECTIVES } from './utils/csp-constants.js';
 import { extractOrigin } from './utils/url-utils.js';
+import type { StaticProfile } from './types.js';
 
 /**
  * Determines whether factoring common sources into default-src is beneficial.
@@ -81,6 +82,14 @@ export interface OptimizePolicyOptions {
    * collapsing for impractical hash counts.
    */
   staticSiteMode?: boolean;
+  /** Static-framework compatibility profile for hosts that cannot emit per-request nonces. */
+  staticProfile?: StaticProfile;
+}
+
+const HASH_PREFIXES = ["'sha256-", "'sha384-", "'sha512-"];
+
+function isHashSource(source: string): boolean {
+  return HASH_PREFIXES.some((prefix) => source.startsWith(prefix));
 }
 
 /**
@@ -138,12 +147,7 @@ export function optimizePolicy(
   // the remaining eval() callsites (via violation reports) without allowing
   // them at runtime.
   if (options?.stripUnsafeEval) {
-    const evalDirectives = [
-      'default-src',
-      'script-src',
-      'script-src-elem',
-      'script-src-attr',
-    ];
+    const evalDirectives = ['default-src', 'script-src', 'script-src-elem', 'script-src-attr'];
     for (const directive of evalDirectives) {
       if (directive in result) {
         result[directive] = result[directive].filter((s) => s !== "'unsafe-eval'");
@@ -158,8 +162,12 @@ export function optimizePolicy(
   if (options?.stripUnsafeInline) {
     const inlineDirectives = [
       'default-src',
-      'script-src', 'script-src-elem', 'script-src-attr',
-      'style-src', 'style-src-elem', 'style-src-attr',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+      'style-src',
+      'style-src-elem',
+      'style-src-attr',
     ];
     for (const directive of inlineDirectives) {
       if (directive in result) {
@@ -173,15 +181,17 @@ export function optimizePolicy(
   // conformant browsers — removing it makes the policy explicit and avoids confusion.
   if (options?.useHashes) {
     const hashDirectives = [
-      'script-src', 'script-src-elem', 'script-src-attr',
-      'style-src', 'style-src-elem', 'style-src-attr',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+      'style-src',
+      'style-src-elem',
+      'style-src-attr',
     ];
     for (const directive of hashDirectives) {
       if (directive in result) {
         const sources = result[directive];
-        const hasHash = sources.some((s) =>
-          s.startsWith("'sha256-") || s.startsWith("'sha384-") || s.startsWith("'sha512-"),
-        );
+        const hasHash = sources.some(isHashSource);
         if (hasHash && sources.includes("'unsafe-inline'")) {
           result[directive] = sources.filter((s) => s !== "'unsafe-inline'");
         }
@@ -190,9 +200,7 @@ export function optimizePolicy(
     // Also check default-src
     if ('default-src' in result) {
       const sources = result['default-src'];
-      const hasHash = sources.some((s) =>
-        s.startsWith("'sha256-") || s.startsWith("'sha384-") || s.startsWith("'sha512-"),
-      );
+      const hasHash = sources.some(isHashSource);
       if (hasHash && sources.includes("'unsafe-inline'")) {
         result['default-src'] = sources.filter((s) => s !== "'unsafe-inline'");
       }
@@ -213,12 +221,7 @@ export function optimizePolicy(
   for (const directive of attrHashDirectives) {
     if (directive in result) {
       const sources = result[directive];
-      const hasHash = sources.some(
-        (s) =>
-          s.startsWith("'sha256-") ||
-          s.startsWith("'sha384-") ||
-          s.startsWith("'sha512-"),
-      );
+      const hasHash = sources.some(isHashSource);
       if (hasHash && !sources.includes("'unsafe-hashes'")) {
         result[directive] = [...sources, "'unsafe-hashes'"].sort();
       }
@@ -229,28 +232,31 @@ export function optimizePolicy(
   // This addresses the common case of CSS-in-JS frameworks generating thousands
   // of unique inline style hashes that are impractical to maintain.
   const collapseThreshold = options?.collapseHashThreshold;
+  let reactExpoStyleAttrFallback = false;
   if (collapseThreshold != null && collapseThreshold > 0) {
-    const collapseEligible = [
-      'script-src', 'script-src-elem', 'script-src-attr',
-      'style-src', 'style-src-elem', 'style-src-attr',
-    ];
+    const collapseEligible =
+      options?.staticProfile === 'react-expo'
+        ? ['style-src-attr']
+        : [
+            'script-src',
+            'script-src-elem',
+            'script-src-attr',
+            'style-src',
+            'style-src-elem',
+            'style-src-attr',
+          ];
     for (const directive of collapseEligible) {
       if (directive in result) {
         const sources = result[directive];
-        const hashCount = sources.filter(
-          (s) =>
-            s.startsWith("'sha256-") ||
-            s.startsWith("'sha384-") ||
-            s.startsWith("'sha512-"),
-        ).length;
+        const hashCount = sources.filter(isHashSource).length;
         if (hashCount > collapseThreshold) {
-          result[directive] = sources.filter(
-            (s) =>
-              !s.startsWith("'sha256-") &&
-              !s.startsWith("'sha384-") &&
-              !s.startsWith("'sha512-") &&
-              s !== "'unsafe-hashes'",
-          );
+          result[directive] =
+            options?.staticProfile === 'react-expo' && directive === 'style-src-attr'
+              ? ["'unsafe-inline'"]
+              : sources.filter((s) => !isHashSource(s) && s !== "'unsafe-hashes'");
+          if (options?.staticProfile === 'react-expo' && directive === 'style-src-attr') {
+            reactExpoStyleAttrFallback = true;
+          }
           if (!result[directive].includes("'unsafe-inline'")) {
             result[directive].push("'unsafe-inline'");
           }
@@ -262,16 +268,43 @@ export function optimizePolicy(
   // In static site mode, skip nonce replacement — nonces require a server
   // to generate a unique value per request, which is not possible for
   // static file hosts (e.g. Azure Static Web Apps, GitHub Pages, S3).
-  if (options?.staticSiteMode && options.useNonces) {
+  if ((options?.staticSiteMode || options?.staticProfile) && options.useNonces) {
     // Silently skip nonces — the caller opted for static site mode
     options = { ...options, useNonces: false };
+  }
+
+  // The React/Expo profile allows only the scoped style attribute fallback.
+  // Scripts and broad style directives remain strict because static hosts
+  // cannot replace unsafe-inline with per-request nonces.
+  if (options?.staticProfile === 'react-expo') {
+    const strictInlineDirectives = [
+      'default-src',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+      'style-src',
+      'style-src-elem',
+      'style-src-attr',
+    ];
+    for (const directive of strictInlineDirectives) {
+      if (directive === 'style-src-attr' && reactExpoStyleAttrFallback) {
+        continue;
+      }
+      if (directive in result) {
+        result[directive] = result[directive].filter((s) => s !== "'unsafe-inline'");
+      }
+    }
   }
 
   // Replace 'unsafe-inline' with nonce placeholder in script/style directives
   if (options?.useNonces) {
     const nonceDirectives = [
-      'script-src', 'script-src-elem', 'script-src-attr',
-      'style-src', 'style-src-elem', 'style-src-attr',
+      'script-src',
+      'script-src-elem',
+      'script-src-attr',
+      'style-src',
+      'style-src-elem',
+      'style-src-attr',
     ];
     for (const directive of nonceDirectives) {
       if (directive in result) {
