@@ -20,6 +20,21 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./playwright": {
+      "types": "./dist/playwright.d.ts",
+      "import": "./dist/playwright.js"
+    },
+    "./playwright/reporter": {
+      "types": "./dist/playwright-reporter.d.ts",
+      "import": "./dist/playwright-reporter.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/",
     "README.md",
