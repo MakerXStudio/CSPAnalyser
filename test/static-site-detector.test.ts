@@ -40,6 +40,7 @@ describe('detectStaticSite', () => {
     );
     const result = detectStaticSite(hashes, { 'style-src-attr': ["'unsafe-inline'"] });
     expect(result.isLikelyStatic).toBe(true);
+    expect(result.recommendedProfile).toBe('react-expo');
     expect(result.reasons.some((r) => r.includes('style-src-attr'))).toBe(true);
   });
 
@@ -116,7 +117,7 @@ describe('detectStaticSite', () => {
     const result = detectStaticSite([], {});
     expect(result.isLikelyStatic).toBe(false);
     expect(result.noncesFeasible).toBe(true);
-    expect(result.warnings).toBeUndefined;
+    expect(result.recommendedProfile).toBeUndefined();
   });
 
   it('multiple script-src-elem hashes are a static signal', () => {

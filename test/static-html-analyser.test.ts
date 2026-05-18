@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -167,9 +167,7 @@ describe('normalizeSourceExpression', () => {
   });
 
   it('leaves origin sources untouched', () => {
-    expect(normalizeSourceExpression('https://cdn.example.com')).toBe(
-      'https://cdn.example.com',
-    );
+    expect(normalizeSourceExpression('https://cdn.example.com')).toBe('https://cdn.example.com');
   });
 
   it("leaves keyword sources like 'self' untouched", () => {
@@ -332,6 +330,45 @@ describe('buildStaticPolicy', () => {
     expect(sources).toContain("'sha256-extra='");
     expect(sources).toContain("'self'");
   });
+
+  it('uses the react-expo profile to collapse only style attribute hash explosions', () => {
+    const scriptHashes = Array.from({ length: 4 }, (_, i) => sha256(`script${i}`));
+    const styleElemHashes = Array.from({ length: 4 }, (_, i) => sha256(`style${i}`));
+    const styleAttrHashes = Array.from({ length: 4 }, (_, i) => sha256(`color: ${i}`));
+    const scriptAttrHashes = Array.from({ length: 4 }, (_, i) => sha256(`handler${i}`));
+    const hashes = {
+      scriptElem: new Set<string>(scriptHashes),
+      styleElem: new Set<string>(styleElemHashes),
+      styleAttr: new Set<string>(styleAttrHashes),
+      scriptAttr: new Set<string>(scriptAttrHashes),
+    };
+
+    const directives = buildStaticPolicy(hashes, {
+      staticProfile: 'react-expo',
+      collapseHashThreshold: 2,
+      extraDirectives: new Map([
+        ['script-src', ["'unsafe-inline'"]],
+        ['style-src', ["'unsafe-inline'"]],
+        ['style-src-elem', ["'unsafe-inline'"]],
+      ]),
+    });
+
+    expect(directives['style-src-attr']).toEqual(["'unsafe-inline'"]);
+    expect(directives['script-src']).toBeUndefined();
+    expect(directives['style-src']).toBeUndefined();
+    expect(directives['script-src-elem']).not.toContain("'unsafe-inline'");
+    expect(directives['style-src-elem']).not.toContain("'unsafe-inline'");
+    expect(directives['script-src-attr']).not.toContain("'unsafe-inline'");
+    for (const h of scriptHashes) {
+      expect(directives['script-src-elem']).toContain(h);
+    }
+    for (const h of styleElemHashes) {
+      expect(directives['style-src-elem']).toContain(h);
+    }
+    for (const h of scriptAttrHashes) {
+      expect(directives['script-src-attr']).toContain(h);
+    }
+  });
 });
 
 describe('injectCspMeta', () => {
@@ -344,8 +381,7 @@ describe('injectCspMeta', () => {
   });
 
   it('removes any existing CSP meta tag before injecting (idempotent)', () => {
-    const html =
-      `<html><head><meta http-equiv="Content-Security-Policy" content="old-policy"><title>x</title></head></html>`;
+    const html = `<html><head><meta http-equiv="Content-Security-Policy" content="old-policy"><title>x</title></head></html>`;
     const out = injectCspMeta(html, "default-src 'self'");
     expect(out).not.toContain('old-policy');
     // And only one meta tag remains

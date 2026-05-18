@@ -17,18 +17,19 @@ When `session-id` is omitted, the most recent completed session for the current 
 
 ## Options
 
-| Option                 | Default       | Description                                                                                                                   |
-| ---------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `--strictness <level>` | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                                          |
-| `--format <fmt>`       | `header`      | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`. |
-| `--nonce`              | `false`       | Replace `'unsafe-inline'` with nonce placeholders.                                                                            |
-| `--strict-dynamic`     | `false`       | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`.                                                                   |
-| `--hash`               | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.            |
-| `--strip-unsafe-eval`  | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                     |
-| `--collapse-hash-threshold <n>` | disabled | Collapse hashes to `'unsafe-inline'` when a directive exceeds `<n>` hashes. Useful for CSS-in-JS apps that generate thousands of dynamic inline styles. |
-| `--static-site`        | `false`       | Target is a static site — disables nonce replacement since nonces require a server to generate per-request values.             |
-| `--report-only`        | `false`       | Generate a report-only header.                                                                                                |
-| `--project <name>`     | auto-detected | Override auto-detected project name for session lookup.                                                                       |
+| Option                          | Default       | Description                                                                                                                                                                                               |
+| ------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--strictness <level>`          | `moderate`    | Policy generation strictness: `strict`, `moderate`, or `permissive`.                                                                                                                                      |
+| `--format <fmt>`                | `header`      | Output format: `header`, `meta`, `nginx`, `apache`, `cloudflare`, `cloudflare-pages`, `azure-frontdoor`, `helmet`, or `json`.                                                                             |
+| `--nonce`                       | `false`       | Replace `'unsafe-inline'` with nonce placeholders.                                                                                                                                                        |
+| `--strict-dynamic`              | `false`       | Add `'strict-dynamic'` alongside nonces. Implies `--nonce`.                                                                                                                                               |
+| `--hash`                        | `false`       | Compute SHA-256 hashes for all inline content and remove `'unsafe-inline'` from directives that have hash sources.                                                                                        |
+| `--strip-unsafe-eval`           | `false`       | Remove `'unsafe-eval'` from the generated policy even if violations were captured for it.                                                                                                                 |
+| `--collapse-hash-threshold <n>` | disabled      | Collapse hashes to `'unsafe-inline'` when a directive exceeds `<n>` hashes. Useful for CSS-in-JS apps that generate thousands of dynamic inline styles.                                                   |
+| `--static-site`                 | `false`       | Target is a static site — disables nonce replacement since nonces require a server to generate per-request values.                                                                                        |
+| `--static-profile react-expo`   | --            | Static React/Expo profile: keeps scripts and `<style>` blocks hash-strict while allowing only excessive `style-src-attr` hashes to collapse to `'unsafe-inline'`. Static profiles skip nonce replacement. |
+| `--report-only`                 | `false`       | Generate a report-only header.                                                                                                                                                                            |
+| `--project <name>`              | auto-detected | Override auto-detected project name for session lookup.                                                                                                                                                   |
 
 ## When to use
 
@@ -79,6 +80,18 @@ csp-analyser generate abc123 --report-only
 ```bash
 csp-analyser generate abc123 --format json | jq '.directives'
 ```
+
+### Static React/Expo export
+
+```bash
+csp-analyser generate abc123 \
+  --hash \
+  --collapse-hash-threshold 10 \
+  --static-site \
+  --static-profile react-expo
+```
+
+The `react-expo` profile is for static hosts that cannot emit per-request nonces. It keeps script directives hash-based, avoids broad `style-src 'unsafe-inline'`, and only permits the scoped `style-src-attr 'unsafe-inline'` fallback when the style attribute hash count exceeds the threshold.
 
 ## When to use this command
 

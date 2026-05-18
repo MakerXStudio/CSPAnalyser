@@ -165,6 +165,16 @@ export function scoreCspPolicy(directives: Record<string, string[]>): CspScore {
     }
   }
 
+  if (directiveContains(directives, 'style-src-attr', "'unsafe-inline'")) {
+    findings.push({
+      directive: 'style-src-attr',
+      message:
+        "'unsafe-inline' in style-src-attr allows inline style attributes — acceptable only as a scoped static SPA fallback",
+      severity: 'info',
+      points: -5,
+    });
+  }
+
   // ── Info deductions (missing hardening directives) ─────────────────
 
   if (!('object-src' in directives) && !directiveContains(directives, 'default-src', "'none'")) {

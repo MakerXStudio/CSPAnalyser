@@ -28,11 +28,11 @@ csp-analyser generate --hash --collapse-hash-threshold 10
 
 This gives you the best of both worlds:
 
-| Directive | Hashes found | Result |
-|-----------|-------------|--------|
-| `script-src-elem` | 3 | Hashes kept, `'unsafe-inline'` removed |
-| `style-src-attr` | 1,963 | Hashes removed, `'unsafe-inline'` added |
-| `style-src-elem` | 5 | Hashes kept, `'unsafe-inline'` removed |
+| Directive         | Hashes found | Result                                  |
+| ----------------- | ------------ | --------------------------------------- |
+| `script-src-elem` | 3            | Hashes kept, `'unsafe-inline'` removed  |
+| `style-src-attr`  | 1,963        | Hashes removed, `'unsafe-inline'` added |
+| `style-src-elem`  | 5            | Hashes kept, `'unsafe-inline'` removed  |
 
 ### How `--hash` and `--collapse-hash-threshold` interact
 
@@ -100,14 +100,14 @@ When using the MCP server's `generate_policy` tool, CSP Analyser automatically a
 
 Detection signals include:
 
-| Signal | Indicates |
-|--------|-----------|
-| Expo/webpack/Gatsby/Vite patterns in inline content | Static site generator |
-| High `style-src-attr` hash count (50+) | CSS-in-JS on a client-side SPA |
-| `'unsafe-eval'` in script-src | Bundler runtime (common in static builds) |
-| Many `script-src-elem` hashes | Inline scripts in a static HTML shell |
-| `__NEXT_DATA__`, `__NUXT__` patterns | Server-side rendering (nonces *are* feasible) |
-| Existing `nonce="..."` attributes | Server already supports nonces |
+| Signal                                              | Indicates                                     |
+| --------------------------------------------------- | --------------------------------------------- |
+| Expo/webpack/Gatsby/Vite patterns in inline content | Static site generator                         |
+| High `style-src-attr` hash count (50+)              | CSS-in-JS on a client-side SPA                |
+| `'unsafe-eval'` in script-src                       | Bundler runtime (common in static builds)     |
+| Many `script-src-elem` hashes                       | Inline scripts in a static HTML shell         |
+| `__NEXT_DATA__`, `__NUXT__` patterns                | Server-side rendering (nonces _are_ feasible) |
+| Existing `nonce="..."` attributes                   | Server already supports nonces                |
 
 ### Recommended static site policy
 
@@ -118,8 +118,11 @@ csp-analyser generate \
   --hash \
   --collapse-hash-threshold 10 \
   --static-site \
+  --static-profile react-expo \
   --format header
 ```
+
+The `react-expo` profile narrows the hash-collapse fallback to `style-src-attr`. It skips nonce replacement because static hosts cannot emit per-request nonces, keeps scripts and `<style>` blocks hash-strict, and allows the common React Native Web / Expo case where generated style attributes produce an impractically large hash set. Use it only when the hash explosion is on `style-src-attr`; it is not a substitute for fixing inline scripts or broad style-inline allowances.
 
 This produces a practical policy like:
 
@@ -128,7 +131,7 @@ default-src 'self';
 script-src 'self' 'unsafe-eval';
 script-src-elem 'self' 'sha256-abc...' 'sha256-def...';
 style-src-attr 'unsafe-inline';
-style-src-elem 'self' 'unsafe-inline';
+style-src-elem 'self' 'sha256-ghi...';
 img-src 'self' data:;
 object-src 'none';
 ```
@@ -164,12 +167,12 @@ This helps you identify which dependencies require `eval()` or `new Function()` 
 
 Common offenders in the JavaScript ecosystem:
 
-| Library | Reason |
-|---------|--------|
-| `react-native-reanimated` | `new Function("")` feature detection for worklet compilation |
+| Library                                 | Reason                                                         |
+| --------------------------------------- | -------------------------------------------------------------- |
+| `react-native-reanimated`               | `new Function("")` feature detection for worklet compilation   |
 | `react-native-css-interop` / NativeWind | `new Function(...args, body)` to compile CSS-to-JS style rules |
-| `regenerator-runtime` | `new Function()` for async/generator polyfills |
-| CSS-in-JS libraries | Runtime style compilation |
+| `regenerator-runtime`                   | `new Function()` for async/generator polyfills                 |
+| CSS-in-JS libraries                     | Runtime style compilation                                      |
 
 ## Hash stability analysis
 
@@ -212,6 +215,7 @@ csp-analyser generate \
   --hash \
   --collapse-hash-threshold 10 \
   --static-site \
+  --static-profile react-expo \
   --format json
 
 # 3. Review the evalSources, hashStability, and staticSiteAnalysis
@@ -221,5 +225,6 @@ csp-analyser generate \
 csp-analyser export --format cloudflare-pages \
   --hash \
   --collapse-hash-threshold 10 \
-  --static-site
+  --static-site \
+  --static-profile react-expo
 ```

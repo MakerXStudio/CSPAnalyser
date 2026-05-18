@@ -57,7 +57,11 @@ describe('scoreCspPolicy — critical deductions', () => {
       'base-uri': ["'self'"],
       'form-action': ["'self'"],
     });
-    expect(score.findings.some((f) => f.directive === 'default-src' && f.message.includes('unsafe-eval'))).toBe(true);
+    expect(
+      score.findings.some(
+        (f) => f.directive === 'default-src' && f.message.includes('unsafe-eval'),
+      ),
+    ).toBe(true);
   });
 
   it('does not double-penalize unsafe-eval in default-src when script-src is present', () => {
@@ -69,7 +73,11 @@ describe('scoreCspPolicy — critical deductions', () => {
       'form-action': ["'self'"],
     });
     // Should NOT have finding for default-src unsafe-eval since script-src overrides
-    expect(score.findings.some((f) => f.directive === 'default-src' && f.message.includes('unsafe-eval'))).toBe(false);
+    expect(
+      score.findings.some(
+        (f) => f.directive === 'default-src' && f.message.includes('unsafe-eval'),
+      ),
+    ).toBe(false);
   });
 
   it('penalizes wildcard * in script-src', () => {
@@ -80,14 +88,20 @@ describe('scoreCspPolicy — critical deductions', () => {
       'base-uri': ["'self'"],
       'form-action': ["'self'"],
     });
-    expect(score.findings.some((f) => f.directive === 'script-src' && f.message.includes("Wildcard '*'"))).toBe(true);
+    expect(
+      score.findings.some(
+        (f) => f.directive === 'script-src' && f.message.includes("Wildcard '*'"),
+      ),
+    ).toBe(true);
   });
 
   it('penalizes wildcard * in default-src', () => {
     const score = scoreCspPolicy({
       'default-src': ['*'],
     });
-    expect(score.findings.some((f) => f.directive === 'default-src' && f.points === -25)).toBe(true);
+    expect(score.findings.some((f) => f.directive === 'default-src' && f.points === -25)).toBe(
+      true,
+    );
   });
 });
 
@@ -123,7 +137,9 @@ describe('scoreCspPolicy — warning deductions', () => {
       'base-uri': ["'self'"],
       'form-action': ["'self'"],
     });
-    expect(score.findings.some((f) => f.directive === 'default-src' && f.message.includes('Missing'))).toBe(true);
+    expect(
+      score.findings.some((f) => f.directive === 'default-src' && f.message.includes('Missing')),
+    ).toBe(true);
   });
 
   it('penalizes wildcard in non-critical directives', () => {
@@ -203,6 +219,20 @@ describe('scoreCspPolicy — info deductions', () => {
     const finding = score.findings.find((f) => f.directive === 'script-src-attr');
     expect(finding).toBeDefined();
     expect(finding?.points).toBe(-5);
+  });
+
+  it("penalizes 'unsafe-inline' in style-src-attr as a scoped compromise", () => {
+    const score = scoreCspPolicy({
+      'default-src': ["'self'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'style-src-attr': ["'unsafe-inline'"],
+    });
+    const finding = score.findings.find((f) => f.directive === 'style-src-attr');
+    expect(finding).toBeDefined();
+    expect(finding?.points).toBe(-5);
+    expect(finding?.severity).toBe('info');
   });
 });
 
@@ -308,7 +338,11 @@ describe('scoreCspPolicy — edge cases', () => {
       'base-uri': ["'self'"],
       'form-action': ["'self'"],
     });
-    expect(score.findings.some((f) => f.directive === 'script-src-elem' && f.message.includes('unsafe-inline'))).toBe(true);
+    expect(
+      score.findings.some(
+        (f) => f.directive === 'script-src-elem' && f.message.includes('unsafe-inline'),
+      ),
+    ).toBe(true);
   });
 });
 

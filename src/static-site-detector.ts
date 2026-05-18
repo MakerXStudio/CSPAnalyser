@@ -42,6 +42,7 @@ export function detectStaticSite(
   const reasons: string[] = [];
   let ssrScore = 0;
   let staticScore = 0;
+  let recommendedProfile: StaticSiteSignals['recommendedProfile'];
 
   // Check inline content for SSR vs static indicators
   const hashesWithContent = inlineHashes.filter((h) => h.content != null);
@@ -67,6 +68,7 @@ export function detectStaticSite(
   const styleAttrHashes = inlineHashes.filter((h) => h.directive === 'style-src-attr');
   if (styleAttrHashes.length > DYNAMIC_STYLE_HASH_THRESHOLD) {
     staticScore += 3;
+    recommendedProfile = 'react-expo';
     reasons.push(
       `${styleAttrHashes.length} style-src-attr hashes — CSS-in-JS generating dynamic inline styles (typical of static SPAs)`,
     );
@@ -107,5 +109,6 @@ export function detectStaticSite(
     confidence,
     reasons,
     noncesFeasible: !isLikelyStatic,
+    recommendedProfile,
   };
 }

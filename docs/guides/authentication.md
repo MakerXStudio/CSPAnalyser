@@ -63,7 +63,7 @@ The file must have a `.json` extension and must exist on disk. Symlinks are reso
 
 ## Cookie Injection
 
-Available through the MCP tools when you already have session cookies (e.g., extracted from browser DevTools or a login API response). Cookies are injected into a fresh browser context before navigation.
+Available through the MCP `start_session`, `crawl_url`, and `audit_policy` tools when you already have session cookies (e.g., extracted from browser DevTools or a login API response). Cookies are injected into a fresh browser context before navigation.
 
 ```json
 // MCP start_session tool - cookies parameter
@@ -83,7 +83,7 @@ Available through the MCP tools when you already have session cookies (e.g., ext
 }
 ```
 
-Only `name` and `value` are required. If `domain` is omitted, it defaults to the target URL's hostname. If `path` is omitted, it defaults to `/`.
+Only `name` and `value` are required. Optional fields are `domain`, `path`, `httpOnly`, `secure`, and `sameSite` (`Strict`, `Lax`, or `None`). If `domain` is omitted, it defaults to the target URL's hostname. If `path` is omitted, it defaults to `/`.
 
 Cookie names and values are validated against RFC 6265:
 

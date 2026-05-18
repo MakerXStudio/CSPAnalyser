@@ -107,13 +107,13 @@ If you're working on CSP Analyser itself and want to point an MCP client at your
 
 The MCP server stores its SQLite database in the platform-appropriate user-data directory, regardless of the current working directory:
 
-| Platform | Path |
-|----------|------|
-| Linux | `$XDG_CONFIG_HOME/csp-analyser/data.db` (defaults to `~/.config/csp-analyser/data.db`) |
-| macOS | `~/Library/Application Support/csp-analyser/data.db` |
-| Windows | `%LOCALAPPDATA%\csp-analyser\data.db` |
+| Platform | Path                                                                                   |
+| -------- | -------------------------------------------------------------------------------------- |
+| Linux    | `$XDG_CONFIG_HOME/csp-analyser/data.db` (defaults to `~/.config/csp-analyser/data.db`) |
+| macOS    | `~/Library/Application Support/csp-analyser/data.db`                                   |
+| Windows  | `%LOCALAPPDATA%\csp-analyser\data.db`                                                  |
 
-Sessions are tagged with the current project (detected from the nearest `package.json`), so commands like `export`, `score`, and `permissions` auto-resolve to the latest completed session for the project the agent is currently working in.
+Sessions are tagged with the current project (detected from the nearest `package.json`). MCP tools that inspect, export, score, compare, or read permissions for existing sessions require explicit `sessionId` values; agents can call `list_sessions` first to discover sessions for the current project, or pass `allProjects: true` where a tool supports cross-project access. Auto-resolving the latest completed project session is CLI-only behavior.
 
 ::: tip
 Nothing is written to your project directory. There is no longer a `.csp-analyser/` folder to add to `.gitignore` — data lives in your user-data directory instead.
@@ -129,12 +129,12 @@ The report collector HTTP server (for capturing CSP violations from the browser)
 
 ## Environment variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warn`, `error` | `info` |
-| `NO_COLOR` | Disable coloured log output | unset |
-| `XDG_CONFIG_HOME` | Override the Linux data directory root | `~/.config` |
-| `LOCALAPPDATA` | Override the Windows data directory root | Set by Windows |
+| Variable          | Description                                         | Default        |
+| ----------------- | --------------------------------------------------- | -------------- |
+| `LOG_LEVEL`       | Logging verbosity: `debug`, `info`, `warn`, `error` | `info`         |
+| `NO_COLOR`        | Disable coloured log output                         | unset          |
+| `XDG_CONFIG_HOME` | Override the Linux data directory root              | `~/.config`    |
+| `LOCALAPPDATA`    | Override the Windows data directory root            | Set by Windows |
 
 Logs are written to stderr to avoid interfering with the MCP JSON protocol on stdout.
 

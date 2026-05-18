@@ -18,6 +18,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 - `strict-dynamic` support for script loading
 - Auto-collapse excessive hashes to `unsafe-inline` (configurable threshold)
 - Static site mode: detects static hosting and disables nonce suggestions
+- Static React/Expo profile: keeps scripts hash-strict while allowing scoped `style-src-attr` fallback for hash-heavy static exports
 - Hash stability analysis: warns when hashes are build-specific and impractical
 - `unsafe-eval` source attribution: identifies which dependencies require `eval()`
 - Session diffing to compare policy changes over time
@@ -105,6 +106,7 @@ csp-analyser hash-static dist/ --inject   # hashes inline content and writes <me
 --collapse-hash-threshold <n>  Collapse hashes to 'unsafe-inline' when count
                         exceeds <n> per directive
 --static-site           Target is a static site (disables nonce suggestions)
+--static-profile <p>    Static framework profile: react-expo
 --storage-state <path>  Playwright storage state file for auth
 --cookies <json>        Raw cookies as JSON string
 --manual-login          Open browser for manual login before crawl
@@ -135,7 +137,7 @@ Add to your MCP client config (e.g. Claude Code `mcp.json`):
 }
 ```
 
-The MCP server provides tools for starting sessions, crawling URLs, generating policies, exporting in various formats, diffing sessions, and scoring policies.
+The MCP server provides 12 tools for starting sessions, crawling URLs, hashing static HTML builds, generating policies, exporting in various formats, diffing sessions, scoring policies, inspecting sessions, listing sessions, querying violations, reading Permissions-Policy headers, and auditing existing CSP deployments.
 
 ## Static sites (no browser)
 

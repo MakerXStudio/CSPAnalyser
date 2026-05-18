@@ -353,12 +353,22 @@ describe('parseCliArgs', () => {
 
   describe('--collapse-hash-threshold', () => {
     it('parses valid integer', () => {
-      const result = parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', '10']);
+      const result = parseCliArgs([
+        'crawl',
+        'https://example.com',
+        '--collapse-hash-threshold',
+        '10',
+      ]);
       expect(result.collapseHashThreshold).toBe(10);
     });
 
     it('parses zero', () => {
-      const result = parseCliArgs(['crawl', 'https://example.com', '--collapse-hash-threshold', '0']);
+      const result = parseCliArgs([
+        'crawl',
+        'https://example.com',
+        '--collapse-hash-threshold',
+        '0',
+      ]);
       expect(result.collapseHashThreshold).toBe(0);
     });
 
@@ -395,6 +405,29 @@ describe('parseCliArgs', () => {
     it('sets to true when provided', () => {
       const result = parseCliArgs(['crawl', 'https://example.com', '--static-site']);
       expect(result.staticSiteMode).toBe(true);
+    });
+  });
+
+  describe('--static-profile', () => {
+    it('parses react-expo profile', () => {
+      const result = parseCliArgs([
+        'crawl',
+        'https://example.com',
+        '--static-profile',
+        'react-expo',
+      ]);
+      expect(result.staticProfile).toBe('react-expo');
+    });
+
+    it('is undefined when not provided', () => {
+      const result = parseCliArgs(['crawl', 'https://example.com']);
+      expect(result.staticProfile).toBeUndefined();
+    });
+
+    it('throws on unknown profile', () => {
+      expect(() =>
+        parseCliArgs(['crawl', 'https://example.com', '--static-profile', 'unknown']),
+      ).toThrow('Invalid --static-profile');
     });
   });
 
@@ -575,9 +608,9 @@ describe('parseCliArgs', () => {
     });
 
     it('throws on empty directive name', () => {
-      expect(() =>
-        parseCliArgs(['hash-static', '.', '--policy-directive', '=value']),
-      ).toThrow('Empty directive name');
+      expect(() => parseCliArgs(['hash-static', '.', '--policy-directive', '=value'])).toThrow(
+        'Empty directive name',
+      );
     });
   });
 });
@@ -705,6 +738,26 @@ describe('main', () => {
     expect(mockOptimizePolicy).toHaveBeenCalled();
     expect(mockFormatPolicy).toHaveBeenCalled();
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Content-Security-Policy'));
+  });
+
+  it('passes static profile options to policy optimization', async () => {
+    await main([
+      'generate',
+      'abc-123',
+      '--static-profile',
+      'react-expo',
+      '--collapse-hash-threshold',
+      '2',
+    ]);
+
+    expect(mockOptimizePolicy).toHaveBeenCalledWith(
+      expect.anything(),
+      'https://example.com',
+      expect.objectContaining({
+        staticProfile: 'react-expo',
+        collapseHashThreshold: 2,
+      }),
+    );
   });
 
   it('runs export command and outputs formatted policy', async () => {

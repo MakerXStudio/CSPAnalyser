@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   createDatabase,
   createSession,
@@ -9,6 +11,7 @@ import {
   insertPermissionsPolicy,
 } from '../src/db/repository.js';
 import { createMcpServer, sanitizeErrorMessage, main } from '../src/mcp-server.js';
+import { resolveProjectName } from '../src/utils/file-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Mock session-manager for start_session / crawl_url / audit_policy success tests
@@ -29,8 +32,8 @@ function getRegisteredTools(srv: McpServer): Record<string, unknown> {
   return (srv as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 }
 
-function createTestSession(targetUrl = 'https://example.com') {
-  return createSession(db, { targetUrl });
+function createTestSession(targetUrl = 'https://example.com', project?: string) {
+  return createSession(db, { targetUrl, project });
 }
 
 function addTestViolation(sessionId: string, overrides: Record<string, unknown> = {}) {
@@ -44,6 +47,15 @@ function addTestViolation(sessionId: string, overrides: Record<string, unknown> 
     capturedVia: 'report_uri',
     rawReport: '{}',
     ...overrides,
+  });
+}
+
+function addInlineScriptViolation(sessionId: string) {
+  return addTestViolation(sessionId, {
+    blockedUri: "'unsafe-inline'",
+    violatedDirective: 'script-src',
+    effectiveDirective: 'script-src',
+    sample: 'window.__mcpInline = true;',
   });
 }
 
@@ -74,7 +86,8 @@ describe('tool registration', () => {
     expect('list_sessions' in tools).toBe(true);
     expect('get_permissions_policy' in tools).toBe(true);
     expect('audit_policy' in tools).toBe(true);
-    expect(Object.keys(tools).length).toBe(11);
+    expect('hash_static' in tools).toBe(true);
+    expect(Object.keys(tools).length).toBe(12);
   });
 });
 
@@ -83,12 +96,20 @@ describe('tool registration', () => {
 // Helper to call a tool handler directly
 async function callTool(name: string, args: Record<string, unknown> = {}) {
   const tools = getRegisteredTools(server);
-  const tool = tools[name] as { handler: (args: Record<string, unknown>, extra: unknown) => Promise<unknown> } | undefined;
+  const tool = tools[name] as
+    | { handler: (args: Record<string, unknown>, extra: unknown) => Promise<unknown> }
+    | undefined;
   if (!tool) throw new Error(`Tool not found: ${name}`);
-  return tool.handler(args, {}) as Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+  return tool.handler(args, {}) as Promise<{
+    content: Array<{ type: string; text: string }>;
+    isError?: boolean;
+  }>;
 }
 
-function parseToolResult(result: { content: Array<{ type: string; text: string }>; isError?: boolean }) {
+function parseToolResult(result: {
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+}) {
   const text = result.content[0].text;
   try {
     return JSON.parse(text);
@@ -96,6 +117,18 @@ function parseToolResult(result: { content: Array<{ type: string; text: string }
     return text;
   }
 }
+
+const testCookies = [
+  {
+    name: 'session_id',
+    value: 'abc123',
+    domain: 'example.com',
+    path: '/',
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+  },
+];
 
 // ── list_sessions ─────────────────────────────────────────────────────
 
@@ -247,6 +280,43 @@ describe('generate_policy', () => {
     expect(data.strictness).toBe('strict');
   });
 
+  it('uses nonce mode and strict-dynamic when useStrictDynamic is true', async () => {
+    const session = createTestSession();
+    addInlineScriptViolation(session.id);
+
+    const result = await callTool('generate_policy', {
+      sessionId: session.id,
+      useStrictDynamic: true,
+    });
+    const data = parseToolResult(result) as {
+      directives: Record<string, string[]>;
+      policyString: string;
+    };
+    const scriptSrc = data.directives['script-src'] ?? [];
+
+    expect(scriptSrc).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(scriptSrc).toContain("'strict-dynamic'");
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(data.policyString).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(data.policyString).toContain("'strict-dynamic'");
+  });
+
+  it('skips nonce placeholders when static site mode is selected', async () => {
+    const session = createTestSession();
+    addInlineScriptViolation(session.id);
+
+    const result = await callTool('generate_policy', {
+      sessionId: session.id,
+      useNonces: true,
+      staticSiteMode: true,
+    });
+    const data = parseToolResult(result) as { directives: Record<string, string[]> };
+    const scriptSrc = data.directives['script-src'] ?? [];
+
+    expect(scriptSrc).not.toContain("'nonce-{{CSP_NONCE}}'");
+    expect(scriptSrc).toContain("'unsafe-inline'");
+  });
+
   it('returns error for nonexistent session', async () => {
     const result = await callTool('generate_policy', {
       sessionId: '00000000-0000-0000-0000-000000000000',
@@ -298,6 +368,22 @@ describe('export_policy', () => {
     expect(data.policy).toContain('Content-Security-Policy-Report-Only:');
   });
 
+  it('exports nonce and strict-dynamic when requested', async () => {
+    const session = createTestSession();
+    addInlineScriptViolation(session.id);
+
+    const result = await callTool('export_policy', {
+      sessionId: session.id,
+      format: 'header',
+      useStrictDynamic: true,
+    });
+    const data = parseToolResult(result) as { policy: string };
+
+    expect(data.policy).toContain("'nonce-{{CSP_NONCE}}'");
+    expect(data.policy).toContain("'strict-dynamic'");
+    expect(data.policy).not.toContain("'unsafe-inline'");
+  });
+
   it('exports all supported formats', async () => {
     const session = createTestSession();
     addTestViolation(session.id);
@@ -317,6 +403,112 @@ describe('export_policy', () => {
       format: 'header',
     });
     expect(result.isError).toBe(true);
+  });
+});
+
+// ── hash_static ───────────────────────────────────────────────────────
+
+describe('hash_static', () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  function createTempHtml(html: string): string {
+    tmpDir = mkdtempSync(join(process.cwd(), '.tmp-mcp-hash-static-'));
+    const htmlFile = join(tmpDir, 'index.html');
+    writeFileSync(htmlFile, html);
+    return htmlFile;
+  }
+
+  it('returns a structured static policy without injecting', async () => {
+    const htmlFile = createTempHtml(
+      '<html><head></head><body><script>console.log("ok")</script><style>body{color:red}</style><div style="color: red" onclick="go()"></div></body></html>',
+    );
+
+    const result = await callTool('hash_static', {
+      paths: [htmlFile],
+      format: 'json',
+      extraDirectives: { 'connect-src': ['https://api.example.com'] },
+      policyDirectives: { 'upgrade-insecure-requests': [] },
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.format).toBe('json');
+    expect(data.injected).toBe(false);
+    expect(data.filesScanned).toBe(1);
+    expect(data.counts.scriptElemHashes).toBe(1);
+    expect(data.counts.styleElemHashes).toBe(1);
+    expect(data.counts.styleAttrHashes).toBe(1);
+    expect(data.counts.scriptAttrHashes).toBe(1);
+    expect(data.directives['connect-src']).toContain('https://api.example.com');
+    expect(data.directives['upgrade-insecure-requests']).toEqual([]);
+    expect(JSON.parse(data.policy).directives['default-src']).toContain("'self'");
+  });
+
+  it('injects a CSP meta tag into project-local HTML', async () => {
+    const htmlFile = createTempHtml(
+      '<html><head><title>x</title></head><body><script>console.log("ok")</script></body></html>',
+    );
+
+    const result = await callTool('hash_static', {
+      paths: [tmpDir],
+      inject: true,
+      policyDirectives: { 'report-uri': ['/csp-report'] },
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.format).toBe('meta');
+    expect(data.injected).toBe(true);
+    expect(data.filesScanned).toBe(1);
+    expect(data.directives['report-uri']).toEqual(['/csp-report']);
+
+    const updated = readFileSync(htmlFile, 'utf8');
+    expect(updated).toContain('<meta http-equiv="Content-Security-Policy"');
+    expect(updated).toContain('script-src-elem');
+    expect(updated).not.toContain('report-uri');
+  });
+
+  it('does not rewrite HTML when inject output formatting fails', async () => {
+    const originalHtml =
+      '<html><head><title>x</title></head><body><script>console.log("ok")</script></body></html>';
+    const htmlFile = createTempHtml(originalHtml);
+
+    const result = await callTool('hash_static', {
+      paths: [tmpDir],
+      inject: true,
+      isReportOnly: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Report-Only is not supported in <meta> tags');
+    expect(readFileSync(htmlFile, 'utf8')).toBe(originalHtml);
+  });
+
+  it('rejects unknown policyDirectives', async () => {
+    const htmlFile = createTempHtml('<html><head></head><body></body></html>');
+
+    const result = await callTool('hash_static', {
+      paths: [htmlFile],
+      policyDirectives: { 'connect-src': ['https://api.example.com'] },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Unknown document directive "connect-src"');
+  });
+
+  it('rejects paths outside the current working directory', async () => {
+    const result = await callTool('hash_static', {
+      paths: ['/tmp'],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('outside the current working directory');
   });
 });
 
@@ -364,13 +556,18 @@ describe('start_session', () => {
       depth: 2,
       maxPages: 50,
       storageStatePath: '/tmp/state.json',
+      cookies: testCookies,
     });
 
-    expect(mockRunSession).toHaveBeenCalledWith(db, expect.objectContaining({
-      targetUrl: 'https://example.com',
-      crawlConfig: { depth: 2, maxPages: 50, settlementDelay: undefined },
-      storageStatePath: '/tmp/state.json',
-    }));
+    expect(mockRunSession).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        targetUrl: 'https://example.com',
+        crawlConfig: { depth: 2, maxPages: 50, settlementDelay: undefined },
+        storageStatePath: '/tmp/state.json',
+        cookies: testCookies,
+      }),
+    );
   });
 
   it('returns error when runSession throws', async () => {
@@ -438,12 +635,17 @@ describe('crawl_url', () => {
 
     await callTool('crawl_url', {
       url: 'https://example.com/page',
+      cookies: testCookies,
     });
 
-    expect(mockRunSession).toHaveBeenCalledWith(db, expect.objectContaining({
-      targetUrl: 'https://example.com/page',
-      crawlConfig: { depth: 0, maxPages: 1 },
-    }));
+    expect(mockRunSession).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        targetUrl: 'https://example.com/page',
+        crawlConfig: { depth: 0, maxPages: 1 },
+        cookies: testCookies,
+      }),
+    );
   });
 
   it('returns error when runSession throws', async () => {
@@ -501,6 +703,31 @@ describe('score_policy', () => {
     expect(result.isError).toBeUndefined();
     const data = parseToolResult(result);
     expect(data.overall).toBeTypeOf('number');
+  });
+
+  it('scores nonce and strict-dynamic strengths when requested', async () => {
+    const session = createTestSession();
+    addInlineScriptViolation(session.id);
+
+    const result = await callTool('score_policy', {
+      sessionId: session.id,
+      useStrictDynamic: true,
+    });
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result) as {
+      findings: Array<{ points: number; message: string }>;
+      formatted: string;
+    };
+
+    expect(
+      data.findings.some((finding) => finding.points > 0 && finding.message.includes('nonce')),
+    ).toBe(true);
+    expect(
+      data.findings.some(
+        (finding) => finding.points > 0 && finding.message.includes('strict-dynamic'),
+      ),
+    ).toBe(true);
+    expect(data.formatted).toContain('strict-dynamic');
   });
 
   it('returns error when DB query fails', async () => {
@@ -569,7 +796,9 @@ describe('compare_sessions', () => {
       sessionIdB: sessionB.id,
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Failed to compare sessions');
+    expect(result.content[0].text).toContain(
+      'Session not found: 00000000-0000-0000-0000-000000000000',
+    );
   });
 
   it('returns error when second session not found', async () => {
@@ -580,7 +809,62 @@ describe('compare_sessions', () => {
       sessionIdB: '00000000-0000-0000-0000-000000000000',
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Failed to compare sessions');
+    expect(result.content[0].text).toContain(
+      'Session not found: 00000000-0000-0000-0000-000000000000',
+    );
+  });
+
+  it('rejects cross-project comparison by default', async () => {
+    const sessionA = createTestSession('https://example.com', resolveProjectName());
+    addTestViolation(sessionA.id);
+    const sessionB = createTestSession('https://example.com', 'other-project');
+    addTestViolation(sessionB.id);
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: sessionB.id,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(`Session not found: ${sessionB.id}`);
+  });
+
+  it('allows cross-project comparison when allProjects is true', async () => {
+    const sessionA = createTestSession('https://example.com', resolveProjectName());
+    addTestViolation(sessionA.id);
+    const sessionB = createTestSession('https://example.com', 'other-project');
+    addTestViolation(sessionB.id, {
+      blockedUri: 'https://other.com/style.css',
+      effectiveDirective: 'style-src',
+      violatedDirective: 'style-src',
+    });
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: sessionB.id,
+      allProjects: true,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.sessionA).toBe(sessionA.id);
+    expect(data.sessionB).toBe(sessionB.id);
+  });
+
+  it('allows legacy unscoped sessions by default', async () => {
+    const sessionA = createTestSession('https://example.com', resolveProjectName());
+    addTestViolation(sessionA.id);
+    const legacySession = createTestSession('https://example.com');
+    addTestViolation(legacySession.id);
+
+    const result = await callTool('compare_sessions', {
+      sessionIdA: sessionA.id,
+      sessionIdB: legacySession.id,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const data = parseToolResult(result);
+    expect(data.sessionB).toBe(legacySession.id);
   });
 
   it('compares sessions with no violations', async () => {
@@ -875,10 +1159,32 @@ describe('audit_policy', () => {
 
     expect(result.isError).toBeUndefined();
     const data = parseToolResult(result);
-    expect(data.errors).toEqual([
-      { url: 'https://example.com/', error: 'Navigation timeout' },
-    ]);
+    expect(data.errors).toEqual([{ url: 'https://example.com/', error: 'Navigation timeout' }]);
     expect(data.pagesVisited).toBe(0);
+  });
+
+  it('passes cookies to runAuditSession', async () => {
+    const session = createTestSession();
+
+    mockRunAuditSession.mockResolvedValue({
+      session: { ...getSession(db, session.id)!, status: 'complete' },
+      pagesVisited: 1,
+      violationsFound: 0,
+      errors: [],
+    });
+
+    await callTool('audit_policy', {
+      targetUrl: 'https://example.com',
+      cookies: testCookies,
+    });
+
+    expect(mockRunAuditSession).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        targetUrl: 'https://example.com',
+        cookies: testCookies,
+      }),
+    );
   });
 });
 
@@ -886,7 +1192,9 @@ describe('audit_policy', () => {
 
 describe('server metadata', () => {
   it('has correct server info', () => {
-    const serverInstance = (server as unknown as { server: { _serverInfo: { name: string; version: string } } }).server;
+    const serverInstance = (
+      server as unknown as { server: { _serverInfo: { name: string; version: string } } }
+    ).server;
     expect(serverInstance._serverInfo.name).toBe('csp-analyser');
     // Version is read from package.json at runtime — just verify it's a valid semver-like string
     expect(serverInstance._serverInfo.version).toMatch(/^\d+\.\d+\.\d+/);

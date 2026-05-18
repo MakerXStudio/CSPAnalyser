@@ -239,11 +239,14 @@ export interface HashStabilityResult {
 
 export type StaticSiteConfidence = 'high' | 'medium' | 'low';
 
+export type StaticProfile = 'react-expo';
+
 export interface StaticSiteSignals {
   isLikelyStatic: boolean;
   confidence: StaticSiteConfidence;
   reasons: string[];
   noncesFeasible: boolean;
+  recommendedProfile?: StaticProfile;
 }
 
 // ── Existing CSP header types ─────────────────────────────────────────
