@@ -27,6 +27,7 @@ The generated policy is controlled by two main levers: strictness level and post
 Once you have a policy you're happy with, export it in the format your infrastructure expects and optionally automate future runs.
 
 - **[Export Formats](/guides/export-formats)** — All output formats with examples for nginx, Apache, Cloudflare, Azure Front Door, Helmet, and more
+- **[Playwright Test Integration](/guides/playwright-integration)** — Instrument existing Playwright e2e tests and aggregate per-worker CSP artifacts
 - **[CI/CD Integration](/guides/ci-integration)** — Run CSP Analyser in GitHub Actions and other CI pipelines to catch regressions automatically
 
 ## Advanced scenarios

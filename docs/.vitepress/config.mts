@@ -111,6 +111,7 @@ export default defineConfig({
             { text: 'Export Formats', link: '/guides/export-formats' },
             { text: 'Strictness Levels', link: '/guides/strictness' },
             { text: 'Understanding Scores', link: '/guides/scoring' },
+            { text: 'Playwright Test Integration', link: '/guides/playwright-integration' },
             { text: 'CI/CD Integration', link: '/guides/ci-integration' },
             { text: 'Advanced Scenarios', link: '/guides/advanced-scenarios' },
           ],
