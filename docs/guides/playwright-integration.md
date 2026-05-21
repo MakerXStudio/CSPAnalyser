@@ -13,8 +13,8 @@ Create a shared test fixture and import it from your specs:
 
 ```ts
 // tests/csp-test.ts
-import { test as base } from '@playwright/test'
-import { createCspTest } from '@makerx/csp-analyser/playwright'
+import { test as base } from '@playwright/test';
+import { createCspTest } from '@makerx/csp-analyser/playwright';
 
 export const test = createCspTest(base, {
   targetUrl: 'http://localhost:3000',
@@ -22,20 +22,20 @@ export const test = createCspTest(base, {
   format: 'json',
   strictness: 'moderate',
   includeHashes: true,
-})
+});
 
-export { expect } from '@playwright/test'
+export { expect } from '@playwright/test';
 ```
 
 Then update specs to import the shared fixture:
 
 ```ts
-import { test, expect } from './csp-test'
+import { test, expect } from './csp-test';
 
 test('checkout flow', async ({ page }) => {
-  await page.goto('/checkout')
-  await expect(page.getByRole('heading', { name: 'Checkout' })).toBeVisible()
-})
+  await page.goto('/checkout');
+  await expect(page.getByRole('heading', { name: 'Checkout' })).toBeVisible();
+});
 ```
 
 The `context` and `page` fixtures attach CSP routing, violation listeners, and inline hash observers before the test body runs, so `page.goto()`, popups, and newly-created pages are instrumented. The worker fixture finalizes one capture per worker and writes per-worker JSON artifacts that are safe for parallel CI runs. Set `targetUrl` or Playwright `use.baseURL` so CSP injection is origin-scoped to your app; if neither is available, CSP Analyser cannot safely infer a localhost port and will not restrict injection by origin.
@@ -45,25 +45,25 @@ The `context` and `page` fixtures attach CSP routing, violation listeners, and i
 If you do not use Playwright Test fixtures, attach the capture before navigation:
 
 ```ts
-import { chromium } from 'playwright'
-import { createPlaywrightCspCapture } from '@makerx/csp-analyser/playwright'
+import { chromium } from 'playwright';
+import { createPlaywrightCspCapture } from '@makerx/csp-analyser/playwright';
 
-const browser = await chromium.launch()
-const context = await browser.newContext()
+const browser = await chromium.launch();
+const context = await browser.newContext();
 const capture = createPlaywrightCspCapture({
   targetUrl: 'http://localhost:3000',
   outputFile: 'test-results/csp-analyser/manual.json',
-})
+});
 
-await capture.attachToContext(context)
-const page = await context.newPage()
-await page.goto('http://localhost:3000')
+await capture.attachToContext(context);
+const page = await context.newPage();
+await page.goto('http://localhost:3000');
 
-const result = await capture.finalize()
-console.log(result.policy)
+const result = await capture.finalize();
+console.log(result.policy);
 
-await capture.close()
-await browser.close()
+await capture.close();
+await browser.close();
 ```
 
 For an existing page, call `await capture.attachToPage(page)` before the next navigation.
@@ -74,24 +74,41 @@ The reporter only merges fixture artifacts. It cannot instrument pages by itself
 
 ```ts
 // playwright.config.ts
-import { defineConfig } from '@playwright/test'
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   reporter: [
     ['list'],
-    ['@makerx/csp-analyser/playwright/reporter', {
-      artifactsDir: 'test-results/csp-analyser',
-      outputDir: 'test-results/csp-analyser',
-      useHashes: true,
-    }],
+    [
+      '@makerx/csp-analyser/playwright/reporter',
+      {
+        artifactsDir: 'test-results/csp-analyser',
+        outputDir: 'test-results/csp-analyser',
+        useHashes: true,
+      },
+    ],
   ],
-})
+});
 ```
 
 It writes:
 
 - `csp-policy.json` — merged, re-optimized directive map and policy string
 - `csp-header.txt` — deployment-ready `Content-Security-Policy` header
+
+## Complete Vite + React example
+
+For a full fixture, reporter, and baseline comparison setup, see the [Vite React CSP scenario sample](https://github.com/MakerXStudio/CSPAnalyser/tree/main/examples/vite-react-client). The sample runs a deterministic Vite preview server, captures same-origin and cross-origin CSP scenarios through Playwright, and compares the generated policy with a checked-in baseline:
+
+```bash
+npm run example:vite-react:csp
+```
+
+When a policy change is intentional, update the sample baseline with:
+
+```bash
+npm run example:vite-react:csp:update
+```
 
 ## Options
 

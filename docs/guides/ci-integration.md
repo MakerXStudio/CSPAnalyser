@@ -113,18 +113,21 @@ If your CI already runs Playwright Test, instrument those journeys instead of la
 
 ```ts
 // playwright.config.ts
-import { defineConfig } from '@playwright/test'
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   reporter: [
     ['list'],
-    ['@makerx/csp-analyser/playwright/reporter', {
-      artifactsDir: 'test-results/csp-analyser',
-      outputDir: 'test-results/csp-analyser',
-      useHashes: true,
-    }],
+    [
+      '@makerx/csp-analyser/playwright/reporter',
+      {
+        artifactsDir: 'test-results/csp-analyser',
+        outputDir: 'test-results/csp-analyser',
+        useHashes: true,
+      },
+    ],
   ],
-})
+});
 ```
 
 Upload the deterministic aggregate outputs:
@@ -143,6 +146,19 @@ Upload the deterministic aggregate outputs:
 ```
 
 The reporter is aggregation-only. It merges JSON artifacts emitted by the fixture and cannot instrument pages without `createCspTest()` or `createPlaywrightCspCapture()`.
+
+For a concrete Playwright CI workflow, use the [Vite React CSP scenario sample](https://github.com/MakerXStudio/CSPAnalyser/tree/main/examples/vite-react-client). It runs the app through Playwright, aggregates CSP artifacts, and compares the generated policy with a checked-in baseline:
+
+```yaml
+- name: Run Vite React CSP sample
+  run: npm run example:vite-react:csp
+```
+
+When a policy change is intentional, refresh the baseline locally and commit the updated JSON:
+
+```bash
+npm run example:vite-react:csp:update
+```
 
 ## Regression detection with diff
 
