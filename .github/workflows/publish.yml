@@ -15,7 +15,7 @@ jobs:
     with:
       compile-script: npm run typecheck
       pre-test-script: npx playwright install --with-deps chromium
-      test-script: npm run test:coverage
+      test-script: npm run test:coverage && npm run example:vite-react:csp
       audit-script: npm run audit
 
   publish:
