@@ -1,0 +1,7 @@
+{
+  "name": "CSP Scenario Sample",
+  "short_name": "CSP Sample",
+  "start_url": "/",
+  "display": "standalone",
+  "icons": []
+}

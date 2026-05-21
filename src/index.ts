@@ -126,3 +126,18 @@ export type {
 
 // ── MCP Server (Phase 5) ──────────────────────────────────────────────
 export { createMcpServer } from './mcp-server.js';
+
+// ── Playwright Test Integration ───────────────────────────────────────
+export { createPlaywrightCspCapture, createCspTest } from './playwright.js';
+export type {
+  PlaywrightCspCaptureOptions,
+  PlaywrightCspFinalizeResult,
+  PlaywrightCspCapture,
+  CspTestFixtures,
+  CspWorkerFixtures,
+} from './playwright.js';
+export { mergePlaywrightCspArtifacts, default as PlaywrightCspReporter } from './playwright-reporter.js';
+export type {
+  PlaywrightCspReporterOptions,
+  PlaywrightCspReporterResult,
+} from './playwright-reporter.js';

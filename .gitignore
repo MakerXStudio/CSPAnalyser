@@ -160,3 +160,7 @@ auth.json
 
 # Security audit logs
 .security/
+
+# Example app generated outputs
+examples/vite-react-client/test-results/
+examples/vite-react-client/playwright-report/

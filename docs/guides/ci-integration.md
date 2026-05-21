@@ -107,6 +107,59 @@ cat csp-report.json | jq '.directives["script-src"]'
 cat csp-report.json | jq -r '.policyString'
 ```
 
+## Existing Playwright e2e tests
+
+If your CI already runs Playwright Test, instrument those journeys instead of launching a separate crawl. Use the fixture from the [Playwright integration guide](/guides/playwright-integration), then add the aggregation reporter:
+
+```ts
+// playwright.config.ts
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  reporter: [
+    ['list'],
+    [
+      '@makerx/csp-analyser/playwright/reporter',
+      {
+        artifactsDir: 'test-results/csp-analyser',
+        outputDir: 'test-results/csp-analyser',
+        useHashes: true,
+      },
+    ],
+  ],
+});
+```
+
+Upload the deterministic aggregate outputs:
+
+```yaml
+- name: Run e2e tests with CSP capture
+  run: npx playwright test
+
+- name: Upload CSP artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: playwright-csp
+    path: |
+      test-results/csp-analyser/csp-policy.json
+      test-results/csp-analyser/csp-header.txt
+```
+
+The reporter is aggregation-only. It merges JSON artifacts emitted by the fixture and cannot instrument pages without `createCspTest()` or `createPlaywrightCspCapture()`.
+
+For a concrete Playwright CI workflow, use the [Vite React CSP scenario sample](https://github.com/MakerXStudio/CSPAnalyser/tree/main/examples/vite-react-client). It runs the app through Playwright, aggregates CSP artifacts, and compares the generated policy with a checked-in baseline:
+
+```yaml
+- name: Run Vite React CSP sample
+  run: npm run example:vite-react:csp
+```
+
+When a policy change is intentional, refresh the baseline locally and commit the updated JSON:
+
+```bash
+npm run example:vite-react:csp:update
+```
+
 ## Regression detection with diff
 
 Compare the current analysis against a previous session to detect policy changes:

@@ -7,6 +7,7 @@ Available as a **CLI** and as an **MCP server** for AI coding agents (Claude Cod
 ## Features
 
 - Headless crawling with configurable depth and page limits
+- Playwright Test integration for instrumenting existing e2e journeys and aggregating per-worker CSP artifacts
 - Interactive mode for manual browsing with live violation capture
 - Authentication support (storage state with sessionStorage capture, manual login, raw cookies)
 - Dual violation capture (DOM events + HTTP reporting endpoint)
@@ -170,6 +171,22 @@ Or export a crawl as JSON and merge the whole policy at once:
 ```bash
 csp-analyser export --format json > crawl-policy.json
 csp-analyser hash-static dist/ --inject --merge-json crawl-policy.json
+```
+
+## Playwright and CI examples
+
+If you already have Playwright e2e tests, instrument those journeys instead of running a separate crawl. See the [Playwright Test Integration](https://cspanalyser.com/guides/playwright-integration) guide for the fixture and aggregation reporter, and the [CI Integration](https://cspanalyser.com/guides/ci-integration) guide for GitHub Actions examples.
+
+A deterministic Vite + React sample app lives in [`examples/vite-react-client`](./examples/vite-react-client/README.md). It exercises common directives, captures policy artifacts through Playwright, and compares them against a checked-in baseline:
+
+```bash
+npm run example:vite-react:csp
+```
+
+When the expected policy intentionally changes, refresh the sample baseline with:
+
+```bash
+npm run example:vite-react:csp:update
 ```
 
 ## Export formats
