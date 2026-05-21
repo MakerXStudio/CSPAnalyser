@@ -93,7 +93,10 @@ class FakeContext {
   }
 }
 
-function makeDeps(order: string[], targetOrigins: Array<string | undefined> = []): Partial<PlaywrightCspCaptureDeps> {
+function makeDeps(
+  order: string[],
+  targetOrigins: Array<string | undefined> = [],
+): Partial<PlaywrightCspCaptureDeps> {
   return {
     setupCspInjection: vi.fn(async (_page, _port, _token, _permissions, targetOrigin) => {
       order.push('route');
@@ -173,7 +176,11 @@ function delayedDeps(order: string[]): DelayedDeps {
 }
 
 async function runFixture<T>(
-  fixture: (args: T, use: (value: PlaywrightCspCapture) => Promise<void>, workerInfo: WorkerInfo) => Promise<void>,
+  fixture: (
+    args: T,
+    use: (value: PlaywrightCspCapture) => Promise<void>,
+    workerInfo: WorkerInfo,
+  ) => Promise<void>,
   args: Partial<T>,
   workerInfo: WorkerInfo,
 ): Promise<PlaywrightCspCapture> {
@@ -344,6 +351,23 @@ describe('createPlaywrightCspCapture', () => {
     expect(order.filter((entry) => entry === 'unroute')).toHaveLength(1);
   });
 
+  it('tolerates route cleanup after Playwright has closed the page', async () => {
+    const db = createDatabase(':memory:');
+    const page = new FakePage('https://example.com/closed') as unknown as Page;
+    const capture = createPlaywrightCspCapture(
+      { targetUrl: 'https://example.com', db },
+      {
+        ...makeDeps([]),
+        setupCspInjection: vi.fn(async () => async () => {
+          throw new Error('page.unroute: Target page, context or browser has been closed');
+        }),
+      },
+    );
+
+    await capture.attachToPage(page);
+    await expect(capture.close()).resolves.toBeUndefined();
+  });
+
   it('attaches each context only once', async () => {
     const order: string[] = [];
     const page = new FakePage('https://example.com/context') as unknown as Page;
@@ -403,7 +427,9 @@ describe('createPlaywrightCspCapture', () => {
     contextObject.emit('page', page);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    await expect(capture.finalize()).rejects.toThrow('One or more Playwright page attachments failed');
+    await expect(capture.finalize()).rejects.toThrow(
+      'One or more Playwright page attachments failed',
+    );
     await capture.close();
   });
 

@@ -133,7 +133,8 @@ function resolveDeps(deps?: Partial<PlaywrightCspCaptureDeps>): PlaywrightCspCap
     generatePolicy: deps?.generatePolicy ?? generatePolicy,
     optimizePolicy: deps?.optimizePolicy ?? optimizePolicy,
     formatPolicy: deps?.formatPolicy ?? formatPolicy,
-    parsePermissionsPolicyHeaders: deps?.parsePermissionsPolicyHeaders ?? parsePermissionsPolicyHeaders,
+    parsePermissionsPolicyHeaders:
+      deps?.parsePermissionsPolicyHeaders ?? parsePermissionsPolicyHeaders,
     extractOrigin: deps?.extractOrigin ?? extractOrigin,
   };
 }
@@ -148,6 +149,14 @@ function safeTargetOrigin(targetUrl: string, deps: PlaywrightCspCaptureDeps): st
 
 function isNavigableUrl(url: string): boolean {
   return url !== '' && !url.startsWith('about:') && !url.startsWith('data:');
+}
+
+function isClosedPageCleanupError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('Target page, context or browser has been closed') ||
+    message.includes('Target closed')
+  );
 }
 
 function artifactPathFor(options: RequiredArtifactOptions): string {
@@ -362,7 +371,9 @@ export function createPlaywrightCspCapture(
         const attachment = attachToPage(page)
           .catch((error: unknown) => {
             asyncAttachmentErrors.push(
-              error instanceof Error ? error : new Error(`Failed to attach CSP capture to page: ${String(error)}`),
+              error instanceof Error
+                ? error
+                : new Error(`Failed to attach CSP capture to page: ${String(error)}`),
             );
           })
           .finally(() => {
@@ -417,7 +428,10 @@ export function createPlaywrightCspCapture(
     await drainContextAttachments();
     await drainContextPageAttachments();
     if (asyncAttachmentErrors.length > 0) {
-      throw new AggregateError(asyncAttachmentErrors, 'One or more Playwright page attachments failed');
+      throw new AggregateError(
+        asyncAttachmentErrors,
+        'One or more Playwright page attachments failed',
+      );
     }
     await drainLoadHashExtractions();
     if (loadHashErrors.length > 0) {
@@ -425,7 +439,10 @@ export function createPlaywrightCspCapture(
     }
     deps.updateSession(db, session.id, { status: 'analyzing' });
     for (const state of pageStates) {
-      if (state.currentPageId) {
+      if (
+        state.currentPageId &&
+        (typeof state.page.isClosed !== 'function' || !state.page.isClosed())
+      ) {
         await deps.extractInlineHashes(state.page, db, session.id, state.currentPageId);
       }
     }
@@ -467,7 +484,9 @@ export function createPlaywrightCspCapture(
     if (!artifactOptions) return null;
     const path = artifactPathFor(artifactOptions);
     mkdirSync(dirname(path), { recursive: true });
-    const content = result?.policy ?? deps.formatPolicy(result?.directives ?? {}, format, options.reportOnly ?? false);
+    const content =
+      result?.policy ??
+      deps.formatPolicy(result?.directives ?? {}, format, options.reportOnly ?? false);
     writeFileSync(path, `${content}\n`, 'utf8');
     return path;
   }
@@ -488,7 +507,13 @@ export function createPlaywrightCspCapture(
       state.page.off('framenavigated', state.onFrameNavigated);
       state.page.off('load', state.onLoad);
       if (state.cleanupRoute) {
-        await state.cleanupRoute();
+        try {
+          await state.cleanupRoute();
+        } catch (error: unknown) {
+          if (!isClosedPageCleanupError(error)) {
+            throw error;
+          }
+        }
       }
     }
     pageStates.clear();
@@ -501,7 +526,15 @@ export function createPlaywrightCspCapture(
     }
   }
 
-  return { sessionId: session.id, db, attachToPage, attachToContext, finalize, writeArtifacts, close };
+  return {
+    sessionId: session.id,
+    db,
+    attachToPage,
+    attachToContext,
+    finalize,
+    writeArtifacts,
+    close,
+  };
 }
 
 export interface CspTestFixtures {
@@ -525,10 +558,11 @@ export function createCspFixtureDefinitions(
 ): CspFixtureDefinitions {
   return {
     _cspWorkerCapture: [
-      async (_args, use, workerInfo) => {
+      async ({ browserName: _browserName }, use, workerInfo) => {
         const projectName = options.project ?? workerInfo.project.name;
         const artifactName =
-          options.artifactName ?? `csp-policy-${projectName.replace(/[^a-z0-9_-]+/gi, '-')}-${workerInfo.workerIndex}`;
+          options.artifactName ??
+          `csp-policy-${projectName.replace(/[^a-z0-9_-]+/gi, '-')}-${workerInfo.workerIndex}`;
         const outputDir = options.outputDir ?? join(workerInfo.project.outputDir, 'csp-analyser');
         const capture = createCapture({
           ...options,
@@ -561,7 +595,10 @@ export function createCspFixtureDefinitions(
 }
 
 export function createCspTest(
-  base: TestType<PlaywrightTestArgs & PlaywrightTestOptions, PlaywrightWorkerArgs & PlaywrightWorkerOptions>,
+  base: TestType<
+    PlaywrightTestArgs & PlaywrightTestOptions,
+    PlaywrightWorkerArgs & PlaywrightWorkerOptions
+  >,
   options: PlaywrightCspCaptureOptions = {},
 ): TestType<
   PlaywrightTestArgs & PlaywrightTestOptions & CspTestFixtures,
