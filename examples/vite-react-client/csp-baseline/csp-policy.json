@@ -1,0 +1,30 @@
+{
+  "directives": {
+    "base-uri": ["'self'"],
+    "connect-src": ["http://localhost:4174"],
+    "default-src": ["'self'"],
+    "form-action": ["'self'"],
+    "frame-src": ["http://localhost:4174"],
+    "img-src": ["data:"],
+    "object-src": ["'none'"],
+    "script-src-attr": ["'sha256-7joyHjeutvU8/PIiwJNyN5hzpj65HEIG48FY2R+wuXI='", "'unsafe-hashes'"],
+    "script-src-elem": [
+      "'self'",
+      "'sha256-3a6gLY59S7lJffxbtpcUO8ERmp9Rsa42FhY8Oe73Nrc='",
+      "'sha256-jRcNNIH8lyKs+pqrNUbEfNfQlEcDZu5ffog2/D7NwPU='"
+    ],
+    "style-src-attr": [
+      "'sha256-56neCMZP7hycp3jt4zdQFM408pD2PyRTlT2+Z8YWuFs='",
+      "'sha256-HDEzLqlV3+nxSebY7LAPswWdJyA8uf5VwkbUR3UkeRU='",
+      "'sha256-RVHlMaSjQgpt5cyT7jzIIf+Expl/97DvnJcnfo1ZUOw='",
+      "'sha256-Wq8POpqLF89yfmQYIp63oCLvm7MuDiKYPIMeupi9tZ0='",
+      "'unsafe-hashes'"
+    ],
+    "style-src-elem": [
+      "'self'",
+      "'sha256-ZWMdHo3Zj2ZFFkYTgnWjZ9FmJX06r0EjY+Jd/2wnXPQ='",
+      "'sha256-dpfX2EHqwpU2exjgD7IWjlEIDJuSlBJbrKaLvgDXr/k='"
+    ]
+  },
+  "isReportOnly": false
+}

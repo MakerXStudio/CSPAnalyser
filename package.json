@@ -23,15 +23,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./playwright": {
       "types": "./dist/playwright.d.ts",
-      "import": "./dist/playwright.js"
+      "import": "./dist/playwright.js",
+      "default": "./dist/playwright.js"
     },
     "./playwright/reporter": {
       "types": "./dist/playwright-reporter.d.ts",
-      "import": "./dist/playwright-reporter.js"
+      "import": "./dist/playwright-reporter.js",
+      "default": "./dist/playwright-reporter.js"
     },
     "./package.json": "./package.json"
   },
@@ -61,7 +64,14 @@
     "docs:csp": "node dist/cli.js hash-static docs/.vitepress/dist --inject --extra style-src-elem='sha256-skqujXORqzxt1aE0NNXxujEanPTX6raoqSscTV/Ww/Y='",
     "predocs:build": "npm run build",
     "docs:build": "vitepress build docs && npm run docs:csp",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "example:vite-react:dev": "vite --config examples/vite-react-client/vite.config.ts",
+    "example:vite-react:build": "vite build --config examples/vite-react-client/vite.config.ts",
+    "example:vite-react:preview": "vite preview --config examples/vite-react-client/vite.config.ts",
+    "example:vite-react:e2e": "npm run build && npm run example:vite-react:build && npm run example:vite-react:clean && playwright test -c examples/vite-react-client/playwright.config.ts",
+    "example:vite-react:csp": "npm run example:vite-react:e2e && node examples/vite-react-client/scripts/compare-csp-policy.mjs",
+    "example:vite-react:csp:update": "npm run example:vite-react:e2e && node examples/vite-react-client/scripts/compare-csp-policy.mjs --update",
+    "example:vite-react:clean": "node -e \"const { rmSync } = require('node:fs'); rmSync('examples/vite-react-client/test-results', { recursive: true, force: true });\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
@@ -73,15 +83,21 @@
     "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "latest",
     "@types/node": "latest",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.58.1",
     "@typescript-eslint/parser": "^8.58.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.4",
     "better-npm-audit": "^3.11.0",
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "typescript": "latest",
     "typescript-eslint": "^8.58.1",
+    "vite": "^6.4.2",
     "vitepress": "^2.0.0-alpha.17",
     "vitest": "latest"
   }
