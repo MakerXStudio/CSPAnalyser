@@ -476,19 +476,16 @@ export async function runInteractiveSession(
     const attachSessionStorageCapture = async (page: Page) => {
       // Expose bridge for in-page reporters to push sessionStorage to Node
       try {
-        await page.exposeFunction(
-          '__cspReportSessionStorage',
-          (origin: unknown, json: unknown) => {
-            try {
-              const entries = JSON.parse(String(json)) as Array<{ name: string; value: string }>;
-              if (entries.length > 0) {
-                sessionStorageSnapshots.set(String(origin), entries);
-              }
-            } catch {
-              // Malformed data — ignore
+        await page.exposeFunction('__cspReportSessionStorage', (origin: unknown, json: unknown) => {
+          try {
+            const entries = JSON.parse(String(json)) as Array<{ name: string; value: string }>;
+            if (entries.length > 0) {
+              sessionStorageSnapshots.set(String(origin), entries);
             }
-          },
-        );
+          } catch {
+            // Malformed data — ignore
+          }
+        });
       } catch {
         // exposeFunction may fail if the page is already closed or
         // if the function was already exposed on a recycled context
@@ -508,7 +505,10 @@ export async function runInteractiveSession(
               }
             }
             /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-            (window as any).__cspReportSessionStorage(window.location.origin, JSON.stringify(items));
+            (window as any).__cspReportSessionStorage(
+              window.location.origin,
+              JSON.stringify(items),
+            );
             /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
           };
           window.addEventListener('beforeunload', report);
@@ -532,10 +532,7 @@ export async function runInteractiveSession(
 
     // 8. Listen for additional pages (new tabs opened by the user)
     context.on('page', (page: Page) => {
-      Promise.all([
-        setupPage(page),
-        attachSessionStorageCapture(page),
-      ]).catch((err: unknown) => {
+      Promise.all([setupPage(page), attachSessionStorageCapture(page)]).catch((err: unknown) => {
         logger.error('Failed to set up interactive page', {
           error: err instanceof Error ? err.message : String(err),
         });

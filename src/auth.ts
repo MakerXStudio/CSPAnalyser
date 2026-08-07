@@ -255,19 +255,16 @@ export async function performManualLogin(
   // to the Node process. This is used by the beforeunload handler to
   // capture the final state right before the page is destroyed — the only
   // reliable way to avoid losing tokens on close.
-  await page.exposeFunction(
-    '__cspReportSessionStorage',
-    (origin: unknown, json: unknown) => {
-      try {
-        const entries = JSON.parse(String(json)) as Array<{ name: string; value: string }>;
-        if (entries.length > 0) {
-          sessionStorageSnapshots.set(String(origin), entries);
-        }
-      } catch {
-        // Malformed data from browser — ignore
+  await page.exposeFunction('__cspReportSessionStorage', (origin: unknown, json: unknown) => {
+    try {
+      const entries = JSON.parse(String(json)) as Array<{ name: string; value: string }>;
+      if (entries.length > 0) {
+        sessionStorageSnapshots.set(String(origin), entries);
       }
-    },
-  );
+    } catch {
+      // Malformed data from browser — ignore
+    }
+  });
 
   // Install in-page reporters via addInitScript so they survive navigation.
   // page.evaluate() only runs on the current document and is lost when the
@@ -316,7 +313,9 @@ export async function performManualLogin(
     }
   };
 
-  page.on('load', () => { captureFromPage().catch(() => {}); });
+  page.on('load', () => {
+    captureFromPage().catch(() => {});
+  });
 
   const snapshotInterval = setInterval(() => {
     captureFromPage().catch(() => {});

@@ -138,7 +138,9 @@ function migrateViolationsUniqueConstraint(db: Database.Database): void {
 
   // If the table DDL doesn't contain a table-level UNIQUE, no migration needed.
   // The new schema creates violations without an inline UNIQUE.
-  if (!tableInfo.sql.includes('UNIQUE(session_id, document_uri, blocked_uri, effective_directive)')) {
+  if (
+    !tableInfo.sql.includes('UNIQUE(session_id, document_uri, blocked_uri, effective_directive)')
+  ) {
     return;
   }
 

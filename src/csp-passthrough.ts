@@ -28,10 +28,7 @@ export interface CapturedCspHeader {
   headerValue: string;
 }
 
-export type CspHeaderCaptureCallback = (
-  captured: CapturedCspHeader[],
-  requestUrl: string,
-) => void;
+export type CspHeaderCaptureCallback = (captured: CapturedCspHeader[], requestUrl: string) => void;
 
 /**
  * Appends report-uri and report-to directives to an existing CSP header value.
@@ -156,8 +153,11 @@ export async function setupCspPassthrough(
       const response = await route.fetch();
       const originalHeaders = response.headers();
 
-      const { headers: newHeaders, capturedCspHeaders, permissionsPolicies } =
-        transformResponseHeadersForAudit(originalHeaders, reportServerPort, reportToken);
+      const {
+        headers: newHeaders,
+        capturedCspHeaders,
+        permissionsPolicies,
+      } = transformResponseHeadersForAudit(originalHeaders, reportServerPort, reportToken);
 
       if (capturedCspHeaders.length > 0 && onCspHeaders) {
         onCspHeaders(capturedCspHeaders, route.request().url());

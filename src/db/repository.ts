@@ -613,11 +613,13 @@ export function insertInlineHash(
   if (result.changes === 0) {
     // Row already exists — backfill content if ours is non-null and theirs is null
     if (storedContent != null) {
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE inline_hashes
         SET content = ?, content_length = ?
         WHERE session_id = ? AND directive = ? AND hash = ? AND content IS NULL
-      `).run(storedContent, p.contentLength, p.sessionId, p.directive, p.hash);
+      `,
+      ).run(storedContent, p.contentLength, p.sessionId, p.directive, p.hash);
     }
     return null;
   }
