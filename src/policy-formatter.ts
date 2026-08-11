@@ -143,7 +143,11 @@ resource cspRule 'Microsoft.Cdn/profiles/ruleSets/rules@2024-09-01' = {
       const directiveEntries = Object.entries(helmetDirectives)
         .map(([key, sources]) => {
           const values = sources
-            .map((s) => (s === '$$NONCE_FN$$' ? '(req, res) => `\'nonce-${res.locals.cspNonce}\'`' : JSON.stringify(s)))
+            .map((s) =>
+              s === '$$NONCE_FN$$'
+                ? "(req, res) => `'nonce-${res.locals.cspNonce}'`"
+                : JSON.stringify(s),
+            )
             .join(', ');
           return `    ${key}: [${values}],`;
         })

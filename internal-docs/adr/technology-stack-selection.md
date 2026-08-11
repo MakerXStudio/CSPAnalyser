@@ -91,4 +91,4 @@ This stack was chosen because:
 |------|-----------|--------|------------|
 | better-sqlite3 native compilation fails on exotic platforms | Low | High | Prebuild binaries cover all major platforms; fallback to `sql.js` (WASM-based) if needed |
 | Playwright `page.route()` misses a header rewrite on an unusual response path (HTTP/2 server push, early hints) | Low | Medium | Covered by automated interactive/crawler tests against remote CSP-hardened sites; if a regression surfaces we can reintroduce a targeted proxy rather than restore the full dual-mode architecture |
-| MCP protocol breaking changes | Low | Medium | Pin SDK version; MCP is backed by Anthropic with broad industry adoption |
+| MCP protocol breaking changes | Low | Medium | Caret range (`^1.x`) on the SDK excludes breaking majors by semver contract; pin a specific version only if a minor actually regresses. Our surface is two imports (`McpServer`, `StdioServerTransport`), so exposure across minors is small. MCP is backed by Anthropic with broad industry adoption |

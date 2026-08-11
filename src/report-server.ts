@@ -72,9 +72,17 @@ export async function startReportServer(
       }
 
       const remaining = violationLimit > 0 ? violationLimit - violationCount : Infinity;
-      handleReport(req, res, db, sessionId, req.url === cspReportPath, remaining, (count: number) => {
-        violationCount += count;
-      });
+      handleReport(
+        req,
+        res,
+        db,
+        sessionId,
+        req.url === cspReportPath,
+        remaining,
+        (count: number) => {
+          violationCount += count;
+        },
+      );
       return;
     }
 

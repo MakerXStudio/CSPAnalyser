@@ -50,7 +50,9 @@ async function triggerLateResources(page: Page): Promise<void> {
       //    browser skipped the implicit favicon request.
       const iconHrefs = new Set<string>();
       document
-        .querySelectorAll<HTMLLinkElement>('link[rel~="icon"], link[rel~="shortcut"], link[rel~="apple-touch-icon"]')
+        .querySelectorAll<HTMLLinkElement>(
+          'link[rel~="icon"], link[rel~="shortcut"], link[rel~="apple-touch-icon"]',
+        )
         .forEach((l) => {
           if (l.href) iconHrefs.add(l.href);
         });
